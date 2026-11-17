@@ -12,6 +12,8 @@ import com.example.data.local.entity.MedicineIntakeEntity
 import com.example.data.local.entity.SleepRecordEntity
 import com.example.data.local.entity.StepRecordEntity
 import com.example.domain.DateEpochUtils
+import com.example.wellbeing.DeviceUsageSnapshot
+import com.example.wellbeing.WellbeingMetricsCalculator
 import kotlinx.coroutines.flow.Flow
 
 class AllModulesRepository(private val database: AppDatabase) {
@@ -264,17 +266,64 @@ class AllModulesRepository(private val database: AppDatabase) {
     ) {
         val screen = ((existing?.screenTimeMinutes ?: 0) + addScreenMinutes).coerceIn(0, 1440)
         val focus = ((existing?.focusSessionsCount ?: 0) + addFocusSession).coerceAtLeast(0)
-        val goal = (goalMinutes ?: existing?.mindfulGoalMinutes ?: 120).coerceIn(30, 600)
+        val goal = (goalMinutes ?: existing?.mindfulGoalMinutes ?: 120).coerceIn(30, 480)
         wellbeingDao.upsertWellbeingRecord(
             DigitalWellbeingRecordEntity(
                 id = existing?.id ?: 0L,
                 profileId = profileId,
-                dayKey = DateEpochUtils.todayDayKey(),
+                dayKey = existing?.dayKey ?: DateEpochUtils.todayDayKey(),
                 screenTimeMinutes = screen,
                 focusSessionsCount = focus,
-                mindfulGoalMinutes = goal
+                mindfulGoalMinutes = goal,
+                unlockCount = existing?.unlockCount ?: 0,
+                appLaunchCount = existing?.appLaunchCount ?: 0,
+                nightScreenMinutes = existing?.nightScreenMinutes ?: 0,
+                longestSessionMinutes = existing?.longestSessionMinutes ?: 0,
+                topAppName = existing?.topAppName ?: "",
+                topAppMinutes = existing?.topAppMinutes ?: 0,
+                topAppsJson = existing?.topAppsJson ?: "",
+                sourceLabel = existing?.sourceLabel ?: "Manual",
+                lastSyncedEpochMs = existing?.lastSyncedEpochMs ?: 0L
             )
         )
+    }
+
+    suspend fun syncWellbeingSnapshot(
+        profileId: Long,
+        existing: DigitalWellbeingRecordEntity?,
+        snapshot: DeviceUsageSnapshot,
+        defaultGoalMinutes: Int = 120
+    ) {
+        val topApp = snapshot.topApps.firstOrNull()
+        val encodedApps = WellbeingMetricsCalculator.encodeTopApps(snapshot.topApps)
+        wellbeingDao.upsertWellbeingRecord(
+            DigitalWellbeingRecordEntity(
+                id = existing?.id ?: 0L,
+                profileId = profileId,
+                dayKey = snapshot.dayKey,
+                screenTimeMinutes = snapshot.totalScreenMinutes,
+                focusSessionsCount = existing?.focusSessionsCount ?: 0,
+                mindfulGoalMinutes = (existing?.mindfulGoalMinutes ?: defaultGoalMinutes).coerceIn(30, 480),
+                unlockCount = snapshot.unlockCount,
+                appLaunchCount = snapshot.appLaunchCount,
+                nightScreenMinutes = snapshot.nightScreenMinutes,
+                longestSessionMinutes = snapshot.longestSessionMinutes,
+                topAppName = topApp?.appName ?: "",
+                topAppMinutes = topApp?.minutesUsed ?: 0,
+                topAppsJson = encodedApps,
+                sourceLabel = "Android Usage Access",
+                lastSyncedEpochMs = snapshot.syncedAtEpochMs
+            )
+        )
+    }
+
+    suspend fun syncWellbeingSnapshotForDay(
+        profileId: Long,
+        snapshot: DeviceUsageSnapshot,
+        defaultGoalMinutes: Int = 120
+    ) {
+        val existing = wellbeingDao.getWellbeingForDaySnapshot(profileId, snapshot.dayKey)
+        syncWellbeingSnapshot(profileId, existing, snapshot, defaultGoalMinutes)
     }
 
     suspend fun updateAiPreference(preference: AiPreferenceEntity) {

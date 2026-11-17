@@ -71,6 +71,7 @@ import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.AiTaskStatus
 import com.example.ui.viewmodel.HomeUiState
 import com.example.ui.viewmodel.ModulesHubUiState
+import com.example.wellbeing.OveruseSeverity
 
 private data class HomeCategoryVisual(
     val key: String,
@@ -552,12 +553,75 @@ fun HomeDashboardScreen(
                             value = latestSleepHrs?.let { String.format("%.1fh", it) } ?: "Log rest",
                             onClick = { onOpenModuleKey("exercise_tracker") }
                         )
+                        val wb = modulesState.todayWellbeing
+                        val wbMins = wb?.screenTimeMinutes ?: 0
+                        val wbCap = wb?.mindfulGoalMinutes ?: 120
+                        val wbSeverity = modulesState.wellbeingOveruseAlert?.severity ?: OveruseSeverity.BALANCED
+                        val screenBadge = when (wbSeverity) {
+                            OveruseSeverity.CRITICAL, OveruseSeverity.EXCEEDED -> "${wbMins}m ⚠️"
+                            OveruseSeverity.APPROACHING -> "${wbMins}/${wbCap}m"
+                            OveruseSeverity.BALANCED -> "${wbMins}m"
+                        }
                         HomeMiniMetricChip(
                             emoji = "📵",
                             label = "Screen",
-                            value = "${modulesState.todayWellbeing?.screenTimeMinutes ?: 0}m",
+                            value = screenBadge,
                             onClick = { onOpenModuleKey("digital_wellbeing") }
                         )
+                    }
+
+                    val activeOveruse = modulesState.wellbeingOveruseAlert
+                    if (activeOveruse != null && activeOveruse.severity != OveruseSeverity.BALANCED) {
+                        val isOverCap = activeOveruse.severity == OveruseSeverity.EXCEEDED ||
+                            activeOveruse.severity == OveruseSeverity.CRITICAL
+                        Surface(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .clip(RoundedCornerShape(14.dp))
+                                .clickable { onOpenModuleKey("digital_wellbeing") }
+                                .testTag("home_wellbeing_overuse_alert"),
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (isOverCap) {
+                                MaterialTheme.colorScheme.errorContainer
+                            } else {
+                                AmberNotice.copy(alpha = 0.22f)
+                            }
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(
+                                    modifier = Modifier.weight(1f),
+                                    verticalArrangement = Arrangement.spacedBy(2.dp)
+                                ) {
+                                    Text(
+                                        text = if (isOverCap) "🚨 ${activeOveruse.title}" else "⚠️ ${activeOveruse.title}",
+                                        style = MaterialTheme.typography.labelLarge,
+                                        color = if (isOverCap) {
+                                            MaterialTheme.colorScheme.onErrorContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurface
+                                        }
+                                    )
+                                    Text(
+                                        text = activeOveruse.message,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        color = if (isOverCap) {
+                                            MaterialTheme.colorScheme.onErrorContainer
+                                        } else {
+                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                        }
+                                    )
+                                }
+                                TextButton(onClick = { onOpenModuleKey("digital_wellbeing") }) {
+                                    Text("Inspect →")
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -989,7 +1053,20 @@ fun HomeDashboardScreen(
                     key = "digital_wellbeing",
                     emoji = "📵",
                     title = "Digital Wellbeing",
-                    subtitle = "${modulesState.todayWellbeing?.screenTimeMinutes ?: 0}m screen • ${modulesState.todayWellbeing?.focusSessionsCount ?: 0} focus blocks",
+                    subtitle = run {
+                        val wb = modulesState.todayWellbeing
+                        val mins = wb?.screenTimeMinutes ?: 0
+                        val unlocks = wb?.unlockCount ?: 0
+                        val top = wb?.topAppName?.takeIf { it.isNotBlank() }
+                        when {
+                            !modulesState.hasUsageAccessPermission && mins == 0 ->
+                                "Tap to connect Android Usage Access"
+                            top != null ->
+                                "${mins}m screen • $unlocks unlocks • Top: $top"
+                            else ->
+                                "${mins}m screen • ${wb?.focusSessionsCount ?: 0} focus blocks"
+                        }
+                    },
                     badgeBg = MaterialTheme.colorScheme.secondaryContainer,
                     cardTint = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.20f)
                 ),

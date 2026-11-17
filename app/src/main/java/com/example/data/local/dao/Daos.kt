@@ -264,6 +264,9 @@ interface DigitalWellbeingDao {
     @Query("SELECT * FROM digital_wellbeing_records WHERE profileId = :profileId AND dayKey = :dayKey LIMIT 1")
     fun observeWellbeingForDay(profileId: Long, dayKey: String): Flow<DigitalWellbeingRecordEntity?>
 
+    @Query("SELECT * FROM digital_wellbeing_records WHERE profileId = :profileId AND dayKey = :dayKey LIMIT 1")
+    suspend fun getWellbeingForDaySnapshot(profileId: Long, dayKey: String): DigitalWellbeingRecordEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertWellbeingRecord(record: DigitalWellbeingRecordEntity): Long
 

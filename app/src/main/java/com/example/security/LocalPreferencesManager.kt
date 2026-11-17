@@ -57,7 +57,11 @@ data class UiPreferencesState(
         bundledToneId = "wellness_gentle",
         reminderHour = 20,
         reminderMinute = 0
-    )
+    ),
+    val wellbeingOveruseAlertsEnabled: Boolean = true,
+    val wellbeingWarningPercent: Int = 80,
+    val lastOveruseAlertDayKey: String = "",
+    val lastOveruseAlertStage: String = ""
 )
 
 class LocalPreferencesManager(private val context: Context) {
@@ -75,6 +79,11 @@ class LocalPreferencesManager(private val context: Context) {
         fun reminderEnabled(cat: String) = booleanPreferencesKey("reminder_enabled_$cat")
         fun reminderHour(cat: String) = intPreferencesKey("reminder_hour_$cat")
         fun reminderMinute(cat: String) = intPreferencesKey("reminder_minute_$cat")
+
+        val WELLBEING_ALERTS_ENABLED = booleanPreferencesKey("wellbeing_overuse_alerts_enabled")
+        val WELLBEING_WARNING_PERCENT = intPreferencesKey("wellbeing_warning_percent")
+        val LAST_OVERUSE_DAY_KEY = stringPreferencesKey("wellbeing_last_alert_day")
+        val LAST_OVERUSE_STAGE = stringPreferencesKey("wellbeing_last_alert_stage")
     }
 
     val preferencesFlow: Flow<UiPreferencesState> = context.lifeCompanionPrefsDataStore.data.map { prefs ->
@@ -108,7 +117,11 @@ class LocalPreferencesManager(private val context: Context) {
             welcomeCompleted = prefs[Keys.WELCOME_COMPLETED] ?: false,
             waterTone = readCategory("water", "water_drop", 10, 0),
             periodTone = readCategory("period", "period_chime", 8, 30),
-            wellnessTone = readCategory("wellness", "wellness_gentle", 20, 0)
+            wellnessTone = readCategory("wellness", "wellness_gentle", 20, 0),
+            wellbeingOveruseAlertsEnabled = prefs[Keys.WELLBEING_ALERTS_ENABLED] ?: true,
+            wellbeingWarningPercent = (prefs[Keys.WELLBEING_WARNING_PERCENT] ?: 80).coerceIn(50, 95),
+            lastOveruseAlertDayKey = prefs[Keys.LAST_OVERUSE_DAY_KEY] ?: "",
+            lastOveruseAlertStage = prefs[Keys.LAST_OVERUSE_STAGE] ?: ""
         )
     }
 
@@ -163,6 +176,20 @@ class LocalPreferencesManager(private val context: Context) {
             prefs[Keys.reminderEnabled(categoryKey)] = enabled
             prefs[Keys.reminderHour(categoryKey)] = hour.coerceIn(0, 23)
             prefs[Keys.reminderMinute(categoryKey)] = minute.coerceIn(0, 59)
+        }
+    }
+
+    suspend fun updateWellbeingAlertSettings(enabled: Boolean, warningPercent: Int) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.WELLBEING_ALERTS_ENABLED] = enabled
+            prefs[Keys.WELLBEING_WARNING_PERCENT] = warningPercent.coerceIn(50, 95)
+        }
+    }
+
+    suspend fun recordOveruseAlertDispatched(dayKey: String, stageKey: String) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.LAST_OVERUSE_DAY_KEY] = dayKey
+            prefs[Keys.LAST_OVERUSE_STAGE] = stageKey
         }
     }
 

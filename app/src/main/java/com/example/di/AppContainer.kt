@@ -20,6 +20,7 @@ import com.example.notifications.AlertSoundManager
 import com.example.security.KeystoreVaultManager
 import com.example.security.LocalPreferencesManager
 import com.example.security.OfflineLicenseVerifier
+import com.example.wellbeing.DeviceWellbeingManager
 
 class AppContainer(context: Context) {
     private val appContext = context.applicationContext
@@ -36,6 +37,7 @@ class AppContainer(context: Context) {
 
     val lifeWeaveAiService = LifeWeaveAiService(appContext)
     val voiceAssistantManager = VoiceAssistantManager(appContext)
+    val deviceWellbeingManager = DeviceWellbeingManager(appContext)
 
     val userProfileRepository = UserProfileRepository(database)
     val waterRepository = WaterRepository(database)

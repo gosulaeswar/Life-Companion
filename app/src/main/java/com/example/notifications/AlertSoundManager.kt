@@ -359,6 +359,43 @@ class AlertSoundManager(private val context: Context) {
         }.getOrDefault(false)
     }
 
+    fun showWellbeingOveruseNotification(
+        title: String,
+        body: String,
+        wellnessToneSetting: CategoryToneSetting
+    ): Boolean {
+        val channelId = ensureNotificationChannel(AlertCategory.WELLNESS, wellnessToneSetting)
+        if (!hasNotificationPermission()) return false
+
+        val tapIntent = Intent(context, MainActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        }
+        val tapPending = PendingIntent.getActivity(
+            context,
+            2099,
+            tapIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val soundUri = resolveSoundUri(AlertCategory.WELLNESS, wellnessToneSetting)
+        val notification = NotificationCompat.Builder(context, channelId)
+            .setSmallIcon(R.drawable.ic_launcher_foreground)
+            .setContentTitle(title)
+            .setContentText(body)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setSound(soundUri)
+            .setAutoCancel(true)
+            .setContentIntent(tapPending)
+            .build()
+
+        return runCatching {
+            NotificationManagerCompat.from(context).notify(1004, notification)
+            true
+        }.getOrDefault(false)
+    }
+
     fun showCustomAlarmNotification(reminder: ReminderEntity): Boolean {
         val soundUri = resolveReminderSoundUri(reminder)
         val channelId = ensureCustomAlarmChannel(reminder, soundUri)

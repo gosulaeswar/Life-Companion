@@ -27,6 +27,10 @@ import com.example.ai.SupportedVoiceLanguages
 import com.example.healthsync.AppleAndFileFitnessImporter
 import com.example.healthsync.FitnessSourceCatalog
 import com.example.healthsync.FitnessSyncRepository
+import com.example.wellbeing.AppUsageMetric
+import com.example.wellbeing.DeviceUsageSnapshot
+import com.example.wellbeing.OveruseSeverity
+import com.example.wellbeing.WellbeingMetricsCalculator
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -440,6 +444,74 @@ class ExampleRobolectricTest {
             val consultation = repo.observeConsultations(profileId).first().first()
             assertEquals(combinedMs, consultation.consultationEpochMs)
             assertEquals(followUpDay, consultation.followUpEpochDay)
+        } finally {
+            db.close()
+        }
+    }
+
+    @Test
+    fun `digital wellbeing snapshot sync persists rich metrics and evaluates overuse alerts accurately`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+
+        try {
+            val profileId = db.userProfileDao().insertProfile(
+                UserProfileEntity(
+                    fullName = "Rohan",
+                    age = 27,
+                    genderIdentity = "Male",
+                    dailyWaterGoalMl = 2500
+                )
+            )
+            val repo = AllModulesRepository(db)
+            val apps = listOf(
+                AppUsageMetric("com.instagram.android", "Instagram", "Social", minutesUsed = 62, launchCount = 19),
+                AppUsageMetric("com.google.android.youtube", "YouTube", "Video", minutesUsed = 48, launchCount = 7),
+                AppUsageMetric("com.whatsapp", "WhatsApp", "Messaging", minutesUsed = 24, launchCount = 31)
+            )
+            val snapshot = DeviceUsageSnapshot(
+                dayKey = DateEpochUtils.todayDayKey(),
+                totalScreenMinutes = 134,
+                unlockCount = 52,
+                appLaunchCount = 57,
+                nightScreenMinutes = 35,
+                longestSessionMinutes = 46,
+                topApps = apps,
+                categoryMinutes = WellbeingMetricsCalculator.categoryBreakdown(apps)
+            )
+
+            // Pre-existing focus session should be preserved after device sync
+            repo.updateDigitalWellbeing(profileId = profileId, existing = null, addFocusSession = 2, goalMinutes = 120)
+            val existing = repo.observeTodayWellbeing(profileId).first()
+            repo.syncWellbeingSnapshot(profileId = profileId, existing = existing, snapshot = snapshot)
+
+            val synced = repo.observeTodayWellbeing(profileId).first()!!
+            assertEquals(134, synced.screenTimeMinutes)
+            assertEquals(52, synced.unlockCount)
+            assertEquals(57, synced.appLaunchCount)
+            assertEquals(35, synced.nightScreenMinutes)
+            assertEquals(46, synced.longestSessionMinutes)
+            assertEquals("Instagram", synced.topAppName)
+            assertEquals(62, synced.topAppMinutes)
+            assertEquals(2, synced.focusSessionsCount)
+            assertEquals(3, WellbeingMetricsCalculator.decodeTopApps(synced.topAppsJson).size)
+
+            val exceededAlert = WellbeingMetricsCalculator.evaluateOveruse(synced, warningPercent = 80, topApps = apps)
+            assertEquals(OveruseSeverity.EXCEEDED, exceededAlert.severity)
+            assertTrue(exceededAlert.message.contains("Instagram"))
+
+            val criticalAlert = WellbeingMetricsCalculator.evaluateOveruse(synced.copy(screenTimeMinutes = 200), warningPercent = 80, topApps = apps)
+            assertEquals(OveruseSeverity.CRITICAL, criticalAlert.severity)
+
+            val approachingAlert = WellbeingMetricsCalculator.evaluateOveruse(synced.copy(screenTimeMinutes = 100, nightScreenMinutes = 5, longestSessionMinutes = 20), warningPercent = 80, topApps = apps)
+            assertEquals(OveruseSeverity.APPROACHING, approachingAlert.severity)
+
+            val balancedAlert = WellbeingMetricsCalculator.evaluateOveruse(synced.copy(screenTimeMinutes = 45, nightScreenMinutes = 5, longestSessionMinutes = 15), warningPercent = 80, topApps = apps)
+            assertEquals(OveruseSeverity.BALANCED, balancedAlert.severity)
+
+            assertTrue(WellbeingMetricsCalculator.computeMindfulBalanceScore(synced) in 5..95)
         } finally {
             db.close()
         }

@@ -244,7 +244,16 @@ data class DigitalWellbeingRecordEntity(
     val dayKey: String,
     val screenTimeMinutes: Int,
     val focusSessionsCount: Int = 0,
-    val mindfulGoalMinutes: Int = 120
+    val mindfulGoalMinutes: Int = 120,
+    val unlockCount: Int = 0,
+    val appLaunchCount: Int = 0,
+    val nightScreenMinutes: Int = 0,
+    val longestSessionMinutes: Int = 0,
+    val topAppName: String = "",
+    val topAppMinutes: Int = 0,
+    val topAppsJson: String = "",
+    val sourceLabel: String = "Manual",
+    val lastSyncedEpochMs: Long = 0L
 )
 
 @Entity(

@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
         ConnectedDeviceSourceEntity::class,
         HealthVitalMetricEntity::class
     ],
-    version = 4,
+    version = 5,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -164,7 +164,26 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
-        val ALL_MIGRATIONS: Array<Migration> = arrayOf(MIGRATION_1_2, MIGRATION_2_3, MIGRATION_3_4)
+        val MIGRATION_4_5 = object : Migration(4, 5) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN unlockCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN appLaunchCount INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN nightScreenMinutes INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN longestSessionMinutes INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN topAppName TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN topAppMinutes INTEGER NOT NULL DEFAULT 0")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN topAppsJson TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN sourceLabel TEXT NOT NULL DEFAULT 'Manual'")
+                db.execSQL("ALTER TABLE digital_wellbeing_records ADD COLUMN lastSyncedEpochMs INTEGER NOT NULL DEFAULT 0")
+            }
+        }
+
+        val ALL_MIGRATIONS: Array<Migration> = arrayOf(
+            MIGRATION_1_2,
+            MIGRATION_2_3,
+            MIGRATION_3_4,
+            MIGRATION_4_5
+        )
 
         @Volatile
         private var INSTANCE: AppDatabase? = null
