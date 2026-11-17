@@ -4,15 +4,61 @@
     <string name="welcome_title">शांत दैनिक देखभाल,\nपूरी तरह आपके पास।</string>
     <string name="welcome_subtitle">बिना किसी क्लाउड खाते या बाहरी ट्रैकिंग के अपने उपकरण पर ही जलयोजन और स्वास्थ्य का ध्यान रखें।</string>
     <string name="cta_get_started">सेटअप शुरू करें</string>
+    <string name="welcome_badge_on_device">100% ऑफ़लाइन</string>
+    <string name="welcome_language_title">🗣️ भाषा चुनें</string>
+    <string name="welcome_pledge_privacy_title">🛡️ पूरी तरह डिवाइस-आधारित स्टोरेज</string>
+    <string name="welcome_pledge_privacy_sub">आपके प्रोफ़ाइल, पानी, व्यायाम और पीरियड रिकॉर्ड बिना किसी क्लाउड अपलोड के आपके फोन पर सुरक्षित रहते हैं।</string>
+    <string name="welcome_pledge_cycle_title">🌸 समावेशी और हमेशा निःशुल्क चक्र देखभाल</string>
+    <string name="welcome_pledge_cycle_sub">हर पहचान के लिए अनुकूल—पीरियड ट्रैकिंग कभी भी चालू या बंद करें, हमेशा मुफ्त।</string>
+    <string name="welcome_pledge_alerts_title">🔔 कस्टम अलार्म और अलर्ट ध्वनियाँ</string>
+    <string name="welcome_pledge_alerts_sub">पानी, पीरियड घंटी, कस्टम अलार्म या अपने फोन से कोई भी ऑडियो चुनें।</string>
+
     <string name="nav_home">होम</string>
     <string name="nav_water">जल</string>
     <string name="nav_period">चक्र</string>
     <string name="nav_modules">मॉड्यूल</string>
     <string name="nav_settings">गोपनीयता</string>
+
     <string name="profile_setup_title">अपना प्रोफ़ाइल सेट करें</string>
     <string name="profile_edit_title">प्रोफ़ाइल संपादित करें</string>
     <string name="period_always_free_badge">सदैव निःशुल्क</string>
     <string name="privacy_export_json">स्थानीय JSON निर्यात करें</string>
     <string name="privacy_delete_all">सभी स्थानीय डेटा हटाएं</string>
     <string name="activation_verify_button">ऑफ़लाइन कुंजी सत्यापित करें</string>
+
+    <string name="greeting_morning">सुप्रभात</string>
+    <string name="greeting_afternoon">नमस्कार</string>
+    <string name="greeting_evening">शुभ संध्या</string>
+    <string name="greeting_night">शुभ रात्रि</string>
+
+    <string name="home_badge_on_device">🛡️ 100% ऑफ़लाइन</string>
+    <string name="home_tones_alarms">🔔 ध्वनि व अलार्म</string>
+    <string name="home_ai_listener_title">🎙️ AI वॉइस असिस्टेंट</string>
+    <string name="home_ai_listening">🎧 सुन रहा हूँ…</string>
+    <string name="home_ai_hint">अपनी भाषा में बोलने के लिए माइक दबाएं—पानी, कदम या दवा रिकॉर्ड करें।</string>
+    <string name="home_live_metrics_title">📊 आज के लाइव आंकड़े</string>
+    <string name="home_sync_watch">⌚ घड़ी सिंक करें</string>
+    <string name="home_daily_steps">👟 दैनिक कदम</string>
+    <string name="home_metric_water">पानी</string>
+    <string name="home_metric_heart">हृदय</string>
+    <string name="home_metric_meds">दवाइयाँ</string>
+    <string name="home_metric_calories">कैलोरी</string>
+    <string name="home_metric_sleep">नींद</string>
+    <string name="home_metric_screen">स्क्रीन</string>
+    <string name="home_doctors_title">डॉक्टर</string>
+    <string name="home_movement_title">व्यायाम</string>
+    <string name="home_daily_hydration">दैनिक जलयोजन</string>
+    <string name="home_hydration_crushed">पानी का लक्ष्य पूरा हुआ! 🎉</string>
+    <string name="home_cycle_care">पीरियड व चक्र देखभाल</string>
+
+    <string name="water_screen_title">💧 जलयोजन ट्रैकर</string>
+    <string name="period_screen_title">🌸 पीरियड व चक्र देखभाल</string>
+    <string name="modules_hub_title">स्वास्थ्य मॉड्यूल</string>
+
+    <string name="settings_screen_title">सेटिंग्स, अलार्म और गोपनीयता</string>
+    <string name="settings_appearance_title">रूप व भाषा सेटिंग्स</string>
+    <string name="settings_theme_mode">थीम मोड</string>
+    <string name="settings_regional_language">क्षेत्रीय भाषा</string>
+    <string name="settings_screen_off_popup_title">🌙 स्क्रीन-ऑफ अलार्म पॉपअप चालू करें</string>
+    <string name="settings_screen_off_popup_cta">स्क्रीन-ऑफ पॉपअप अनुमति दें</string>
 </resources>

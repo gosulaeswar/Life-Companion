@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">लाईफवीव्ह</string>
+    <string name="tagline_privacy">तुमचे जीवन, तुमचे उपकरण. १००% स्थानिक.</string>
+    <string name="welcome_title">शांत दैनंदिन काळजी,\nपूर्णपणे तुमच्याकडेच.</string>
+    <string name="welcome_subtitle">कोणत्याही क्लाउड खात्याशिवाय किंवा ट्रॅकिंगशिवाय तुमच्या फोनवरच पाणी, मासिक पाळी व आरोग्याची नोंद ठेवा.</string>
+    <string name="cta_get_started">सेटअप सुरू करा</string>
+    <string name="welcome_badge_on_device">१००% ऑफलाईन</string>
+    <string name="welcome_language_title">🗣️ भाषा निवडा</string>
+    <string name="welcome_pledge_privacy_title">🛡️ केवळ फोनवरच सुरक्षित साठवण</string>
+    <string name="welcome_pledge_privacy_sub">तुमचे प्रोफाईल, पाणी, व्यायाम आणि पाळीच्या नोंदी क्लाउड अपलोडशिवाय तुमच्या फोनवर सुरक्षित राहतात.</string>
+    <string name="welcome_pledge_cycle_title">🌸 सर्वांसाठी मोफत पाळी काळजी</string>
+    <string name="welcome_pledge_cycle_sub">केव्हाही मासिक पाळी ट्रॅकिंग सुरू किंवा बंद करा—नेहमी मोफत.</string>
+    <string name="welcome_pledge_alerts_title">🔔 सानुकूल अलार्म आवाज</string>
+    <string name="welcome_pledge_alerts_sub">पाण्याचा आवाज, पाळीची घंटा, सानुकूल अलार्म किंवा तुमच्या फोनमधील ऑडिओ निवडा.</string>
+
+    <string name="nav_home">मुख्यपृष्ठ</string>
+    <string name="nav_water">पाणी</string>
+    <string name="nav_period">चक्र</string>
+    <string name="nav_modules">विभाग</string>
+    <string name="nav_settings">गोपनीयता</string>
+
+    <string name="profile_setup_title">तुमचे प्रोफाईल तयार करा</string>
+    <string name="profile_edit_title">प्रोफाईल संपादित करा</string>
+    <string name="period_always_free_badge">सदैव मोफत</string>
+    <string name="privacy_export_json">स्थानिक JSON निर्यात करा</string>
+    <string name="privacy_delete_all">सर्व स्थानिक डेटा हटवा</string>
+    <string name="activation_verify_button">ऑफलाईन की तपासा</string>
+
+    <string name="greeting_morning">सुप्रभात</string>
+    <string name="greeting_afternoon">शुभ दुपार</string>
+    <string name="greeting_evening">शुभ संध्या</string>
+    <string name="greeting_night">शुभ रात्री</string>
+
+    <string name="home_badge_on_device">🛡️ १००% ऑफलाईन</string>
+    <string name="home_tones_alarms">🔔 आवाज व अलार्म</string>
+    <string name="home_ai_listener_title">🎙️ AI व्हॉइस सहाय्यक</string>
+    <string name="home_ai_listening">🎧 ऐकत आहे…</string>
+    <string name="home_ai_hint">तुमच्या भाषेत बोलण्यासाठी माईक दाबा—पाणी, पावले किंवा औषधांची नोंद करा.</string>
+    <string name="home_live_metrics_title">📊 आजची थेट आकडेवारी</string>
+    <string name="home_sync_watch">⌚ घड्याळ सिंक</string>
+    <string name="home_daily_steps">👟 दैनिक पावले</string>
+    <string name="home_metric_water">पाणी</string>
+    <string name="home_metric_heart">हृदय</string>
+    <string name="home_metric_meds">औषधे</string>
+    <string name="home_metric_calories">कॅलरीज</string>
+    <string name="home_metric_sleep">झोप</string>
+    <string name="home_metric_screen">स्क्रीन</string>
+    <string name="home_doctors_title">डॉक्टर</string>
+    <string name="home_movement_title">व्यायाम</string>
+    <string name="home_daily_hydration">दैनंदिन पाणी</string>
+    <string name="home_hydration_crushed">पाण्याचे ध्येय पूर्ण! 🎉</string>
+    <string name="home_cycle_care">पाळी व चक्र काळजी</string>
+
+    <string name="water_screen_title">💧 पाणी ट्रॅकर</string>
+    <string name="period_screen_title">🌸 पाळी व चक्र काळजी</string>
+    <string name="modules_hub_title">आरोग्य विभाग</string>
+
+    <string name="settings_screen_title">सेटिंग्ज, अलार्म व गोपनीयता</string>
+    <string name="settings_appearance_title">दिसणे व भाषा</string>
+    <string name="settings_theme_mode">थीम प्रकार</string>
+    <string name="settings_regional_language">प्रादेशिक भाषा</string>
+    <string name="settings_screen_off_popup_title">🌙 स्क्रीन-ऑफ अलार्म पॉपअप सुरू करा</string>
+    <string name="settings_screen_off_popup_cta">स्क्रीन-ऑफ पॉपअप परवानगी द्या</string>
+</resources>

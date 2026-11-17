@@ -55,9 +55,11 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.data.local.entity.PeriodRecordEntity
 import com.example.domain.DateEpochUtils
 import com.example.ui.components.CalendarDatePickerDialog
@@ -102,7 +104,7 @@ fun PeriodTrackerScreen(
                             horizontalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Text(
-                                text = "🌸 Cycle & Period Care",
+                                text = stringResource(id = R.string.period_screen_title),
                                 style = MaterialTheme.typography.headlineMedium
                             )
                         }

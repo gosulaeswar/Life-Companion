@@ -46,8 +46,10 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import com.example.R
 import com.example.domain.DateEpochUtils
 import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.HydrationRingGauge
@@ -87,7 +89,7 @@ fun WaterTrackerScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "💧 Hydration Tracker",
+                            text = stringResource(id = R.string.water_screen_title),
                             style = MaterialTheme.typography.headlineMedium
                         )
                         Text(

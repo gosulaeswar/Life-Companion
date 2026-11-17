@@ -64,6 +64,7 @@ import com.example.R
 import com.example.di.AppContainer
 import com.example.di.SimpleViewModelFactory
 import com.example.notifications.AlertCategory
+import com.example.security.ProvideLocalizedLocale
 import com.example.ui.screens.BeautyCareScreen
 import com.example.ui.screens.ConnectedDevicesScreen
 import com.example.ui.screens.DietNutritionScreen
@@ -120,8 +121,9 @@ fun LifeCompanionApp(container: AppContainer) {
     )
     val sessionState by sessionViewModel.uiState.collectAsStateWithLifecycle()
 
-    LifeCompanionTheme(themeMode = sessionState.preferences.themeMode) {
-        when (sessionState.launchDestination) {
+    ProvideLocalizedLocale(language = sessionState.preferences.language) {
+        LifeCompanionTheme(themeMode = sessionState.preferences.themeMode) {
+            when (sessionState.launchDestination) {
             AppLaunchDestination.Loading -> {
                 Box(
                     modifier = Modifier
@@ -176,6 +178,7 @@ fun LifeCompanionApp(container: AppContainer) {
                 )
             }
         }
+    }
     }
 }
 

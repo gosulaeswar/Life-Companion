@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">లైఫ్‌వీవ్</string>
+    <string name="tagline_privacy">మీ జీవితం, మీ పరికరం. 100% లోకల్.</string>
+    <string name="welcome_title">ప్రశాంతమైన రోజువారీ సంరక్షణ,\nపూర్తిగా మీ వద్దే.</string>
+    <string name="welcome_subtitle">క్లౌడ్ ఖాతా లేదా ట్రాకింగ్ లేకుండా మీ ఫోన్‌లోనే నీరు, పీరియడ్ చక్రం మరియు ఆరోగ్యాన్ని ట్రాక్ చేయండి.</string>
+    <string name="cta_get_started">సెటప్ ప్రారంభించండి</string>
+    <string name="welcome_badge_on_device">100% ఆఫ్‌లైన్</string>
+    <string name="welcome_language_title">🗣️ భాషను ఎంచుకోండి</string>
+    <string name="welcome_pledge_privacy_title">🛡️ పూర్తిగా పరికరంలోనే నిల్వ</string>
+    <string name="welcome_pledge_privacy_sub">మీ ప్రొఫైల్, నీరు, వ్యాయామం మరియు సైకిల్ వివరాలు క్లౌడ్‌కు వెళ్లకుండా మీ ఫోన్‌లోనే సురక్షితంగా ఉంటాయి.</string>
+    <string name="welcome_pledge_cycle_title">🌸 అందరికీ ఉచిత సైకిల్ కేర్</string>
+    <string name="welcome_pledge_cycle_sub">ఎప్పుడైనా పీరియడ్ ట్రాకింగ్‌ను ఆన్ లేదా ఆఫ్ చేయవచ్చు—ఎల్లప్పుడూ ఉచితం.</string>
+    <string name="welcome_pledge_alerts_title">🔔 ప్రత్యేక కస్టమ్ అలారం శబ్దాలు</string>
+    <string name="welcome_pledge_alerts_sub">నీటి శబ్దం, సైకిల్ బెల్, కస్టమ్ అలారాలు లేదా మీ ఫోన్ ఆడియోను ఎంచుకోండి.</string>
+
+    <string name="nav_home">హోమ్</string>
+    <string name="nav_water">నీరు</string>
+    <string name="nav_period">సైకిల్</string>
+    <string name="nav_modules">మాడ్యూల్స్</string>
+    <string name="nav_settings">గోప్యత</string>
+
+    <string name="profile_setup_title">మీ ప్రొఫైల్‌ను సెటప్ చేయండి</string>
+    <string name="profile_edit_title">ప్రొఫైల్ సవరించండి</string>
+    <string name="period_always_free_badge">ఎల్లప్పుడూ ఉచితం</string>
+    <string name="privacy_export_json">లోకల్ JSON ఎగుమతి</string>
+    <string name="privacy_delete_all">అన్ని డేటాను తొలగించు</string>
+    <string name="activation_verify_button">ఆఫ్‌లైన్ కీ నిర్ధారించు</string>
+
+    <string name="greeting_morning">శుభోదయం</string>
+    <string name="greeting_afternoon">శుభ మధ్యాహ్నం</string>
+    <string name="greeting_evening">శుభ సాయంత్రం</string>
+    <string name="greeting_night">శుభ రాత్రి</string>
+
+    <string name="home_badge_on_device">🛡️ 100% ఆఫ్‌లైన్</string>
+    <string name="home_tones_alarms">🔔 శబ్దాలు &amp; అలారాలు</string>
+    <string name="home_ai_listener_title">🎙️ AI వాయిస్ అసిస్టెంట్</string>
+    <string name="home_ai_listening">🎧 వింటోంది…</string>
+    <string name="home_ai_hint">మీ భాషలో మాట్లాడటానికి మైక్ నొక్కండి—నీరు, అడుగులు లేదా మందులను నమోదు చేయండి.</string>
+    <string name="home_live_metrics_title">📊 నేటి లైవ్ గణాంకాలు</string>
+    <string name="home_sync_watch">⌚ వాచ్ సింక్</string>
+    <string name="home_daily_steps">👟 రోజువారీ అడుగులు</string>
+    <string name="home_metric_water">నీరు</string>
+    <string name="home_metric_heart">గుండె</string>
+    <string name="home_metric_meds">మందులు</string>
+    <string name="home_metric_calories">కేలరీలు</string>
+    <string name="home_metric_sleep">నిద్ర</string>
+    <string name="home_metric_screen">స్క్రీన్</string>
+    <string name="home_doctors_title">వైద్యులు</string>
+    <string name="home_movement_title">కదలిక</string>
+    <string name="home_daily_hydration">రోజువారీ నీరు</string>
+    <string name="home_hydration_crushed">నీటి లక్ష్యం పూర్తయింది! 🎉</string>
+    <string name="home_cycle_care">పీరియడ్ &amp; సైకిల్ కేర్</string>
+
+    <string name="water_screen_title">💧 నీటి ట్రాకర్</string>
+    <string name="period_screen_title">🌸 పీరియడ్ &amp; సైకిల్ కేర్</string>
+    <string name="modules_hub_title">ఆరోగ్య మాడ్యూల్స్</string>
+
+    <string name="settings_screen_title">సెట్టింగ్స్, అలారాలు &amp; గోప్యత</string>
+    <string name="settings_appearance_title">రూపం &amp; భాష</string>
+    <string name="settings_theme_mode">థీమ్ మోడ్</string>
+    <string name="settings_regional_language">ప్రాంతీయ భాష</string>
+    <string name="settings_screen_off_popup_title">🌙 స్క్రీన్ ఆఫ్ అలారం పాప్అప్</string>
+    <string name="settings_screen_off_popup_cta">స్క్రీన్-ఆఫ్ పాప్అప్ అనుమతి</string>
+</resources>

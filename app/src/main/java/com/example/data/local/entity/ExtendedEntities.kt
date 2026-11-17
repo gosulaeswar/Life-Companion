@@ -202,7 +202,10 @@ data class ReminderEntity(
     val isEnabled: Boolean = true,
     val soundKey: String = "water_drop",
     val customSoundUri: String? = null,
-    val customSoundLabel: String? = null
+    val customSoundLabel: String? = null,
+    val alarmEmoji: String = "⏰",
+    val customMessage: String = "",
+    val gesturePreset: String = "SWIPE_SLIDE"
 )
 
 @Entity(

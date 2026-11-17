@@ -43,6 +43,7 @@ data class SettingsPrivacyUiState(
     val playingToneKey: String? = null,
     val vaultStatus: VaultSecurityStatus = VaultSecurityStatus(false, KeystoreVaultManager.DATA_KEY_ALIAS),
     val publicKeyReady: Boolean = true,
+    val canUseFullScreenPopup: Boolean = true,
     val activationBanner: String? = null,
     val activationSuccess: Boolean? = null,
     val statusMessage: String? = null
@@ -62,6 +63,7 @@ class SettingsPrivacyViewModel(
 
     private val activationBanner = MutableStateFlow<Pair<String, Boolean>?>(null)
     private val statusMessage = MutableStateFlow<String?>(null)
+    private val fullScreenPopupAllowed = MutableStateFlow(alertSoundManager.canUseFullScreenIntent())
     private val vaultStatus = vaultManager.inspectVaultStatus()
     private val publicKeyReady = licenseVerifier.isPublicKeyReady()
 
@@ -71,24 +73,30 @@ class SettingsPrivacyViewModel(
     }
 
     val uiState: StateFlow<SettingsPrivacyUiState> = combine(
-        preferencesManager.preferencesFlow,
-        profileFlow,
-        alarmsFlow,
-        moduleRepository.observeModules(),
-        AlertSoundManager.playingToneKey,
-        activationBanner,
-        statusMessage
-    ) { values ->
-        val prefs = values[0] as UiPreferencesState
-        val profile = values[1] as UserProfileEntity?
+        combine(
+            preferencesManager.preferencesFlow,
+            profileFlow,
+            alarmsFlow,
+            moduleRepository.observeModules(),
+            AlertSoundManager.playingToneKey
+        ) { prefs, profile, alarms, modules, playingKey ->
+            listOf(prefs, profile, alarms, modules, playingKey)
+        },
+        combine(
+            activationBanner,
+            statusMessage,
+            fullScreenPopupAllowed
+        ) { act, msg, fsi ->
+            Triple(act, msg, fsi)
+        }
+    ) { mainList, meta ->
+        val prefs = mainList[0] as UiPreferencesState
+        val profile = mainList[1] as UserProfileEntity?
         @Suppress("UNCHECKED_CAST")
-        val alarms = values[2] as List<ReminderEntity>
+        val alarms = mainList[2] as List<ReminderEntity>
         @Suppress("UNCHECKED_CAST")
-        val modules = values[3] as List<ModuleActivationEntity>
-        val playingKey = values[4] as String?
-        @Suppress("UNCHECKED_CAST")
-        val actBanner = values[5] as Pair<String, Boolean>?
-        val msg = values[6] as String?
+        val modules = mainList[3] as List<ModuleActivationEntity>
+        val playingKey = mainList[4] as String?
 
         SettingsPrivacyUiState(
             preferences = prefs,
@@ -98,18 +106,30 @@ class SettingsPrivacyViewModel(
             playingToneKey = playingKey,
             vaultStatus = vaultStatus,
             publicKeyReady = publicKeyReady,
-            activationBanner = actBanner?.first,
-            activationSuccess = actBanner?.second,
-            statusMessage = msg
+            canUseFullScreenPopup = meta.third,
+            activationBanner = meta.first?.first,
+            activationSuccess = meta.first?.second,
+            statusMessage = meta.second
         )
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
         initialValue = SettingsPrivacyUiState(
             vaultStatus = vaultStatus,
-            publicKeyReady = publicKeyReady
+            publicKeyReady = publicKeyReady,
+            canUseFullScreenPopup = fullScreenPopupAllowed.value
         )
     )
+
+    fun refreshFullScreenPopupStatus() {
+        fullScreenPopupAllowed.value = alertSoundManager.canUseFullScreenIntent()
+    }
+
+    fun openFullScreenPopupSettings(context: Context) {
+        runCatching {
+            context.startActivity(alertSoundManager.createFullScreenIntentSettingsIntent())
+        }
+    }
 
     fun setThemeMode(mode: ThemeMode) {
         viewModelScope.launch { preferencesManager.setThemeMode(mode) }
@@ -118,7 +138,7 @@ class SettingsPrivacyViewModel(
     fun setLanguage(language: SupportedLanguage) {
         viewModelScope.launch {
             preferencesManager.setLanguage(language)
-            statusMessage.value = "Language preference set to ${language.displayLabel}."
+            statusMessage.value = "Language switched to ${language.nativeName} (${language.displayLabel})."
         }
     }
 
@@ -242,21 +262,44 @@ class SettingsPrivacyViewModel(
         }
     }
 
+    fun updateCategoryNotificationStyle(
+        category: AlertCategory,
+        emoji: String,
+        customMessage: String,
+        gesturePreset: String
+    ) {
+        viewModelScope.launch {
+            preferencesManager.updateCategoryNotificationStyle(
+                categoryKey = category.key,
+                emoji = emoji,
+                customMessage = customMessage,
+                gesturePreset = gesturePreset
+            )
+            statusMessage.value = "${category.title} popup emoji & gesture updated ($emoji)."
+        }
+    }
+
     fun sendTestNotification(category: AlertCategory) {
         val setting = settingFor(category)
         val (title, body) = when (category) {
             AlertCategory.WATER ->
-                "Hydration Alert Test" to "Sound: ${alertSoundManager.describeCurrentTone(category, setting)}"
+                "Hydration Alert" to "Sound: ${alertSoundManager.describeCurrentTone(category, setting)}"
             AlertCategory.PERIOD ->
-                "Cycle Care Alert Test" to "Sound: ${alertSoundManager.describeCurrentTone(category, setting)}"
+                "Cycle Care Alert" to "Sound: ${alertSoundManager.describeCurrentTone(category, setting)}"
             AlertCategory.WELLNESS ->
-                "Wellness Alert Test" to "Sound: ${alertSoundManager.describeCurrentTone(category, setting)}"
+                "Wellness Alert" to "Sound: ${alertSoundManager.describeCurrentTone(category, setting)}"
         }
-        val sent = alertSoundManager.showAlertNotification(category, setting, title, body)
+        val sent = alertSoundManager.showAlertNotification(
+            category = category,
+            setting = setting,
+            title = title,
+            body = body,
+            launchPopupImmediately = true
+        )
         statusMessage.value = if (sent) {
-            "Test notification posted with ${category.title} channel sound."
+            "Mini-alarm popup & notification launched for ${category.title}."
         } else {
-            "Notification permission not granted yet. Allow notifications to hear alert notifications."
+            "Notification permission not granted yet. Allow notifications for screen-off alerts."
         }
     }
 
@@ -271,10 +314,15 @@ class SettingsPrivacyViewModel(
         soundKey: String,
         customSoundUri: String?,
         customSoundLabel: String?,
+        alarmEmoji: String = "⏰",
+        customMessage: String = "",
+        gesturePreset: String = "SWIPE_SLIDE",
         isEnabled: Boolean = true
     ) {
         val profileId = uiState.value.profile?.id ?: return
         val cleanTitle = title.trim().ifEmpty { "Custom Wellness Alarm" }
+        val cleanEmoji = alarmEmoji.trim().ifEmpty { "⏰" }
+        val cleanMsg = customMessage.trim()
         val time24h = String.format("%02d:%02d", hour.coerceIn(0, 23), minute.coerceIn(0, 59))
         viewModelScope.launch {
             val savedId = customAlarmRepository.saveAlarm(
@@ -288,7 +336,10 @@ class SettingsPrivacyViewModel(
                     isEnabled = isEnabled,
                     soundKey = soundKey,
                     customSoundUri = customSoundUri,
-                    customSoundLabel = customSoundLabel
+                    customSoundLabel = customSoundLabel,
+                    alarmEmoji = cleanEmoji,
+                    customMessage = cleanMsg,
+                    gesturePreset = gesturePreset
                 )
             )
             val savedEntity = ReminderEntity(
@@ -301,14 +352,17 @@ class SettingsPrivacyViewModel(
                 isEnabled = isEnabled,
                 soundKey = soundKey,
                 customSoundUri = customSoundUri,
-                customSoundLabel = customSoundLabel
+                customSoundLabel = customSoundLabel,
+                alarmEmoji = cleanEmoji,
+                customMessage = cleanMsg,
+                gesturePreset = gesturePreset
             )
             if (isEnabled) {
                 alertSoundManager.scheduleCustomAlarm(savedEntity)
-                statusMessage.value = "Alarm '$cleanTitle' set for $time24h."
+                statusMessage.value = "$cleanEmoji Alarm '$cleanTitle' set for $time24h."
             } else {
                 alertSoundManager.cancelCustomAlarm(savedId)
-                statusMessage.value = "Alarm '$cleanTitle' saved (paused)."
+                statusMessage.value = "$cleanEmoji Alarm '$cleanTitle' saved (paused)."
             }
         }
     }
@@ -318,10 +372,10 @@ class SettingsPrivacyViewModel(
             val updated = customAlarmRepository.toggleAlarm(alarm, enabled)
             if (enabled) {
                 alertSoundManager.scheduleCustomAlarm(updated)
-                statusMessage.value = "Alarm '${alarm.title}' enabled for ${alarm.triggerTime24h}."
+                statusMessage.value = "${alarm.alarmEmoji} Alarm '${alarm.title}' enabled for ${alarm.triggerTime24h}."
             } else {
                 alertSoundManager.cancelCustomAlarm(alarm.id)
-                statusMessage.value = "Alarm '${alarm.title}' paused."
+                statusMessage.value = "${alarm.alarmEmoji} Alarm '${alarm.title}' paused."
             }
         }
     }
@@ -340,11 +394,14 @@ class SettingsPrivacyViewModel(
     }
 
     fun testCustomAlarmNotification(alarm: ReminderEntity) {
-        val sent = alertSoundManager.showCustomAlarmNotification(alarm)
+        val sent = alertSoundManager.showCustomAlarmNotification(
+            reminder = alarm,
+            launchPopupImmediately = true
+        )
         statusMessage.value = if (sent) {
-            "Posted test alarm '${alarm.title}' (${alertSoundManager.describeReminderTone(alarm)})."
+            "Launched mini-alarm popup for ${alarm.alarmEmoji} '${alarm.title}'."
         } else {
-            "Allow notifications to fire custom alarm alerts."
+            "Allow notifications so alarms also pop up when screen is off."
         }
     }
 

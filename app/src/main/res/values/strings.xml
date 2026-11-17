@@ -4,15 +4,61 @@
     <string name="welcome_title">Calm daily care,\nkept strictly yours.</string>
     <string name="welcome_subtitle">Track hydration, cycle rhythms, and personal wellness in an on-device vault with zero cloud accounts or remote tracking.</string>
     <string name="cta_get_started">Begin Local Setup</string>
+    <string name="welcome_badge_on_device">100% On-Device</string>
+    <string name="welcome_language_title">🗣️ Choose Language</string>
+    <string name="welcome_pledge_privacy_title">🛡️ Strictly On-Device Storage</string>
+    <string name="welcome_pledge_privacy_sub">All profiles, hydration logs, workouts, and cycle records stay privately on your phone with zero cloud upload.</string>
+    <string name="welcome_pledge_cycle_title">🌸 Inclusive &amp; Always Free Cycle Care</string>
+    <string name="welcome_pledge_cycle_sub">Personalized for every identity—toggle cycle tracking anytime, free forever.</string>
+    <string name="welcome_pledge_alerts_title">🔔 Distinct Custom Alert Sounds</string>
+    <string name="welcome_pledge_alerts_sub">Dedicated water droplet, botanical period chime, custom alarms, or any local audio file from your phone.</string>
+
     <string name="nav_home">Home</string>
     <string name="nav_water">Hydration</string>
     <string name="nav_period">Cycle</string>
     <string name="nav_modules">Modules</string>
     <string name="nav_settings">Privacy</string>
+
     <string name="profile_setup_title">Personalize Your Companion</string>
     <string name="profile_edit_title">Edit Local Profile</string>
     <string name="period_always_free_badge">Always Free</string>
     <string name="privacy_export_json">Export Local JSON</string>
     <string name="privacy_delete_all">Delete All Local Data</string>
     <string name="activation_verify_button">Verify Offline Key</string>
+
+    <string name="greeting_morning">Good morning</string>
+    <string name="greeting_afternoon">Good afternoon</string>
+    <string name="greeting_evening">Good evening</string>
+    <string name="greeting_night">Peaceful night</string>
+
+    <string name="home_badge_on_device">🛡️ 100% On-Device</string>
+    <string name="home_tones_alarms">🔔 Tones &amp; Alarms</string>
+    <string name="home_ai_listener_title">🎙️ AI Voice Listener</string>
+    <string name="home_ai_listening">🎧 Listening…</string>
+    <string name="home_ai_hint">Tap the mic to speak in your language—log coffee, 200 ml water, steps, or ask how to use any feature.</string>
+    <string name="home_live_metrics_title">📊 Today\'s Live Metrics</string>
+    <string name="home_sync_watch">⌚ Sync Watch</string>
+    <string name="home_daily_steps">👟 Daily Steps</string>
+    <string name="home_metric_water">Water</string>
+    <string name="home_metric_heart">Heart</string>
+    <string name="home_metric_meds">Meds</string>
+    <string name="home_metric_calories">Calories</string>
+    <string name="home_metric_sleep">Sleep</string>
+    <string name="home_metric_screen">Screen</string>
+    <string name="home_doctors_title">Doctors</string>
+    <string name="home_movement_title">Movement</string>
+    <string name="home_daily_hydration">Daily Hydration</string>
+    <string name="home_hydration_crushed">Hydration Goal Crushed! 🎉</string>
+    <string name="home_cycle_care">Cycle &amp; Period Care</string>
+
+    <string name="water_screen_title">💧 Hydration Tracker</string>
+    <string name="period_screen_title">🌸 Cycle &amp; Period Care</string>
+    <string name="modules_hub_title">Wellness Modules</string>
+
+    <string name="settings_screen_title">Settings, Alerts &amp; Privacy</string>
+    <string name="settings_appearance_title">Appearance &amp; Personalization</string>
+    <string name="settings_theme_mode">Theme Mode</string>
+    <string name="settings_regional_language">Language</string>
+    <string name="settings_screen_off_popup_title">🌙 Enable Screen-Off Alarm Popups</string>
+    <string name="settings_screen_off_popup_cta">Allow Screen-Off Popups</string>
 </resources>

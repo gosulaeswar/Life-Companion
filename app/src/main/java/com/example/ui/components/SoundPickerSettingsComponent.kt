@@ -57,11 +57,14 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.example.data.local.entity.ReminderEntity
+import com.example.notifications.AlarmEmojiCatalog
+import com.example.notifications.AlarmEmojiGesturePreset
 import com.example.notifications.AlertCategory
 import com.example.notifications.BundledAlertTone
 import com.example.security.AlertToneSource
 import com.example.security.CategoryToneSetting
 import com.example.ui.theme.JetBrainsMonoMetricFont
+import androidx.compose.ui.unit.sp
 
 /**
  * Dedicated Settings component allowing users to assign bundled local audio files
@@ -81,6 +84,7 @@ fun CategorySoundPickerCard(
     onSelectSystemTone: (AlertCategory, AlertToneSource) -> Unit,
     onPickLocalStorageAudio: (AlertCategory) -> Unit,
     onToggleDailyReminder: (AlertCategory, Boolean, Int, Int) -> Unit,
+    onUpdateCategoryStyle: (AlertCategory, String, String, String) -> Unit = { _, _, _, _ -> },
     onTestCategoryNotification: (AlertCategory) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -254,6 +258,80 @@ fun CategorySoundPickerCard(
                             }
                         )
                     }
+
+                    var editCategoryStyle by remember(selectedCategory) { mutableStateOf(false) }
+                    val activeEmoji = activeSetting.customEmoji?.takeIf { it.isNotBlank() }
+                        ?: AlarmEmojiCatalog.defaultEmojiForCategory(selectedCategory.key)
+                    val activeGesture = AlarmEmojiGesturePreset.fromId(activeSetting.gesturePreset)
+
+                    HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "Popup Style: $activeEmoji • ${activeGesture.shortBadge}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.weight(1f)
+                        )
+                        TextButton(onClick = { editCategoryStyle = !editCategoryStyle }) {
+                            Text(if (editCategoryStyle) "Hide" else "Customize Emoji & Gesture")
+                        }
+                    }
+
+                    if (editCategoryStyle) {
+                        var draftEmoji by remember(selectedCategory, activeSetting.customEmoji) {
+                            mutableStateOf(activeEmoji)
+                        }
+                        var draftMsg by remember(selectedCategory, activeSetting.customMessage) {
+                            mutableStateOf(activeSetting.customMessage.orEmpty())
+                        }
+                        var draftGesture by remember(selectedCategory, activeSetting.gesturePreset) {
+                            mutableStateOf(activeSetting.gesturePreset)
+                        }
+
+                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                AlarmEmojiCatalog.curatedEmojis.take(8).forEach { emojiChoice ->
+                                    FilterChip(
+                                        selected = draftEmoji == emojiChoice,
+                                        onClick = { draftEmoji = emojiChoice },
+                                        label = { Text(emojiChoice, fontSize = 16.sp) }
+                                    )
+                                }
+                            }
+                            OutlinedTextField(
+                                value = draftMsg,
+                                onValueChange = { draftMsg = it },
+                                label = { Text("Custom Popup Message (optional)") },
+                                singleLine = true,
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                AlarmEmojiGesturePreset.entries.forEach { preset ->
+                                    FilterChip(
+                                        selected = draftGesture == preset.id,
+                                        onClick = { draftGesture = preset.id },
+                                        label = { Text(preset.shortBadge) }
+                                    )
+                                }
+                            }
+                            Button(
+                                onClick = {
+                                    onUpdateCategoryStyle(selectedCategory, draftEmoji, draftMsg, draftGesture)
+                                    editCategoryStyle = false
+                                },
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                Text("Save Popup Style")
+                            }
+                        }
+                    }
                 }
             }
 
@@ -408,7 +486,10 @@ fun CustomAlarmsSettingsCard(
         daysMask: Int,
         soundKey: String,
         customUri: String?,
-        customLabel: String?
+        customLabel: String?,
+        alarmEmoji: String,
+        customMessage: String,
+        gesturePreset: String
     ) -> Unit,
     onLaunchAudioPickerForDialog: ((Uri) -> Unit) -> Unit,
     resolveAudioDisplayName: (Uri) -> String,
@@ -523,19 +604,43 @@ fun CustomAlarmsSettingsCard(
                                     horizontalArrangement = Arrangement.SpaceBetween,
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
+                                    val gesturePreset = AlarmEmojiGesturePreset.fromId(alarm.gesturePreset)
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(
-                                            text = alarm.triggerTime24h,
-                                            style = MaterialTheme.typography.headlineSmall.copy(
-                                                fontFamily = JetBrainsMonoMetricFont,
-                                                fontWeight = FontWeight.Bold
-                                            ),
-                                            color = MaterialTheme.colorScheme.primary
-                                        )
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        ) {
+                                            Text(text = alarm.alarmEmoji, fontSize = 24.sp)
+                                            Text(
+                                                text = alarm.triggerTime24h,
+                                                style = MaterialTheme.typography.headlineSmall.copy(
+                                                    fontFamily = JetBrainsMonoMetricFont,
+                                                    fontWeight = FontWeight.Bold
+                                                ),
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.secondaryContainer
+                                            ) {
+                                                Text(
+                                                    text = gesturePreset.shortBadge,
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
+                                        }
                                         Text(
                                             text = alarm.title,
                                             style = MaterialTheme.typography.titleSmall
                                         )
+                                        if (alarm.customMessage.isNotBlank()) {
+                                            Text(
+                                                text = alarm.customMessage,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
                                         Text(
                                             text = "${formatDaysMask(alarm.daysOfWeekMask)} • $soundLabel",
                                             style = MaterialTheme.typography.bodySmall,
@@ -567,8 +672,11 @@ fun CustomAlarmsSettingsCard(
                                         Spacer(modifier = Modifier.size(4.dp))
                                         Text(if (isPlaying) "Stop" else "Play")
                                     }
-                                    TextButton(onClick = { onTestAlarm(alarm) }) {
-                                        Text("Test")
+                                    TextButton(
+                                        onClick = { onTestAlarm(alarm) },
+                                        modifier = Modifier.testTag("test_popup_alarm_${alarm.id}")
+                                    ) {
+                                        Text("Test Popup")
                                     }
                                     IconButton(
                                         onClick = { onDeleteAlarm(alarm) },
@@ -600,7 +708,7 @@ fun CustomAlarmsSettingsCard(
                 onStopPreview()
                 showAlarmDialog = false
             },
-            onSave = { title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel ->
+            onSave = { title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel, alarmEmoji, customMsg, gesturePreset ->
                 onStopPreview()
                 onSaveAlarm(
                     editingAlarm?.id ?: 0L,
@@ -611,7 +719,10 @@ fun CustomAlarmsSettingsCard(
                     mask,
                     soundKey,
                     customUri,
-                    customLabel
+                    customLabel,
+                    alarmEmoji,
+                    customMsg,
+                    gesturePreset
                 )
                 showAlarmDialog = false
             }
@@ -637,7 +748,10 @@ private fun CustomAlarmEditorDialog(
         mask: Int,
         soundKey: String,
         customUri: String?,
-        customLabel: String?
+        customLabel: String?,
+        alarmEmoji: String,
+        customMessage: String,
+        gesturePreset: String
     ) -> Unit
 ) {
     val parsedParts = existing?.triggerTime24h?.split(":")
@@ -649,6 +763,9 @@ private fun CustomAlarmEditorDialog(
     var soundKey by remember { mutableStateOf(existing?.soundKey ?: BundledAlertTone.WATER_DROP.id) }
     var customUri by remember { mutableStateOf(existing?.customSoundUri) }
     var customLabel by remember { mutableStateOf(existing?.customSoundLabel) }
+    var alarmEmoji by remember { mutableStateOf(existing?.alarmEmoji ?: AlarmEmojiCatalog.defaultEmojiForCategory(moduleKey)) }
+    var customMessage by remember { mutableStateOf(existing?.customMessage ?: "") }
+    var gesturePreset by remember { mutableStateOf(existing?.gesturePreset ?: AlarmEmojiGesturePreset.SWIPE_SLIDE.id) }
 
     val dayLabels = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
@@ -670,6 +787,49 @@ private fun CustomAlarmEditorDialog(
                         .testTag("custom_alarm_title_input")
                 )
 
+                OutlinedTextField(
+                    value = customMessage,
+                    onValueChange = { customMessage = it },
+                    label = { Text("Custom Popup Message (optional)") },
+                    placeholder = { Text("e.g. Drink 250 ml & stretch your back!") },
+                    maxLines = 2,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .testTag("custom_alarm_message_input")
+                )
+
+                Text("Notification Emoji", style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AlarmEmojiCatalog.curatedEmojis.forEach { emojiOption ->
+                        FilterChip(
+                            selected = alarmEmoji == emojiOption,
+                            onClick = { alarmEmoji = emojiOption },
+                            label = { Text(emojiOption, fontSize = 16.sp) },
+                            modifier = Modifier.testTag("alarm_emoji_$emojiOption")
+                        )
+                    }
+                }
+
+                Text("Emoji Popup Gesture", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    AlarmEmojiGesturePreset.entries.forEach { preset ->
+                        FilterChip(
+                            selected = gesturePreset == preset.id,
+                            onClick = { gesturePreset = preset.id },
+                            label = { Text(preset.shortBadge) },
+                            modifier = Modifier.testTag("alarm_gesture_${preset.id}")
+                        )
+                    }
+                }
+                Text(
+                    text = AlarmEmojiGesturePreset.fromId(gesturePreset).instruction,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
                 Text("Category", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     AlertCategory.entries.forEach { cat ->
@@ -677,6 +837,9 @@ private fun CustomAlarmEditorDialog(
                             selected = moduleKey == cat.key,
                             onClick = {
                                 moduleKey = cat.key
+                                if (existing == null) {
+                                    alarmEmoji = AlarmEmojiCatalog.defaultEmojiForCategory(cat.key)
+                                }
                                 if (soundKey != "custom_uri") {
                                     soundKey = cat.defaultTone.id
                                 }
@@ -853,7 +1016,19 @@ private fun CustomAlarmEditorDialog(
         confirmButton = {
             Button(
                 onClick = {
-                    onSave(title, moduleKey, hour, minute, daysMask, soundKey, customUri, customLabel)
+                    onSave(
+                        title,
+                        moduleKey,
+                        hour,
+                        minute,
+                        daysMask,
+                        soundKey,
+                        customUri,
+                        customLabel,
+                        alarmEmoji,
+                        customMessage,
+                        gesturePreset
+                    )
                 },
                 modifier = Modifier.testTag("save_custom_alarm_button")
             ) {

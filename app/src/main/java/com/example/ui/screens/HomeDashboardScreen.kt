@@ -75,8 +75,10 @@ import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.IntOffset
 import androidx.core.content.ContextCompat
+import com.example.R
 import com.example.ai.SupportedVoiceLanguages
 import com.example.domain.DateEpochUtils
 import com.example.ui.components.ModuleStatusPill
@@ -208,9 +210,18 @@ fun HomeDashboardScreen(
                             ) {
                                 Text(text = greetingEmoji, fontSize = 26.sp)
                             }
+                            val localizedGreeting = when {
+                                uiState.greeting.contains("morning", ignoreCase = true) ->
+                                    stringResource(id = R.string.greeting_morning)
+                                uiState.greeting.contains("afternoon", ignoreCase = true) ->
+                                    stringResource(id = R.string.greeting_afternoon)
+                                uiState.greeting.contains("evening", ignoreCase = true) ->
+                                    stringResource(id = R.string.greeting_evening)
+                                else -> stringResource(id = R.string.greeting_night)
+                            }
                             Column {
                                 Text(
-                                    text = "${uiState.greeting} ✨",
+                                    text = "$localizedGreeting ✨",
                                     style = MaterialTheme.typography.labelLarge,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -247,7 +258,7 @@ fun HomeDashboardScreen(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        PrivacyVaultBadge(text = "🛡️ 100% On-Device")
+                        PrivacyVaultBadge(text = stringResource(id = R.string.home_badge_on_device))
                         Surface(
                             shape = CircleShape,
                             color = AmberNotice.copy(alpha = 0.2f)
@@ -267,7 +278,7 @@ fun HomeDashboardScreen(
                             shape = CircleShape
                         ) {
                             Text(
-                                text = "🔔 Tones & Alarms",
+                                text = stringResource(id = R.string.home_tones_alarms),
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -359,7 +370,11 @@ fun HomeDashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = if (isListening) "🎧 Listening (${selectedLang.emoji})..." else "🎙️ AI Voice Listener",
+                                    text = if (isListening) {
+                                        "${stringResource(id = R.string.home_ai_listening)} (${selectedLang.emoji})"
+                                    } else {
+                                        stringResource(id = R.string.home_ai_listener_title)
+                                    },
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
@@ -372,7 +387,7 @@ fun HomeDashboardScreen(
                                 text = if (isListening && modulesState.voicePartialTranscript.isNotBlank()) {
                                     "“${modulesState.voicePartialTranscript}”"
                                 } else {
-                                    "Tap the mic to speak in your language—log coffee, 200 ml water, steps, or ask how to use any feature."
+                                    stringResource(id = R.string.home_ai_hint)
                                 },
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -491,11 +506,11 @@ fun HomeDashboardScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Text(
-                            text = "📊 Today's Live Metrics",
+                            text = stringResource(id = R.string.home_live_metrics_title),
                             style = MaterialTheme.typography.titleMedium
                         )
                         TextButton(onClick = { onOpenModuleKey("connected_devices") }) {
-                            Text("⌚ Sync Watch")
+                            Text(stringResource(id = R.string.home_sync_watch))
                         }
                     }
 
@@ -519,7 +534,7 @@ fun HomeDashboardScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    text = "👟 Daily Steps",
+                                    text = stringResource(id = R.string.home_daily_steps),
                                     style = MaterialTheme.typography.titleSmall
                                 )
                                 Text(
@@ -548,31 +563,31 @@ fun HomeDashboardScreen(
                     ) {
                         HomeMiniMetricChip(
                             emoji = "💧",
-                            label = "Water",
+                            label = stringResource(id = R.string.home_metric_water),
                             value = "${uiState.hydration.totalTodayMl} ml",
                             onClick = onOpenWaterTracker
                         )
                         HomeMiniMetricChip(
                             emoji = "❤️",
-                            label = "Heart",
+                            label = stringResource(id = R.string.home_metric_heart),
                             value = latestHr?.let { "${it.valuePrimary.toInt()} bpm" } ?: "Sync HR",
                             onClick = { onOpenModuleKey("connected_devices") }
                         )
                         HomeMiniMetricChip(
                             emoji = "💊",
-                            label = "Meds",
+                            label = stringResource(id = R.string.home_metric_meds),
                             value = if (expectedDoses > 0) "$takenDoses/$expectedDoses" else "${activeMeds.size} meds",
                             onClick = { onOpenModuleKey("medical_care") }
                         )
                         HomeMiniMetricChip(
                             emoji = "🥗",
-                            label = "Calories",
+                            label = stringResource(id = R.string.home_metric_calories),
                             value = "$totalCalories kcal",
                             onClick = { onOpenModuleKey("diet_tracker") }
                         )
                         HomeMiniMetricChip(
                             emoji = "😴",
-                            label = "Sleep",
+                            label = stringResource(id = R.string.home_metric_sleep),
                             value = latestSleepHrs?.let { String.format("%.1fh", it) } ?: "Log rest",
                             onClick = { onOpenModuleKey("exercise_tracker") }
                         )
@@ -587,7 +602,7 @@ fun HomeDashboardScreen(
                         }
                         HomeMiniMetricChip(
                             emoji = "📵",
-                            label = "Screen",
+                            label = stringResource(id = R.string.home_metric_screen),
                             value = screenBadge,
                             onClick = { onOpenModuleKey("digital_wellbeing") }
                         )
@@ -905,7 +920,7 @@ fun HomeDashboardScreen(
 
                     SpotlightEmojiCard(
                         emoji = "🩺",
-                        title = "Doctors",
+                        title = stringResource(id = R.string.home_doctors_title),
                         metric = doctorMetric,
                         subtitle = doctorSub,
                         tint = MaterialTheme.colorScheme.tertiaryContainer,
@@ -917,7 +932,7 @@ fun HomeDashboardScreen(
                     )
                     SpotlightEmojiCard(
                         emoji = "🏃",
-                        title = "Movement",
+                        title = stringResource(id = R.string.home_movement_title),
                         metric = "$totalSteps steps",
                         subtitle = "$activeMinutes min active",
                         tint = AmberNotice.copy(alpha = 0.22f),
@@ -971,9 +986,9 @@ fun HomeDashboardScreen(
                             Column {
                                 Text(
                                     text = if (uiState.hydration.remainingMl == 0) {
-                                        "Hydration Goal Crushed! 🎉"
+                                        stringResource(id = R.string.home_hydration_crushed)
                                     } else {
-                                        "Daily Hydration"
+                                        stringResource(id = R.string.home_daily_hydration)
                                     },
                                     style = MaterialTheme.typography.titleMedium
                                 )
@@ -1081,7 +1096,7 @@ fun HomeDashboardScreen(
                             )
                             Column {
                                 Text(
-                                    text = "Cycle & Period Care",
+                                    text = stringResource(id = R.string.home_cycle_care),
                                     style = MaterialTheme.typography.titleMedium
                                 )
                                 Text(

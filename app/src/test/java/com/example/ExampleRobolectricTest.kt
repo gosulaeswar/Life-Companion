@@ -14,13 +14,19 @@ import com.example.data.repository.ModuleRepository
 import com.example.domain.DateEpochUtils
 import com.example.domain.HydrationSummary
 import com.example.domain.OnDeviceWellnessAdvisor
+import com.example.notifications.AlarmEmojiCatalog
+import com.example.notifications.AlarmEmojiGesturePreset
+import com.example.notifications.AlarmPopupPayload
+import com.example.notifications.AlertAlarmReceiver
 import com.example.notifications.AlertCategory
 import com.example.notifications.AlertSoundManager
 import com.example.notifications.BootCompletedReceiver
 import com.example.notifications.BundledAlertTone
 import com.example.security.AlertToneSource
+import com.example.security.AppLocaleManager
 import com.example.security.CategoryToneSetting
 import com.example.security.OfflineLicenseVerifier
+import com.example.security.SupportedLanguage
 import com.example.security.VerificationResult
 import com.example.ai.AiActionType
 import com.example.ai.LifeWeaveAiService
@@ -102,7 +108,10 @@ class ExampleRobolectricTest {
                     moduleKey = AlertCategory.WATER.key,
                     triggerTime24h = "15:30",
                     daysOfWeekMask = 62,
-                    soundKey = BundledAlertTone.BAMBOO_BROOK.id
+                    soundKey = BundledAlertTone.BAMBOO_BROOK.id,
+                    alarmEmoji = "💧",
+                    customMessage = "Sip 300ml & stretch",
+                    gesturePreset = AlarmEmojiGesturePreset.HOLD_RING.id
                 )
             )
 
@@ -112,6 +121,9 @@ class ExampleRobolectricTest {
             assertEquals(1, alarms.size)
             assertEquals("15:30", alarms.first().triggerTime24h)
             assertEquals(BundledAlertTone.BAMBOO_BROOK.id, alarms.first().soundKey)
+            assertEquals("💧", alarms.first().alarmEmoji)
+            assertEquals("Sip 300ml & stretch", alarms.first().customMessage)
+            assertEquals(AlarmEmojiGesturePreset.HOLD_RING.id, alarms.first().gesturePreset)
 
             db.userProfileDao().deleteAllProfiles()
             assertEquals(0, db.waterDao().getAllForProfileSnapshot(profileId).size)
@@ -562,5 +574,82 @@ class ExampleRobolectricTest {
         // Ensure BootCompletedReceiver safely handles boot intent without throwing
         val receiver = BootCompletedReceiver()
         receiver.onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
+    }
+
+    @Test
+    fun `customized alarm popup payload emoji gesture presets and snooze actions roundtrip safely`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val original = AlarmPopupPayload(
+            notificationId = 5042,
+            alarmId = 42L,
+            categoryKey = "water",
+            title = "Evening Sip",
+            message = "Drink 250ml warm water",
+            emoji = "💧",
+            timeLabel = "14:55",
+            toneLabel = "Water Droplet Chime",
+            gesturePreset = AlarmEmojiGesturePreset.DOUBLE_TAP_POP,
+            soundUriString = "android.resource://${context.packageName}/raw/sound_water_drop"
+        )
+        val roundtrip = AlarmPopupPayload.fromIntent(original.writeToIntent(Intent()))
+        assertEquals(original.notificationId, roundtrip.notificationId)
+        assertEquals(original.alarmId, roundtrip.alarmId)
+        assertEquals("💧", roundtrip.emoji)
+        assertEquals("14:55", roundtrip.timeLabel)
+        assertEquals("Drink 250ml warm water", roundtrip.message)
+        assertEquals(AlarmEmojiGesturePreset.DOUBLE_TAP_POP, roundtrip.gesturePreset)
+
+        assertEquals("🌸", AlarmEmojiCatalog.defaultEmojiForCategory("period"))
+        assertEquals(AlarmEmojiGesturePreset.SWIPE_SLIDE, AlarmEmojiGesturePreset.fromId("unknown"))
+
+        val soundManager = AlertSoundManager(context)
+        val reminder = ReminderEntity(
+            id = 42L,
+            profileId = 1L,
+            title = "Medicine Check",
+            moduleKey = AlertCategory.WELLNESS.key,
+            triggerTime24h = "14:55",
+            alarmEmoji = "💊",
+            customMessage = "Take Vitamin D3 after lunch",
+            gesturePreset = AlarmEmojiGesturePreset.HOLD_RING.id
+        )
+        soundManager.scheduleCustomAlarm(reminder)
+        soundManager.scheduleSnoozeAlarm(roundtrip, minutes = 10)
+        soundManager.cancelCustomAlarm(42L)
+
+        // Verify dismiss & snooze broadcasts from notification shade execute safely
+        val alarmReceiver = AlertAlarmReceiver()
+        alarmReceiver.onReceive(
+            context,
+            Intent(AlertAlarmReceiver.ACTION_DISMISS_ALARM).putExtra(AlarmPopupPayload.EXTRA_NOTIFICATION_ID, 5042)
+        )
+        alarmReceiver.onReceive(
+            context,
+            original.writeToIntent(Intent(AlertAlarmReceiver.ACTION_SNOOZE_ALARM))
+        )
+    }
+
+    @Test
+    fun `regional language wrapper resolves localized strings for all supported Indian languages`() {
+        val baseContext = ApplicationProvider.getApplicationContext<Context>()
+
+        val expectedNavHome = mapOf(
+            SupportedLanguage.ENGLISH to "Home",
+            SupportedLanguage.HINDI to "होम",
+            SupportedLanguage.TAMIL to "முகப்பு",
+            SupportedLanguage.TELUGU to "హోమ్",
+            SupportedLanguage.BENGALI to "হোম",
+            SupportedLanguage.MARATHI to "मुख्यपृष्ठ"
+        )
+
+        expectedNavHome.forEach { (lang, expectedHomeLabel) ->
+            val localizedContext = AppLocaleManager.wrapContext(baseContext, lang)
+            assertEquals(expectedHomeLabel, localizedContext.getString(R.string.nav_home))
+            assertNotEquals("", localizedContext.getString(R.string.welcome_title))
+            if (lang != SupportedLanguage.ENGLISH) {
+                assertNotEquals("Home", localizedContext.getString(R.string.nav_home))
+                assertNotEquals("Daily Steps", localizedContext.getString(R.string.home_daily_steps))
+            }
+        }
     }
 }

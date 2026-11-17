@@ -93,7 +93,7 @@ fun WelcomeScreen(
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.primary
                     )
-                    PrivacyVaultBadge(text = "100% On-Device")
+                    PrivacyVaultBadge(text = stringResource(id = R.string.welcome_badge_on_device))
                 }
 
                 // Editorial Botanical Hero Art
@@ -117,7 +117,7 @@ fun WelcomeScreen(
                         color = MaterialTheme.colorScheme.surface.copy(alpha = 0.9f)
                     ) {
                         Text(
-                            text = "✨ Adaptive Personal Companion",
+                            text = "✨ ${stringResource(id = R.string.tagline_privacy)}",
                             style = MaterialTheme.typography.labelMedium,
                             color = MaterialTheme.colorScheme.primary,
                             modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -141,22 +141,22 @@ fun WelcomeScreen(
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     PledgeCard(
                         icon = Icons.Rounded.Shield,
-                        title = "🛡️ Strictly On-Device Storage",
-                        subtitle = "All profiles, hydration logs, workouts, and cycle records stay privately on your phone with zero cloud upload."
+                        title = stringResource(id = R.string.welcome_pledge_privacy_title),
+                        subtitle = stringResource(id = R.string.welcome_pledge_privacy_sub)
                     )
                     PledgeCard(
                         icon = Icons.Rounded.FavoriteBorder,
-                        title = "🌸 Inclusive & Always Free Cycle Care",
-                        subtitle = "Personalized for every identity—toggle cycle tracking anytime, free forever."
+                        title = stringResource(id = R.string.welcome_pledge_cycle_title),
+                        subtitle = stringResource(id = R.string.welcome_pledge_cycle_sub)
                     )
                     PledgeCard(
                         icon = Icons.Rounded.NotificationsActive,
-                        title = "🔔 Distinct Custom Alert Sounds",
-                        subtitle = "Dedicated water droplet, botanical period chime, custom alarms, or any local audio file from your phone."
+                        title = stringResource(id = R.string.welcome_pledge_alerts_title),
+                        subtitle = stringResource(id = R.string.welcome_pledge_alerts_sub)
                     )
                 }
 
-                // Regional Language Readiness Selector
+                // Regional Language Selector
                 Card(
                     colors = CardDefaults.cardColors(
                         containerColor = MaterialTheme.colorScheme.surface
@@ -168,7 +168,7 @@ fun WelcomeScreen(
                         verticalArrangement = Arrangement.spacedBy(10.dp)
                     ) {
                         Text(
-                            text = "🗣️ Language Readiness",
+                            text = stringResource(id = R.string.welcome_language_title),
                             style = MaterialTheme.typography.titleSmall,
                             color = MaterialTheme.colorScheme.onSurface
                         )
@@ -180,7 +180,14 @@ fun WelcomeScreen(
                                 FilterChip(
                                     selected = selectedLanguage == lang,
                                     onClick = { onSelectLanguage(lang) },
-                                    label = { Text(lang.nativeName) },
+                                    label = {
+                                        val label = if (lang == SupportedLanguage.ENGLISH) {
+                                            lang.nativeName
+                                        } else {
+                                            "${lang.nativeName} (${lang.displayLabel})"
+                                        }
+                                        Text(label)
+                                    },
                                     modifier = Modifier.testTag("lang_chip_${lang.code}")
                                 )
                             }

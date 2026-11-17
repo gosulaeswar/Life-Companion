@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">লাইফউইভ</string>
+    <string name="tagline_privacy">আপনার জীবন, আপনার ডিভাইস। ১০০% স্থানীয়।</string>
+    <string name="welcome_title">শান্ত দৈনন্দিন যত্ন,\nসম্পূর্ণ আপনার নিজের কাছে।</string>
+    <string name="welcome_subtitle">কোনো ক্লাউড অ্যাকাউন্ট বা ট্র্যাকিং ছাড়াই নিজের ফোনে জল, পিরিয়ড চক্র এবং সুস্থতার হিসাব রাখুন।</string>
+    <string name="cta_get_started">সেটআপ শুরু করুন</string>
+    <string name="welcome_badge_on_device">১০০% অফলাইন</string>
+    <string name="welcome_language_title">🗣️ ভাষা নির্বাচন করুন</string>
+    <string name="welcome_pledge_privacy_title">🛡️ সম্পূর্ণ ডিভাইসেই সংরক্ষণ</string>
+    <string name="welcome_pledge_privacy_sub">আপনার প্রোফাইল, জল, ব্যায়াম ও চক্রের তথ্য কোনো ক্লাউড আপলোড ছাড়াই আপনার ফোনে সুরক্ষিত থাকে।</string>
+    <string name="welcome_pledge_cycle_title">🌸 সবার জন্য বিনামূল্যে চক্র যত্ন</string>
+    <string name="welcome_pledge_cycle_sub">যেকোনো সময় সাইকেল ট্র্যাকিং চালু বা বন্ধ করুন—চিরকাল বিনামূল্যে।</string>
+    <string name="welcome_pledge_alerts_title">🔔 কাস্টম অ্যালার্ম ও শব্দ</string>
+    <string name="welcome_pledge_alerts_sub">জলের শব্দ, চক্রের ঘণ্টা, কাস্টম অ্যালার্ম বা ফোনের যেকোনো অডিও ব্যবহার করুন।</string>
+
+    <string name="nav_home">হোম</string>
+    <string name="nav_water">জল</string>
+    <string name="nav_period">চক্র</string>
+    <string name="nav_modules">মডিউল</string>
+    <string name="nav_settings">গোপনীয়তা</string>
+
+    <string name="profile_setup_title">আপনার প্রোফাইল সাজান</string>
+    <string name="profile_edit_title">প্রোফাইল সম্পাদনা</string>
+    <string name="period_always_free_badge">সর্বদা বিনামূল্যে</string>
+    <string name="privacy_export_json">স্থানীয় JSON রপ্তানি</string>
+    <string name="privacy_delete_all">সব ডেটা মুছে ফেলুন</string>
+    <string name="activation_verify_button">অফলাইন কী যাচাই করুন</string>
+
+    <string name="greeting_morning">সুপ্রভাত</string>
+    <string name="greeting_afternoon">শুভ অপরাহ্ণ</string>
+    <string name="greeting_evening">শুভ সন্ধ্যা</string>
+    <string name="greeting_night">শুভ রাত্রি</string>
+
+    <string name="home_badge_on_device">🛡️ ১০০% অফলাইন</string>
+    <string name="home_tones_alarms">🔔 শব্দ ও অ্যালার্ম</string>
+    <string name="home_ai_listener_title">🎙️ AI ভয়েস সহায়ক</string>
+    <string name="home_ai_listening">🎧 শুনছি…</string>
+    <string name="home_ai_hint">নিজের ভাষায় কথা বলতে মাইকে ট্যাপ করুন—জল, পদক্ষেপ বা ওষুধ যোগ করুন।</string>
+    <string name="home_live_metrics_title">📊 আজকের লাইভ পরিমাপ</string>
+    <string name="home_sync_watch">⌚ ঘড়ি সিঙ্ক</string>
+    <string name="home_daily_steps">👟 দৈনিক পদক্ষেপ</string>
+    <string name="home_metric_water">জল</string>
+    <string name="home_metric_heart">হৃদস্পন্দন</string>
+    <string name="home_metric_meds">ওষুধ</string>
+    <string name="home_metric_calories">ক্যালোরি</string>
+    <string name="home_metric_sleep">ঘুম</string>
+    <string name="home_metric_screen">স্ক্রিন</string>
+    <string name="home_doctors_title">ডাক্তার</string>
+    <string name="home_movement_title">ব্যায়াম</string>
+    <string name="home_daily_hydration">দৈনিক জলপান</string>
+    <string name="home_hydration_crushed">জলের লক্ষ্য পূর্ণ! 🎉</string>
+    <string name="home_cycle_care">পিরিয়ড ও চক্র যত্ন</string>
+
+    <string name="water_screen_title">💧 জলপান ট্র্যাকার</string>
+    <string name="period_screen_title">🌸 পিরিয়ড ও চক্র যত্ন</string>
+    <string name="modules_hub_title">স্বাস্থ্য মডিউল</string>
+
+    <string name="settings_screen_title">সেটিংস, অ্যালার্ম ও গোপনীয়তা</string>
+    <string name="settings_appearance_title">থিম ও ভাষা</string>
+    <string name="settings_theme_mode">থিম মোড</string>
+    <string name="settings_regional_language">আঞ্চলিক ভাষা</string>
+    <string name="settings_screen_off_popup_title">🌙 স্ক্রিন-অফ অ্যালার্ম পপআপ</string>
+    <string name="settings_screen_off_popup_cta">স্ক্রিন-অফ পপআপ অনুমতি</string>
+</resources>

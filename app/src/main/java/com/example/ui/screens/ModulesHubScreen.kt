@@ -27,8 +27,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.R
 import com.example.ui.components.ModuleStatusPill
 import com.example.ui.viewmodel.ModulesHubUiState
 
@@ -201,7 +203,7 @@ fun ModulesHubScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Column(modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth()) {
                 Text(
-                    text = "✨ All Wellness Modules",
+                    text = "✨ ${stringResource(id = R.string.modules_hub_title)}",
                     style = MaterialTheme.typography.headlineMedium
                 )
                 Text(

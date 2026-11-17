@@ -52,6 +52,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import com.example.R
 import com.example.notifications.AlertCategory
 import com.example.security.SupportedLanguage
@@ -78,8 +81,18 @@ fun SettingsPrivacyScreen(
     var pendingAlarmAudioCallback by remember { mutableStateOf<((Uri) -> Unit)?>(null) }
     var pendingNotifyAction by remember { mutableStateOf<(() -> Unit)?>(null) }
 
-    DisposableEffect(Unit) {
-        onDispose { viewModel.stopAudioPreview() }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                viewModel.refreshFullScreenPopupStatus()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose {
+            lifecycleOwner.lifecycle.removeObserver(observer)
+            viewModel.stopAudioPreview()
+        }
     }
 
     val exportJsonLauncher = rememberLauncherForActivityResult(
@@ -135,7 +148,7 @@ fun SettingsPrivacyScreen(
             Spacer(modifier = Modifier.height(8.dp))
             Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
                 Text(
-                    text = "Settings, Alerts & Privacy",
+                    text = stringResource(id = R.string.settings_screen_title),
                     style = MaterialTheme.typography.headlineMedium
                 )
                 Spacer(modifier = Modifier.height(6.dp))
@@ -165,6 +178,41 @@ fun SettingsPrivacyScreen(
                         )
                         TextButton(onClick = viewModel::clearStatusMessage) {
                             Text("OK")
+                        }
+                    }
+                }
+            }
+        }
+
+        if (!uiState.canUseFullScreenPopup) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Text(
+                            text = stringResource(id = R.string.settings_screen_off_popup_title),
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        Text(
+                            text = "Allow full-screen notifications in Android settings so your mini-alarm & emoji gesture card pops up even when the phone screen is locked or off.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer
+                        )
+                        Button(
+                            onClick = { viewModel.openFullScreenPopupSettings(context) },
+                            modifier = Modifier.testTag("enable_fullscreen_alarm_button")
+                        ) {
+                            Text(stringResource(id = R.string.settings_screen_off_popup_cta))
                         }
                     }
                 }
@@ -201,6 +249,9 @@ fun SettingsPrivacyScreen(
                         viewModel.toggleReminder(category, false, hour, min)
                     }
                 },
+                onUpdateCategoryStyle = { category, emoji, message, gesturePreset ->
+                    viewModel.updateCategoryNotificationStyle(category, emoji, message, gesturePreset)
+                },
                 onTestCategoryNotification = { category ->
                     runWithNotificationPermission {
                         viewModel.sendTestNotification(category)
@@ -233,7 +284,7 @@ fun SettingsPrivacyScreen(
                         viewModel.testCustomAlarmNotification(alarm)
                     }
                 },
-                onSaveAlarm = { existingId, title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel ->
+                onSaveAlarm = { existingId, title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel, alarmEmoji, customMsg, gesturePreset ->
                     runWithNotificationPermission {
                         viewModel.saveCustomAlarm(
                             existingId = existingId,
@@ -244,7 +295,10 @@ fun SettingsPrivacyScreen(
                             daysOfWeekMask = mask,
                             soundKey = soundKey,
                             customSoundUri = customUri,
-                            customSoundLabel = customLabel
+                            customSoundLabel = customLabel,
+                            alarmEmoji = alarmEmoji,
+                            customMessage = customMsg,
+                            gesturePreset = gesturePreset
                         )
                     }
                 },
@@ -273,11 +327,11 @@ fun SettingsPrivacyScreen(
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     Text(
-                        text = "Appearance & Personalization",
+                        text = stringResource(id = R.string.settings_appearance_title),
                         style = MaterialTheme.typography.titleMedium
                     )
 
-                    Text("Theme Mode", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(id = R.string.settings_theme_mode), style = MaterialTheme.typography.labelLarge)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         ThemeMode.entries.forEach { mode ->
                             FilterChip(
@@ -289,7 +343,7 @@ fun SettingsPrivacyScreen(
                         }
                     }
 
-                    Text("Regional Language Readiness", style = MaterialTheme.typography.labelLarge)
+                    Text(stringResource(id = R.string.settings_regional_language), style = MaterialTheme.typography.labelLarge)
                     FlowRow(
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                         verticalArrangement = Arrangement.spacedBy(6.dp)
@@ -298,7 +352,15 @@ fun SettingsPrivacyScreen(
                             FilterChip(
                                 selected = uiState.preferences.language == lang,
                                 onClick = { viewModel.setLanguage(lang) },
-                                label = { Text(lang.nativeName) }
+                                label = {
+                                    val label = if (lang == SupportedLanguage.ENGLISH) {
+                                        lang.nativeName
+                                    } else {
+                                        "${lang.nativeName} (${lang.displayLabel})"
+                                    }
+                                    Text(label)
+                                },
+                                modifier = Modifier.testTag("settings_lang_chip_${lang.code}")
                             )
                         }
                     }

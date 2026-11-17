@@ -1,0 +1,64 @@
+<resources>
+    <string name="app_name">லைஃப்வீவ்</string>
+    <string name="tagline_privacy">உங்கள் வாழ்க்கை, உங்கள் சாதனம். 100% உள்ளூர்.</string>
+    <string name="welcome_title">அமைதியான தினசரி பராமரிப்பு,\nமுழுமையாக உங்கள் வசம்.</string>
+    <string name="welcome_subtitle">கிளவுட் கணக்கு அல்லது கண்காணிப்பு இல்லாமல் உங்கள் சாதனத்திலேயே குடிநீர், மாதவிடாய் சுழற்சி மற்றும் ஆரோக்கியத்தைக் கண்காணிக்கவும்.</string>
+    <string name="cta_get_started">அமைப்பைத் தொடங்கு</string>
+    <string name="welcome_badge_on_device">100% ஆஃப்லைன்</string>
+    <string name="welcome_language_title">🗣️ மொழியைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="welcome_pledge_privacy_title">🛡️ முழுமையாக சாதன சேமிப்பு</string>
+    <string name="welcome_pledge_privacy_sub">அனைத்து சுயவிவரங்கள், குடிநீர், உடற்பயிற்சி மற்றும் சுழற்சி பதிவுகளும் உங்கள் தொலைபேசியிலேயே பாதுகாப்பாக இருக்கும்.</string>
+    <string name="welcome_pledge_cycle_title">🌸 அனைவருக்கும் இலவச சுழற்சி பராமரிப்பு</string>
+    <string name="welcome_pledge_cycle_sub">எப்போது வேண்டுமானாலும் சுழற்சி கண்காணிப்பை இயக்கலாம் அல்லது முடக்கலாம்—என்றென்றும் இலவசம்.</string>
+    <string name="welcome_pledge_alerts_title">🔔 தனிப்பயன் அலாரம் ஒலிகள்</string>
+    <string name="welcome_pledge_alerts_sub">நீர் ஒலி, சுழற்சி மணி, தனிப்பயன் அலாரங்கள் அல்லது உங்கள் தொலைபேசி ஆடியோவைப் பயன்படுத்தவும்.</string>
+
+    <string name="nav_home">முகப்பு</string>
+    <string name="nav_water">நீர்</string>
+    <string name="nav_period">சுழற்சி</string>
+    <string name="nav_modules">பகுதிகள்</string>
+    <string name="nav_settings">தனியுரிமை</string>
+
+    <string name="profile_setup_title">உங்கள் சுயவிவரத்தை அமைக்கவும்</string>
+    <string name="profile_edit_title">சுயவிவரத்தைத் திருத்து</string>
+    <string name="period_always_free_badge">என்றும் இலவசம்</string>
+    <string name="privacy_export_json">உள்ளூர் JSON ஏற்றுமதி</string>
+    <string name="privacy_delete_all">அனைத்து தரவையும் அழி</string>
+    <string name="activation_verify_button">ஆஃப்லைன் விசையை சரிபார்</string>
+
+    <string name="greeting_morning">காலை வணக்கம்</string>
+    <string name="greeting_afternoon">மதிய வணக்கம்</string>
+    <string name="greeting_evening">மாலை வணக்கம்</string>
+    <string name="greeting_night">இனிய இரவு</string>
+
+    <string name="home_badge_on_device">🛡️ 100% சாதனத்தில்</string>
+    <string name="home_tones_alarms">🔔 ஒலிகள் &amp; அலாரங்கள்</string>
+    <string name="home_ai_listener_title">🎙️ AI குரல் உதவியாளர்</string>
+    <string name="home_ai_listening">🎧 கேட்கிறது…</string>
+    <string name="home_ai_hint">உங்கள் மொழியில் பேச மைக்கைத் தட்டவும்—தண்ணீர், படிகள் அல்லது மருந்துகளைப் பதிவு செய்யவும்.</string>
+    <string name="home_live_metrics_title">📊 இன்றைய நேரடி அளவீடுகள்</string>
+    <string name="home_sync_watch">⌚ கடிகாரத்தை இணை</string>
+    <string name="home_daily_steps">👟 தினசரி படிகள்</string>
+    <string name="home_metric_water">நீர்</string>
+    <string name="home_metric_heart">இதயம்</string>
+    <string name="home_metric_meds">மருந்து</string>
+    <string name="home_metric_calories">கலோரி</string>
+    <string name="home_metric_sleep">தூக்கம்</string>
+    <string name="home_metric_screen">திரை</string>
+    <string name="home_doctors_title">மருத்துவர்கள்</string>
+    <string name="home_movement_title">இயக்கம்</string>
+    <string name="home_daily_hydration">தினசரி குடிநீர்</string>
+    <string name="home_hydration_crushed">குடிநீர் இலக்கு முடிந்தது! 🎉</string>
+    <string name="home_cycle_care">மாதவிடாய் சுழற்சி பராமரிப்பு</string>
+
+    <string name="water_screen_title">💧 குடிநீர் கண்காணிப்பு</string>
+    <string name="period_screen_title">🌸 மாதவிடாய் சுழற்சி பராமரிப்பு</string>
+    <string name="modules_hub_title">ஆரோக்கியப் பகுதிகள்</string>
+
+    <string name="settings_screen_title">அமைப்புகள், அலாரங்கள் &amp; தனியுரிமை</string>
+    <string name="settings_appearance_title">தோற்றம் &amp; மொழி</string>
+    <string name="settings_theme_mode">தீம் முறை</string>
+    <string name="settings_regional_language">பிராந்திய மொழி</string>
+    <string name="settings_screen_off_popup_title">🌙 திரை அணைந்திருக்கும் அலாரம் பாப்அப்</string>
+    <string name="settings_screen_off_popup_cta">திரை-ஆஃப் பாப்அப் அனுமதி</string>
+</resources>

@@ -2,6 +2,7 @@ package com.example.notifications
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -9,6 +10,7 @@ import android.content.ContentResolver
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.graphics.Color
 import android.media.AudioAttributes
 import android.media.MediaPlayer
 import android.media.RingtoneManager
@@ -16,6 +18,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.SystemClock
 import android.provider.OpenableColumns
+import android.provider.Settings
 import androidx.annotation.RawRes
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -274,8 +277,10 @@ class AlertSoundManager(private val context: Context) {
                 "${category.title} Alerts",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Local on-device alerts for ${category.title}"
+                description = "Local on-device alerts & screen-off popups for ${category.title}"
                 enableVibration(true)
+                enableLights(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setSound(soundUri, audioAttrs)
             }
             manager.createNotificationChannel(channel)
@@ -299,16 +304,40 @@ class AlertSoundManager(private val context: Context) {
 
             val channel = NotificationChannel(
                 channelId,
-                "Alarm: ${reminder.title}",
+                "${reminder.alarmEmoji} Alarm: ${reminder.title}",
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Custom local alarm for ${reminder.title}"
+                description = "Custom local alarm & screen-off popup for ${reminder.title}"
                 enableVibration(true)
+                enableLights(true)
+                lockscreenVisibility = Notification.VISIBILITY_PUBLIC
                 setSound(soundUri, audioAttrs)
             }
             manager.createNotificationChannel(channel)
         }
         return channelId
+    }
+
+    fun canUseFullScreenIntent(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.UPSIDE_DOWN_CAKE) return true
+        val manager = context.getSystemService(NotificationManager::class.java) ?: return false
+        return manager.canUseFullScreenIntent()
+    }
+
+    fun createFullScreenIntentSettingsIntent(): Intent {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+            val fsiIntent = Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (fsiIntent.resolveActivity(context.packageManager) != null) {
+                return fsiIntent
+            }
+        }
+        return Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
     }
 
     fun hasNotificationPermission(): Boolean {
@@ -326,109 +355,177 @@ class AlertSoundManager(private val context: Context) {
         category: AlertCategory,
         setting: CategoryToneSetting,
         title: String,
-        body: String
+        body: String,
+        launchPopupImmediately: Boolean = false
     ): Boolean {
         val channelId = ensureNotificationChannel(category, setting)
-        if (!hasNotificationPermission()) return false
-
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
-        }
-        val tapPending = PendingIntent.getActivity(
-            context,
-            category.requestCode + 50,
-            tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
         val soundUri = resolveSoundUri(category, setting)
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setSound(soundUri)
-            .setAutoCancel(true)
-            .setContentIntent(tapPending)
-            .build()
-
-        return runCatching {
-            NotificationManagerCompat.from(context).notify(category.notificationId, notification)
-            true
-        }.getOrDefault(false)
+        val emoji = setting.customEmoji?.takeIf { it.isNotBlank() }
+            ?: AlarmEmojiCatalog.defaultEmojiForCategory(category.key)
+        val effectiveBody = setting.customMessage?.takeIf { it.isNotBlank() } ?: body
+        val payload = AlarmPopupPayload(
+            notificationId = category.notificationId,
+            categoryKey = category.key,
+            title = title,
+            message = effectiveBody,
+            emoji = emoji,
+            timeLabel = String.format("%02d:%02d", setting.reminderHour, setting.reminderMinute),
+            toneLabel = describeCurrentTone(category, setting),
+            gesturePreset = AlarmEmojiGesturePreset.fromId(setting.gesturePreset),
+            soundUriString = soundUri.toString()
+        )
+        if (launchPopupImmediately) {
+            AlarmRingerManager.startRinging(context, soundUri)
+            launchPopupActivity(payload)
+        }
+        if (!hasNotificationPermission()) return launchPopupImmediately
+        return postPopupAlarmNotification(channelId, payload, soundUri)
     }
 
     fun showWellbeingOveruseNotification(
         title: String,
         body: String,
-        wellnessToneSetting: CategoryToneSetting
+        wellnessToneSetting: CategoryToneSetting,
+        launchPopupImmediately: Boolean = false
     ): Boolean {
         val channelId = ensureNotificationChannel(AlertCategory.WELLNESS, wellnessToneSetting)
-        if (!hasNotificationPermission()) return false
-
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+        val soundUri = resolveSoundUri(AlertCategory.WELLNESS, wellnessToneSetting)
+        val payload = AlarmPopupPayload(
+            notificationId = 1004,
+            categoryKey = "wellbeing",
+            title = title.removePrefix("📵").trim(),
+            message = body,
+            emoji = "📵",
+            toneLabel = describeCurrentTone(AlertCategory.WELLNESS, wellnessToneSetting),
+            gesturePreset = AlarmEmojiGesturePreset.SWIPE_SLIDE,
+            soundUriString = soundUri.toString()
+        )
+        if (launchPopupImmediately) {
+            AlarmRingerManager.startRinging(context, soundUri)
+            launchPopupActivity(payload)
         }
-        val tapPending = PendingIntent.getActivity(
+        if (!hasNotificationPermission()) return launchPopupImmediately
+        return postPopupAlarmNotification(channelId, payload, soundUri)
+    }
+
+    fun showCustomAlarmNotification(
+        reminder: ReminderEntity,
+        launchPopupImmediately: Boolean = false
+    ): Boolean {
+        val soundUri = resolveReminderSoundUri(reminder)
+        val channelId = ensureCustomAlarmChannel(reminder, soundUri)
+        val toneLabel = describeReminderTone(reminder)
+        val emoji = reminder.alarmEmoji.ifBlank {
+            AlarmEmojiCatalog.defaultEmojiForCategory(reminder.moduleKey)
+        }
+        val body = reminder.customMessage.ifBlank {
+            "Scheduled ${reminder.triggerTime24h} alarm • Sound: $toneLabel"
+        }
+        val payload = AlarmPopupPayload(
+            notificationId = 5000 + reminder.id.toInt(),
+            alarmId = reminder.id,
+            categoryKey = reminder.moduleKey,
+            title = reminder.title,
+            message = body,
+            emoji = emoji,
+            timeLabel = reminder.triggerTime24h,
+            toneLabel = toneLabel,
+            gesturePreset = AlarmEmojiGesturePreset.fromId(reminder.gesturePreset),
+            soundUriString = soundUri.toString()
+        )
+        if (launchPopupImmediately) {
+            AlarmRingerManager.startRinging(context, soundUri)
+            launchPopupActivity(payload)
+        }
+        if (!hasNotificationPermission()) return launchPopupImmediately
+        return postPopupAlarmNotification(channelId, payload, soundUri)
+    }
+
+    fun postPopupAlarmNotification(
+        channelId: String,
+        payload: AlarmPopupPayload,
+        soundUri: Uri?
+    ): Boolean {
+        val popupIntent = Intent(context, AlarmPopupActivity::class.java).apply {
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            payload.writeToIntent(this)
+        }
+        val popupPending = PendingIntent.getActivity(
             context,
-            2099,
-            tapIntent,
+            8000 + payload.notificationId,
+            popupIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
-        val soundUri = resolveSoundUri(AlertCategory.WELLNESS, wellnessToneSetting)
-        val notification = NotificationCompat.Builder(context, channelId)
+        val dismissIntent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            action = AlertAlarmReceiver.ACTION_DISMISS_ALARM
+            putExtra(AlarmPopupPayload.EXTRA_NOTIFICATION_ID, payload.notificationId)
+        }
+        val dismissPending = PendingIntent.getBroadcast(
+            context,
+            9000 + payload.notificationId,
+            dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val snoozeIntent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            action = AlertAlarmReceiver.ACTION_SNOOZE_ALARM
+            payload.writeToIntent(this)
+        }
+        val snoozePending = PendingIntent.getBroadcast(
+            context,
+            9500 + payload.notificationId,
+            snoozeIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val accentColor = when (payload.categoryKey.lowercase()) {
+            "water" -> Color.parseColor("#1D6E6B")
+            "period" -> Color.parseColor("#B6486E")
+            "wellbeing", "digital_wellbeing" -> Color.parseColor("#C63D2F")
+            else -> Color.parseColor("#3B6978")
+        }
+
+        val styledTitle = "${payload.emoji} ${payload.title}"
+        val styledBody = "${payload.message} (${payload.gesturePreset.shortBadge})"
+
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_HIGH)
-            .setCategory(NotificationCompat.CATEGORY_REMINDER)
-            .setSound(soundUri)
+            .setContentTitle(styledTitle)
+            .setContentText(styledBody)
+            .setStyle(
+                NotificationCompat.BigTextStyle()
+                    .setBigContentTitle(styledTitle)
+                    .bigText("${payload.message}\nGesture ready: ${payload.gesturePreset.instruction}")
+            )
+            .setColor(accentColor)
+            .setPriority(NotificationCompat.PRIORITY_MAX)
+            .setCategory(NotificationCompat.CATEGORY_ALARM)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+            .setFullScreenIntent(popupPending, true)
+            .setContentIntent(popupPending)
+            .setDeleteIntent(dismissPending)
             .setAutoCancel(true)
-            .setContentIntent(tapPending)
-            .build()
+            .addAction(0, "✅ Done", dismissPending)
+            .addAction(0, "😴 Snooze 10m", snoozePending)
+            .addAction(0, "🔕 Stop", dismissPending)
+
+        if (soundUri != null) {
+            builder.setSound(soundUri)
+        }
 
         return runCatching {
-            NotificationManagerCompat.from(context).notify(1004, notification)
+            NotificationManagerCompat.from(context).notify(payload.notificationId, builder.build())
             true
         }.getOrDefault(false)
     }
 
-    fun showCustomAlarmNotification(reminder: ReminderEntity): Boolean {
-        val soundUri = resolveReminderSoundUri(reminder)
-        val channelId = ensureCustomAlarmChannel(reminder, soundUri)
-        if (!hasNotificationPermission()) return false
-
-        val tapIntent = Intent(context, MainActivity::class.java).apply {
+    fun launchPopupActivity(payload: AlarmPopupPayload) {
+        val intent = Intent(context, AlarmPopupActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            payload.writeToIntent(this)
         }
-        val tapPending = PendingIntent.getActivity(
-            context,
-            5000 + reminder.id.toInt(),
-            tapIntent,
-            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
-        )
-
-        val body = "Scheduled ${reminder.triggerTime24h} alarm • Sound: ${describeReminderTone(reminder)}"
-        val notification = NotificationCompat.Builder(context, channelId)
-            .setSmallIcon(R.drawable.ic_launcher_foreground)
-            .setContentTitle(reminder.title)
-            .setContentText(body)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(body))
-            .setPriority(NotificationCompat.PRIORITY_MAX)
-            .setCategory(NotificationCompat.CATEGORY_ALARM)
-            .setSound(soundUri)
-            .setAutoCancel(true)
-            .setContentIntent(tapPending)
-            .build()
-
-        return runCatching {
-            NotificationManagerCompat.from(context).notify(5000 + reminder.id.toInt(), notification)
-            true
-        }.getOrDefault(false)
+        runCatching { context.startActivity(intent) }
     }
 
     fun scheduleDailyReminder(category: AlertCategory, hour: Int, minute: Int) {
@@ -443,12 +540,7 @@ class AlertSoundManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val triggerCal = nextTriggerCalendar(hour, minute)
-        alarmManager.setInexactRepeating(
-            AlarmManager.RTC_WAKEUP,
-            triggerCal.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
-            pendingIntent
-        )
+        scheduleWakeUpAlarmClock(alarmManager, triggerCal.timeInMillis, category.requestCode, pendingIntent)
     }
 
     fun cancelReminder(category: AlertCategory) {
@@ -474,19 +566,57 @@ class AlertSoundManager(private val context: Context) {
         val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
             putExtra(AlertAlarmReceiver.EXTRA_CUSTOM_ALARM_ID, reminder.id)
         }
+        val requestCode = 5000 + reminder.id.toInt()
         val pendingIntent = PendingIntent.getBroadcast(
             context,
-            5000 + reminder.id.toInt(),
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val triggerCal = nextTriggerCalendar(hour, minute)
-        alarmManager.setInexactRepeating(
-            AlarmManager.RTC_WAKEUP,
-            triggerCal.timeInMillis,
-            AlarmManager.INTERVAL_DAY,
-            pendingIntent
+        scheduleWakeUpAlarmClock(alarmManager, triggerCal.timeInMillis, requestCode, pendingIntent)
+    }
+
+    fun scheduleSnoozeAlarm(payload: AlarmPopupPayload, minutes: Int = 10) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val triggerAtMs = System.currentTimeMillis() + minutes.coerceAtLeast(1) * 60_000L
+        val snoozePayload = payload.copy(
+            title = "${payload.title} (Snoozed)"
         )
+        val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            action = AlertAlarmReceiver.ACTION_SNOOZE_TRIGGER
+            snoozePayload.writeToIntent(this)
+        }
+        val requestCode = 7000 + payload.notificationId
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        scheduleWakeUpAlarmClock(alarmManager, triggerAtMs, requestCode, pendingIntent)
+    }
+
+    private fun scheduleWakeUpAlarmClock(
+        alarmManager: AlarmManager,
+        triggerAtMs: Long,
+        showRequestCode: Int,
+        operation: PendingIntent
+    ) {
+        val showIntent = PendingIntent.getActivity(
+            context,
+            10_000 + showRequestCode,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        val clockInfo = AlarmManager.AlarmClockInfo(triggerAtMs, showIntent)
+        runCatching {
+            alarmManager.setAlarmClock(clockInfo, operation)
+        }.onFailure {
+            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, operation)
+        }
     }
 
     fun cancelCustomAlarm(reminderId: Long) {

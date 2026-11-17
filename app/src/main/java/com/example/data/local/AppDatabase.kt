@@ -58,7 +58,7 @@ import kotlinx.coroutines.launch
         ConnectedDeviceSourceEntity::class,
         HealthVitalMetricEntity::class
     ],
-    version = 5,
+    version = 6,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -178,11 +178,20 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_5_6 = object : Migration(5, 6) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("ALTER TABLE reminders ADD COLUMN alarmEmoji TEXT NOT NULL DEFAULT '⏰'")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN customMessage TEXT NOT NULL DEFAULT ''")
+                db.execSQL("ALTER TABLE reminders ADD COLUMN gesturePreset TEXT NOT NULL DEFAULT 'SWIPE_SLIDE'")
+            }
+        }
+
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
             MIGRATION_3_4,
-            MIGRATION_4_5
+            MIGRATION_4_5,
+            MIGRATION_5_6
         )
 
         @Volatile

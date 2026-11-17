@@ -15,10 +15,10 @@ private val Context.lifeCompanionPrefsDataStore by preferencesDataStore(name = "
 enum class SupportedLanguage(val code: String, val displayLabel: String, val nativeName: String) {
     ENGLISH("en", "English", "English"),
     HINDI("hi", "Hindi", "हिन्दी"),
-    TAMIL("ta", "Tamil (Ready)", "தமிழ்"),
-    TELUGU("te", "Telugu (Ready)", "తెలుగు"),
-    BENGALI("bn", "Bengali (Ready)", "বাংলা"),
-    MARATHI("mr", "Marathi (Ready)", "मराठी")
+    TAMIL("ta", "Tamil", "தமிழ்"),
+    TELUGU("te", "Telugu", "తెలుగు"),
+    BENGALI("bn", "Bengali", "বাংলা"),
+    MARATHI("mr", "Marathi", "मराठी")
 }
 
 enum class AlertToneSource(val label: String) {
@@ -36,7 +36,10 @@ data class CategoryToneSetting(
     val channelVersion: Int = 1,
     val reminderEnabled: Boolean = false,
     val reminderHour: Int = 9,
-    val reminderMinute: Int = 0
+    val reminderMinute: Int = 0,
+    val customEmoji: String? = null,
+    val customMessage: String? = null,
+    val gesturePreset: String = "SWIPE_SLIDE"
 )
 
 data class UiPreferencesState(
@@ -79,6 +82,9 @@ class LocalPreferencesManager(private val context: Context) {
         fun reminderEnabled(cat: String) = booleanPreferencesKey("reminder_enabled_$cat")
         fun reminderHour(cat: String) = intPreferencesKey("reminder_hour_$cat")
         fun reminderMinute(cat: String) = intPreferencesKey("reminder_minute_$cat")
+        fun customEmoji(cat: String) = stringPreferencesKey("reminder_emoji_$cat")
+        fun customMessage(cat: String) = stringPreferencesKey("reminder_message_$cat")
+        fun gesturePreset(cat: String) = stringPreferencesKey("reminder_gesture_$cat")
 
         val WELLBEING_ALERTS_ENABLED = booleanPreferencesKey("wellbeing_overuse_alerts_enabled")
         val WELLBEING_WARNING_PERCENT = intPreferencesKey("wellbeing_warning_percent")
@@ -106,7 +112,10 @@ class LocalPreferencesManager(private val context: Context) {
                 channelVersion = prefs[Keys.toneVersion(cat)] ?: 1,
                 reminderEnabled = prefs[Keys.reminderEnabled(cat)] ?: false,
                 reminderHour = prefs[Keys.reminderHour(cat)] ?: defaultHour,
-                reminderMinute = prefs[Keys.reminderMinute(cat)] ?: defaultMin
+                reminderMinute = prefs[Keys.reminderMinute(cat)] ?: defaultMin,
+                customEmoji = prefs[Keys.customEmoji(cat)],
+                customMessage = prefs[Keys.customMessage(cat)],
+                gesturePreset = prefs[Keys.gesturePreset(cat)] ?: "SWIPE_SLIDE"
             )
         }
 
@@ -176,6 +185,29 @@ class LocalPreferencesManager(private val context: Context) {
             prefs[Keys.reminderEnabled(categoryKey)] = enabled
             prefs[Keys.reminderHour(categoryKey)] = hour.coerceIn(0, 23)
             prefs[Keys.reminderMinute(categoryKey)] = minute.coerceIn(0, 59)
+        }
+    }
+
+    suspend fun updateCategoryNotificationStyle(
+        categoryKey: String,
+        emoji: String,
+        customMessage: String,
+        gesturePreset: String
+    ) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            val trimmedEmoji = emoji.trim()
+            if (trimmedEmoji.isNotEmpty()) {
+                prefs[Keys.customEmoji(categoryKey)] = trimmedEmoji
+            } else {
+                prefs.remove(Keys.customEmoji(categoryKey))
+            }
+            val trimmedMsg = customMessage.trim()
+            if (trimmedMsg.isNotEmpty()) {
+                prefs[Keys.customMessage(categoryKey)] = trimmedMsg
+            } else {
+                prefs.remove(Keys.customMessage(categoryKey))
+            }
+            prefs[Keys.gesturePreset(categoryKey)] = gesturePreset
         }
     }
 
