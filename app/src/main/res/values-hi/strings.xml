@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">लाइफवीव</string>
+    <string name="tagline_privacy">आपका जीवन, आपका उपकरण। 100% स्थानीय।</string>
+    <string name="welcome_title">शांत दैनिक देखभाल,\nपूरी तरह आपके पास।</string>
+    <string name="welcome_subtitle">बिना किसी क्लाउड खाते या बाहरी ट्रैकिंग के अपने उपकरण पर ही जलयोजन और स्वास्थ्य का ध्यान रखें।</string>
+    <string name="cta_get_started">सेटअप शुरू करें</string>
+    <string name="nav_home">होम</string>
+    <string name="nav_water">जल</string>
+    <string name="nav_period">चक्र</string>
+    <string name="nav_modules">मॉड्यूल</string>
+    <string name="nav_settings">गोपनीयता</string>
+    <string name="profile_setup_title">अपना प्रोफ़ाइल सेट करें</string>
+    <string name="profile_edit_title">प्रोफ़ाइल संपादित करें</string>
+    <string name="period_always_free_badge">सदैव निःशुल्क</string>
+    <string name="privacy_export_json">स्थानीय JSON निर्यात करें</string>
+    <string name="privacy_delete_all">सभी स्थानीय डेटा हटाएं</string>
+    <string name="activation_verify_button">ऑफ़लाइन कुंजी सत्यापित करें</string>
+</resources>

@@ -1,0 +1,6 @@
+{
+  "name": "LifeWeave",
+  "description": "Adaptive, local-first personal life management Android app with hydration tracking, free inclusive cycle care, custom per-alert sounds, 14-table Room SQLite foundation, and offline signed activation.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

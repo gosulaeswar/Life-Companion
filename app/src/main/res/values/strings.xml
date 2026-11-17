@@ -1,0 +1,18 @@
+<resources>
+    <string name="app_name">LifeWeave</string>
+    <string name="tagline_privacy">Your life, your device. 100% local.</string>
+    <string name="welcome_title">Calm daily care,\nkept strictly yours.</string>
+    <string name="welcome_subtitle">Track hydration, cycle rhythms, and personal wellness in an on-device vault with zero cloud accounts or remote tracking.</string>
+    <string name="cta_get_started">Begin Local Setup</string>
+    <string name="nav_home">Home</string>
+    <string name="nav_water">Hydration</string>
+    <string name="nav_period">Cycle</string>
+    <string name="nav_modules">Modules</string>
+    <string name="nav_settings">Privacy</string>
+    <string name="profile_setup_title">Personalize Your Companion</string>
+    <string name="profile_edit_title">Edit Local Profile</string>
+    <string name="period_always_free_badge">Always Free</string>
+    <string name="privacy_export_json">Export Local JSON</string>
+    <string name="privacy_delete_all">Delete All Local Data</string>
+    <string name="activation_verify_button">Verify Offline Key</string>
+</resources>
