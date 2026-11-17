@@ -9,6 +9,12 @@ import com.google.firebase.FirebaseApp
 import com.google.firebase.appcheck.FirebaseAppCheck
 import com.google.firebase.appcheck.debug.DebugAppCheckProviderFactory
 import com.google.firebase.appcheck.recaptcha.RecaptchaAppCheckProviderFactory
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.TimeoutCancellationException
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeout
+import kotlin.coroutines.resume
+import kotlin.coroutines.resumeWithException
 
 private const val TAG = "AppCheckInit"
 
@@ -19,12 +25,39 @@ private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 private const val META_PREFS_NAME = "lifeweave_appcheck_meta"
 private const val META_HAS_INJECTED_TOKEN = "has_injected_debug_token"
 
-internal enum class AppCheckProviderChoice {
-    DEBUG_WITH_INTENT_TOKEN,
-    DEBUG_PROVIDER,
-    RECAPTCHA_ENTERPRISE,
-    UNCONFIGURED
+internal enum class AppCheckProviderChoice(val displayLabel: String) {
+    DEBUG_WITH_INTENT_TOKEN("Debug Provider (Injected Token)"),
+    DEBUG_PROVIDER("Debug Provider"),
+    RECAPTCHA_ENTERPRISE("reCAPTCHA Enterprise"),
+    UNCONFIGURED("Unconfigured")
 }
+
+sealed interface AppCheckVerificationResult {
+    val providerLabel: String
+
+    data class Success(
+        override val providerLabel: String,
+        val latencyMs: Long,
+        val expiresInSeconds: Long
+    ) : AppCheckVerificationResult
+
+    data class Timeout(
+        override val providerLabel: String,
+        val timeoutMs: Long,
+        val diagnosticMessage: String
+    ) : AppCheckVerificationResult
+
+    data class Failure(
+        override val providerLabel: String,
+        val errorMessage: String,
+        val diagnosticMessage: String
+    ) : AppCheckVerificationResult
+}
+
+@Volatile
+private var installedProviderChoice: AppCheckProviderChoice = AppCheckProviderChoice.UNCONFIGURED
+
+internal fun currentAppCheckProviderChoice(): AppCheckProviderChoice = installedProviderChoice
 
 fun configureAppCheck(context: Context, intent: Intent?) {
     try {
@@ -32,6 +65,7 @@ fun configureAppCheck(context: Context, intent: Intent?) {
         if (FirebaseApp.getApps(appContext).isEmpty()) {
             val initialized = FirebaseApp.initializeApp(appContext)
             if (initialized == null) {
+                installedProviderChoice = AppCheckProviderChoice.UNCONFIGURED
                 Log.w(TAG, "FirebaseApp.initializeApp returned null; google-services config may not be bundled in this build.")
                 return
             }
@@ -65,6 +99,7 @@ fun configureAppCheck(context: Context, intent: Intent?) {
             isEmulator = isEmulatorDevice(),
             hasRecaptchaSiteKey = !siteKey.isNullOrBlank()
         )
+        installedProviderChoice = choice
 
         when (choice) {
             AppCheckProviderChoice.DEBUG_WITH_INTENT_TOKEN,
@@ -92,6 +127,81 @@ fun configureAppCheck(context: Context, intent: Intent?) {
     } catch (e: Exception) {
         Log.e(TAG, "Failed to initialize Firebase App Check", e)
     }
+}
+
+suspend fun verifyAppCheckToken(
+    context: Context?,
+    timeoutMs: Long = 15_000L
+): AppCheckVerificationResult {
+    val provider = installedProviderChoice
+    val providerLabel = provider.displayLabel
+    val appCtx = context?.applicationContext
+    if (appCtx != null && FirebaseApp.getApps(appCtx).isEmpty()) {
+        val initialized = FirebaseApp.initializeApp(appCtx)
+        if (initialized == null) {
+            return AppCheckVerificationResult.Failure(
+                providerLabel = providerLabel,
+                errorMessage = "FirebaseApp is not initialized (missing google-services.json).",
+                diagnosticMessage = "Firebase config is missing from this APK. Restore GOOGLE_SERVICES_JSON in GitHub Secrets and rebuild."
+            )
+        }
+    }
+    if (appCtx != null && provider == AppCheckProviderChoice.UNCONFIGURED) {
+        configureAppCheck(appCtx, null)
+    }
+
+    val activeLabel = installedProviderChoice.displayLabel
+    val startedAt = System.currentTimeMillis()
+    return try {
+        val tokenResult = withTimeout(timeoutMs) {
+            suspendCancellableCoroutine { cont ->
+                val task = FirebaseAppCheck.getInstance().getAppCheckToken(false)
+                task.addOnSuccessListener { result ->
+                    if (cont.isActive) cont.resume(result)
+                }.addOnFailureListener { err ->
+                    if (cont.isActive) cont.resumeWithException(err)
+                }.addOnCanceledListener {
+                    if (cont.isActive) cont.cancel()
+                }
+            }
+        }
+        val elapsed = (System.currentTimeMillis() - startedAt).coerceAtLeast(1L)
+        val expiresInSec = ((tokenResult.expireTimeMillis - System.currentTimeMillis()) / 1000L).coerceAtLeast(0L)
+        AppCheckVerificationResult.Success(
+            providerLabel = activeLabel,
+            latencyMs = elapsed,
+            expiresInSeconds = expiresInSec
+        )
+    } catch (e: TimeoutCancellationException) {
+        Log.e(TAG, "App Check token timed out after ${timeoutMs}ms using $activeLabel", e)
+        AppCheckVerificationResult.Timeout(
+            providerLabel = activeLabel,
+            timeoutMs = timeoutMs,
+            diagnosticMessage = buildTimeoutDiagnostic(activeLabel, timeoutMs)
+        )
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        Log.e(TAG, "App Check token acquisition failed using $activeLabel", e)
+        val raw = e.localizedMessage?.trim().orEmpty().ifEmpty { e.javaClass.simpleName }
+        AppCheckVerificationResult.Failure(
+            providerLabel = activeLabel,
+            errorMessage = raw,
+            diagnosticMessage = buildFailureDiagnostic(activeLabel, raw)
+        )
+    }
+}
+
+internal fun buildTimeoutDiagnostic(providerLabel: String, timeoutMs: Long): String {
+    val secs = (timeoutMs / 1000L).coerceAtLeast(1L)
+    return "App Check ($providerLabel) timed out after ${secs}s before reaching Gemini. " +
+        "On GitHub debug APKs, check mobile/Wi-Fi connectivity to Google Play Services & reCAPTCHA Enterprise, " +
+        "or disable VPN/private DNS and tap Run Diagnostics."
+}
+
+internal fun buildFailureDiagnostic(providerLabel: String, rawError: String): String {
+    return "App Check ($providerLabel) failed: $rawError. " +
+        "Ensure GOOGLE_SERVICES_JSON matches this app package and reCAPTCHA/App Check is active."
 }
 
 internal fun selectAppCheckProviderChoice(

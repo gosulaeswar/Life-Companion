@@ -473,6 +473,8 @@ private fun MainShell(
                             onStopVoicePlayback = modulesHubViewModel::stopVoicePlayback,
                             onClearVoiceError = modulesHubViewModel::clearVoiceError,
                             onQuickAiPrompt = modulesHubViewModel::askAiAssistant,
+                            onRetryAiPrompt = modulesHubViewModel::retryLastAiPrompt,
+                            onRunAiDiagnostics = modulesHubViewModel::runAiDiagnostics,
                             onSnoozeWellbeingAlert = { modulesHubViewModel.snoozeWellbeingHomeAlert(30) },
                             onStartFocusBreak = { modulesHubViewModel.updateWellbeing(addFocus = 1) },
                             onOpenUsageAccessSettings = {

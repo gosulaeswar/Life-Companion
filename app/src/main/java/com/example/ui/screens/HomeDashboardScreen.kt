@@ -130,6 +130,8 @@ fun HomeDashboardScreen(
     onStopVoicePlayback: () -> Unit = {},
     onClearVoiceError: () -> Unit = {},
     onQuickAiPrompt: (String) -> Unit = {},
+    onRetryAiPrompt: () -> Unit = {},
+    onRunAiDiagnostics: () -> Unit = {},
     onSnoozeWellbeingAlert: () -> Unit = {},
     onStartFocusBreak: () -> Unit = {},
     onOpenUsageAccessSettings: () -> Unit = {},
@@ -275,12 +277,10 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Surface(
                                 shape = CircleShape,
@@ -291,6 +291,8 @@ fun HomeDashboardScreen(
                                     text = stringResource(id = R.string.home_badge_on_device),
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = Color.White,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
@@ -303,6 +305,8 @@ fun HomeDashboardScreen(
                                     text = "🏆 $checkInWins logs today",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = Color(0xFFFFF4D6),
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
@@ -318,6 +322,8 @@ fun HomeDashboardScreen(
                                     text = stringResource(id = R.string.home_tones_alarms),
                                     style = MaterialTheme.typography.labelMedium,
                                     color = Color.White,
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
@@ -330,7 +336,8 @@ fun HomeDashboardScreen(
         // Luminous Aurora AI Voice Studio Card
         item {
             val isListening = modulesState.isListeningVoice
-            val isThinking = modulesState.aiTaskStatus is AiTaskStatus.Loading
+            val isThinking = modulesState.aiTaskStatus is AiTaskStatus.Loading ||
+                modulesState.aiTaskStatus is AiTaskStatus.Streaming
             val latestAiReply = modulesState.aiChatMessages.lastOrNull { !it.isFromUser }
             val micPulseTransition = rememberInfiniteTransition(label = "mic_halo")
             val haloScale by micPulseTransition.animateFloat(
@@ -452,7 +459,7 @@ fun HomeDashboardScreen(
                             Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Text(
@@ -462,7 +469,10 @@ fun HomeDashboardScreen(
                                             stringResource(id = R.string.home_ai_listener_title)
                                         },
                                         style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                        color = Color.White
+                                        color = Color.White,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis,
+                                        modifier = Modifier.weight(1f)
                                     )
                                     Surface(
                                         shape = CircleShape,
@@ -472,7 +482,9 @@ fun HomeDashboardScreen(
                                             text = "${selectedLang.emoji} ${selectedLang.label.substringBefore(" ")}",
                                             style = MaterialTheme.typography.labelSmall,
                                             color = Color(0xFF8FF3D8),
-                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
                                         )
                                     }
                                 }
@@ -488,12 +500,11 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        // Quick Voice / Text Prompt Pills
-                        Row(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .horizontalScroll(rememberScrollState()),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                        // Quick Voice / Text Prompt Pills (FlowRow prevents left/right cutoff)
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             listOf(
                                 "💧 Log 200ml water" to "I just drank 200 ml water",
@@ -503,7 +514,7 @@ fun HomeDashboardScreen(
                                 Surface(
                                     modifier = Modifier
                                         .clip(CircleShape)
-                                        .clickable { onQuickAiPrompt(promptText) },
+                                        .clickable(enabled = !isThinking) { onQuickAiPrompt(promptText) },
                                     shape = CircleShape,
                                     color = Color.White.copy(alpha = 0.12f),
                                     border = BorderStroke(1.dp, Color.White.copy(alpha = 0.22f))
@@ -512,10 +523,69 @@ fun HomeDashboardScreen(
                                         text = chipLabel,
                                         style = MaterialTheme.typography.labelSmall,
                                         color = Color.White,
-                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 6.dp)
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                                     )
                                 }
                             }
+                        }
+
+                        when (val status = modulesState.aiTaskStatus) {
+                            is AiTaskStatus.Loading -> {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color.White.copy(alpha = 0.12f)
+                                ) {
+                                    Row(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(16.dp),
+                                            color = Color(0xFF8FF3D8),
+                                            strokeWidth = 2.dp
+                                        )
+                                        Text(
+                                            text = status.label,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = Color(0xFF9DF7DF)
+                                        )
+                                    }
+                                }
+                            }
+                            is AiTaskStatus.Streaming -> {
+                                Surface(
+                                    shape = RoundedCornerShape(14.dp),
+                                    color = Color.White.copy(alpha = 0.14f)
+                                ) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .padding(horizontal = 12.dp, vertical = 9.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        Text(
+                                            text = status.label,
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = Color(0xFF8FF3D8)
+                                        )
+                                        if (status.previewText.isNotBlank()) {
+                                            Text(
+                                                text = status.previewText,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = Color.White,
+                                                maxLines = 3,
+                                                overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                            else -> Unit
                         }
 
                         modulesState.voiceError?.let { vErr ->
@@ -554,7 +624,7 @@ fun HomeDashboardScreen(
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .padding(11.dp),
-                                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     Text(
                                         text = latestAiReply.text,
@@ -564,9 +634,52 @@ fun HomeDashboardScreen(
                                         } else {
                                             Color.White
                                         },
-                                        maxLines = 3,
+                                        maxLines = 4,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    if (latestAiReply.isError) {
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                                        ) {
+                                            Surface(
+                                                modifier = Modifier
+                                                    .clip(CircleShape)
+                                                    .clickable(enabled = !isThinking) { onRetryAiPrompt() }
+                                                    .testTag("home_ai_retry_button"),
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.error.copy(alpha = 0.14f)
+                                            ) {
+                                                Text(
+                                                    text = "🔄 Retry",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.onErrorContainer,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                            Surface(
+                                                modifier = Modifier
+                                                    .clip(CircleShape)
+                                                    .clickable(enabled = !modulesState.isRunningDiagnostics) {
+                                                        onRunAiDiagnostics()
+                                                    }
+                                                    .testTag("home_ai_diagnose_button"),
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.surface
+                                            ) {
+                                                Text(
+                                                    text = if (modulesState.isRunningDiagnostics) {
+                                                        "⏳ Checking..."
+                                                    } else {
+                                                        "🩺 Diagnose App Check"
+                                                    },
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
+                                        }
+                                    }
                                     if (latestAiReply.actionBadges.isNotEmpty()) {
                                         FlowRow(
                                             horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -587,6 +700,41 @@ fun HomeDashboardScreen(
                                             }
                                         }
                                     }
+                                }
+                            }
+                        }
+
+                        modulesState.aiDiagnosticReport?.let { diag ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = if (diag.isHealthy) {
+                                    Color(0xFF0E493C)
+                                } else {
+                                    MaterialTheme.colorScheme.errorContainer
+                                },
+                                border = BorderStroke(
+                                    1.dp,
+                                    if (diag.isHealthy) Color(0xFF2CE5B5).copy(alpha = 0.5f) else MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(11.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    val titleColor = if (diag.isHealthy) Color(0xFF9DF7DF) else MaterialTheme.colorScheme.onErrorContainer
+                                    val bodyColor = if (diag.isHealthy) Color.White else MaterialTheme.colorScheme.onErrorContainer
+                                    Text(
+                                        text = if (diag.isHealthy) "🩺 Diagnostic Passed" else "🩺 App Check / AI Diagnostic",
+                                        style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                        color = titleColor
+                                    )
+                                    Text(
+                                        text = "App Check: ${diag.appCheckStatus}\nGemini: ${diag.geminiStatus}\n${diag.recommendation}",
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = bodyColor
+                                    )
                                 }
                             }
                         }

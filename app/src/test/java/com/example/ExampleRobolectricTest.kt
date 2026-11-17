@@ -34,6 +34,9 @@ import com.example.ai.AppCheckProviderChoice
 import com.example.ai.LifeWeaveAiService
 import com.example.ai.SupportedVoiceLanguages
 import com.example.ai.configureAppCheck
+import com.example.ai.buildFailureDiagnostic
+import com.example.ai.buildTimeoutDiagnostic
+import com.example.ai.currentAppCheckProviderChoice
 import com.example.ai.resolveRecaptchaSiteKey
 import com.example.ai.selectAppCheckProviderChoice
 import com.google.firebase.FirebaseApp
@@ -855,5 +858,32 @@ class ExampleRobolectricTest {
             Context.MODE_PRIVATE
         )
         assertEquals(testToken, debugPrefs.getString("com.google.firebase.appcheck.debug.DEBUG_SECRET", null))
+        assertEquals(AppCheckProviderChoice.DEBUG_WITH_INTENT_TOKEN, currentAppCheckProviderChoice())
+    }
+
+    @Test
+    fun streamingPreviewExtractionAndAppCheckDiagnosticsWork() {
+        val partial = """{"assistantReply":"Logged 200 ml water! Stay hydrated"""
+        assertEquals(
+            "Logged 200 ml water! Stay hydrated",
+            LifeWeaveAiService.extractStreamingFieldPreview(partial, "assistantReply")
+        )
+        val escaped = """{"summary":"Line 1\n\"Take 1 pill\"","medicines":[]}"""
+        assertEquals(
+            """Line 1 "Take 1 pill"""",
+            LifeWeaveAiService.extractStreamingFieldPreview(escaped, "summary")
+        )
+        assertEquals(
+            "",
+            LifeWeaveAiService.extractStreamingFieldPreview("""{"actions":[]}""", "assistantReply")
+        )
+
+        val timeoutMsg = buildTimeoutDiagnostic("reCAPTCHA Enterprise", 15_000L)
+        assertTrue(timeoutMsg.contains("reCAPTCHA Enterprise"))
+        assertTrue(timeoutMsg.contains("15s"))
+
+        val failureMsg = buildFailureDiagnostic("Debug Provider", "403 Attestation Failed")
+        assertTrue(failureMsg.contains("Debug Provider"))
+        assertTrue(failureMsg.contains("403 Attestation Failed"))
     }
 }

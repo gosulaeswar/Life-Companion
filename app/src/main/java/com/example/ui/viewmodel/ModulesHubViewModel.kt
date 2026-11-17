@@ -5,6 +5,7 @@ import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.AiActionType
+import com.example.ai.AiDiagnosticReport
 import com.example.ai.AiParsedAction
 import com.example.ai.ExtractedPrescriptionResult
 import com.example.ai.LifeWeaveAiService
@@ -73,6 +74,7 @@ import kotlinx.coroutines.withContext
 sealed interface AiTaskStatus {
     data object Idle : AiTaskStatus
     data class Loading(val label: String) : AiTaskStatus
+    data class Streaming(val label: String, val previewText: String = "") : AiTaskStatus
     data class Error(val message: String) : AiTaskStatus
 }
 
@@ -103,6 +105,9 @@ data class ModulesHubUiState(
     val voiceError: String? = null,
     val lastPrescriptionResult: ExtractedPrescriptionResult? = null,
     val pendingNavigationModuleKey: String? = null,
+    val lastAiPrompt: String? = null,
+    val aiDiagnosticReport: AiDiagnosticReport? = null,
+    val isRunningDiagnostics: Boolean = false,
     val connectedSources: List<ConnectedDeviceSourceEntity> = emptyList(),
     val vitalMetrics: List<HealthVitalMetricEntity> = emptyList(),
     val healthConnectAvailability: HealthConnectAvailability = HealthConnectAvailability.UNAVAILABLE,
@@ -137,6 +142,9 @@ private data class AiAndSyncOverlayState(
     val voiceError: String?,
     val prescription: ExtractedPrescriptionResult?,
     val navTarget: String?,
+    val lastAiPrompt: String?,
+    val diagnosticReport: AiDiagnosticReport?,
+    val isRunningDiagnostics: Boolean,
     val hcAvailability: HealthConnectAvailability,
     val grantedPerms: Set<String>,
     val isSyncingFitness: Boolean,
@@ -175,6 +183,9 @@ class ModulesHubViewModel(
     private val aiTaskStatus = MutableStateFlow<AiTaskStatus>(AiTaskStatus.Idle)
     private val lastPrescription = MutableStateFlow<ExtractedPrescriptionResult?>(null)
     private val pendingNavModuleKey = MutableStateFlow<String?>(null)
+    private val lastAiPromptFlow = MutableStateFlow<String?>(null)
+    private val diagnosticReportFlow = MutableStateFlow<AiDiagnosticReport?>(null)
+    private val isRunningDiagFlow = MutableStateFlow(false)
 
     private val hcAvailability = MutableStateFlow(healthConnectManager.checkAvailability())
     private val grantedHealthPerms = MutableStateFlow<Set<String>>(emptySet())
@@ -217,6 +228,9 @@ class ModulesHubViewModel(
             voiceError = null,
             prescription = null,
             navTarget = null,
+            lastAiPrompt = null,
+            diagnosticReport = null,
+            isRunningDiagnostics = false,
             hcAvailability = HealthConnectAvailability.UNAVAILABLE,
             grantedPerms = emptySet(),
             isSyncingFitness = false,
@@ -272,18 +286,26 @@ class ModulesHubViewModel(
             preferencesManager.preferencesFlow,
             isSyncingWellbeing,
             wellbeingSyncBanner,
-            combine(hasNotificationPerm, snoozedUntilMs) { n, s -> n to s }
-        ) { usagePerm, prefs, syncingWb, wbBanner, notifAndSnooze ->
-            listOf(usagePerm, prefs, syncingWb, wbBanner, notifAndSnooze)
+            combine(
+                combine(hasNotificationPerm, snoozedUntilMs) { n, s -> n to s },
+                combine(lastAiPromptFlow, diagnosticReportFlow, isRunningDiagFlow) { p, r, d -> Triple(p, r, d) }
+            ) { notifPair, diagTriple -> notifPair to diagTriple }
+        ) { usagePerm, prefs, syncingWb, wbBanner, bundled ->
+            listOf(usagePerm, prefs, syncingWb, wbBanner, bundled)
         }
     ) { base, arr ->
         val prefs = arr[1] as com.example.security.UiPreferencesState
         @Suppress("UNCHECKED_CAST")
-        val notifAndSnooze = arr[4] as Pair<Boolean, Long>
+        val bundled = arr[4] as Pair<Pair<Boolean, Long>, Triple<String?, AiDiagnosticReport?, Boolean>>
+        val notifAndSnooze = bundled.first
+        val diagTriple = bundled.second
         base.copy(
             hasUsageAccess = arr[0] as Boolean,
             hasNotificationPermission = notifAndSnooze.first,
             snoozedUntilMs = notifAndSnooze.second,
+            lastAiPrompt = diagTriple.first,
+            diagnosticReport = diagTriple.second,
+            isRunningDiagnostics = diagTriple.third,
             alertsEnabled = prefs.wellbeingOveruseAlertsEnabled,
             warningPercent = prefs.wellbeingWarningPercent,
             wellnessTone = prefs.wellnessTone,
@@ -417,6 +439,9 @@ class ModulesHubViewModel(
                         voiceError = overlay.voiceError,
                         lastPrescriptionResult = overlay.prescription,
                         pendingNavigationModuleKey = overlay.navTarget,
+                        lastAiPrompt = overlay.lastAiPrompt,
+                        aiDiagnosticReport = overlay.diagnosticReport,
+                        isRunningDiagnostics = overlay.isRunningDiagnostics,
                         connectedSources = sources,
                         vitalMetrics = vitals,
                         healthConnectAvailability = overlay.hcAvailability,
@@ -553,12 +578,44 @@ class ModulesHubViewModel(
         lastPrescription.value = null
     }
 
+    fun retryLastAiPrompt() {
+        val last = lastAiPromptFlow.value
+        if (!last.isNullOrBlank()) {
+            askAiAssistant(last)
+        } else {
+            playMultilingualAppGuide()
+        }
+    }
+
+    fun runAiDiagnostics() {
+        if (isRunningDiagFlow.value) return
+        viewModelScope.launch {
+            isRunningDiagFlow.value = true
+            try {
+                diagnosticReportFlow.value = aiService.runDiagnostics()
+            } finally {
+                isRunningDiagFlow.value = false
+            }
+        }
+    }
+
+    fun dismissDiagnostics() {
+        diagnosticReportFlow.value = null
+    }
+
     fun playMultilingualAppGuide() {
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
         val contextSummary = uiState.value.dailyBriefing
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Preparing ${lang.label} voice guide...")
-            val result = aiService.generateMultilingualAppGuide(lang, contextSummary)
+            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            val result = aiService.generateMultilingualAppGuide(
+                languageOption = lang,
+                wellnessContextSummary = contextSummary,
+                onStageUpdate = { stage -> aiTaskStatus.value = AiTaskStatus.Loading(stage) },
+                onPartialPreview = { preview ->
+                    aiTaskStatus.value = AiTaskStatus.Streaming("Streaming ${lang.label} guide...", preview)
+                }
+            )
             result.onSuccess { outcome ->
                 aiTaskStatus.value = AiTaskStatus.Idle
                 aiMessages.update { list ->
@@ -572,6 +629,7 @@ class ModulesHubViewModel(
                     voiceManager.speak(outcome.replyText, lang.tag)
                 }
             }.onFailure { err ->
+                if (err is CancellationException) throw err
                 val msg = err.localizedMessage ?: "Unable to generate AI guide."
                 aiTaskStatus.value = AiTaskStatus.Error(msg)
                 aiMessages.update { list ->
@@ -586,17 +644,22 @@ class ModulesHubViewModel(
         if (clean.isEmpty()) return
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
         val snapshot = uiState.value
+        lastAiPromptFlow.value = clean
 
         aiMessages.update { list ->
             list + LocalAiMessage(nextMsgId++, isFromUser = true, text = clean)
         }
 
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Thinking in ${lang.label}...")
+            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
             val result = aiService.processVoiceOrTextCommand(
                 userMessage = clean,
                 languageOption = lang,
-                wellnessContextSummary = snapshot.dailyBriefing
+                wellnessContextSummary = snapshot.dailyBriefing,
+                onStageUpdate = { stage -> aiTaskStatus.value = AiTaskStatus.Loading(stage) },
+                onPartialPreview = { preview ->
+                    aiTaskStatus.value = AiTaskStatus.Streaming("Streaming in ${lang.label}...", preview)
+                }
             )
             result.onSuccess { outcome ->
                 val badges = executeAiActions(outcome.actions)
@@ -633,8 +696,16 @@ class ModulesHubViewModel(
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
 
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Reading prescription & adding schedules...")
-            val result = aiService.extractPrescriptionFromUri(context, imageUri, lang)
+            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            val result = aiService.extractPrescriptionFromUri(
+                context = context,
+                imageUri = imageUri,
+                languageOption = lang,
+                onStageUpdate = { stage -> aiTaskStatus.value = AiTaskStatus.Loading(stage) },
+                onPartialPreview = { preview ->
+                    aiTaskStatus.value = AiTaskStatus.Streaming("Reading prescription...", preview)
+                }
+            )
             result.onSuccess { extracted ->
                 val badges = mutableListOf<String>()
                 extracted.medicines.forEach { med ->

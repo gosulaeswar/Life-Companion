@@ -69,6 +69,15 @@ data class ExtractedPrescriptionResult(
     val medicines: List<ExtractedPrescriptionMedicine>
 )
 
+data class AiDiagnosticReport(
+    val isHealthy: Boolean,
+    val firebaseStatus: String,
+    val appCheckStatus: String,
+    val geminiStatus: String,
+    val summary: String,
+    val recommendation: String
+)
+
 class LifeWeaveAiService(context: Context? = null) {
     private val appContext = context?.applicationContext
 
@@ -158,12 +167,21 @@ class LifeWeaveAiService(context: Context? = null) {
         )
     }
 
+    private val diagnosticPingModel by lazy {
+        Firebase.ai.generativeModel(modelName = "gemini-3.8-flash")
+    }
+
     suspend fun processVoiceOrTextCommand(
         userMessage: String,
         languageOption: VoiceLanguageOption,
-        wellnessContextSummary: String
+        wellnessContextSummary: String,
+        onStageUpdate: (String) -> Unit = {},
+        onPartialPreview: (String) -> Unit = {}
     ): Result<AiAssistantOutcome> {
+        var appCheckPassed = false
+        val accumulatedJson = StringBuilder()
         return try {
+            onStageUpdate("Checking Firebase & App Check...")
             if (appContext != null && !ensureFirebaseInitialized()) {
                 return Result.failure(
                     IllegalStateException(
@@ -172,68 +190,115 @@ class LifeWeaveAiService(context: Context? = null) {
                     )
                 )
             }
+
+            if (appContext != null) {
+                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
+                    is AppCheckVerificationResult.Success -> {
+                        appCheckPassed = true
+                    }
+                    is AppCheckVerificationResult.Timeout -> {
+                        return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    }
+                    is AppCheckVerificationResult.Failure -> {
+                        return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    }
+                }
+            }
+
             val prompt = buildString {
                 appendLine("You are LifeWeave's friendly, voice-ready wellness assistant inside an Android health app.")
                 appendLine("Respond naturally in this language: ${languageOption.label} (${languageOption.tag}). Keep spoken replies concise (2-4 sentences).")
                 appendLine()
-                appendLine("Available LifeWeave modules users can ask about or open:")
-                appendLine("- water_tracker: 💧 Hydration goal, quick water logs, streaks")
-                appendLine("- period_tracker: 🌸 Cycle & period tracker with phase guidance")
-                appendLine("- medical_care: 💊 Medicines (daily doses, intervals like 6h/8h/12h/24h, meal timing, Taken/Skipped logs) & 🩺 Doctors + follow-ups")
-                appendLine("- exercise_tracker: 🏃 Workouts, yoga, steps, sleep logs")
-                appendLine("- diet_tracker: 🥗 Meals, coffee/drinks calories, protein/carbs/fats")
-                appendLine("- connected_devices: ⌚ Sync Fitbit, Google Fit, Samsung Health, Garmin, Oura, Strava via Health Connect or Apple Health export.xml")
-                appendLine("- daily_reminders: ⏰ Custom alarms & per-category audio tones")
-                appendLine("- beauty_care: ✨ Skincare & haircare rituals")
-                appendLine("- digital_wellbeing: 📵 Screen time cap & focus blocks")
-                appendLine("- reports_analytics: 📊 Weekly trends")
+                appendLine("Modules:")
+                appendLine("- water_tracker: hydration goal & water logs")
+                appendLine("- period_tracker: cycle & period tracker")
+                appendLine("- medical_care: medicines (doses, intervals, meal timing) & doctors")
+                appendLine("- exercise_tracker: workouts, yoga, steps, sleep")
+                appendLine("- diet_tracker: meals & coffee/drink calories")
+                appendLine("- connected_devices: Fitbit, Health Connect, Samsung, Garmin, Apple Health")
+                appendLine("- daily_reminders: custom alarms & tones")
+                appendLine("- beauty_care: skincare & haircare")
+                appendLine("- digital_wellbeing: screen time cap & focus blocks")
+                appendLine("- reports_analytics: weekly trends")
                 appendLine()
-                appendLine("Current user live wellness snapshot:")
+                appendLine("Current snapshot:")
                 appendLine(wellnessContextSummary)
                 appendLine()
-                appendLine("Action extraction rules:")
-                appendLine("1. If user mentions drinking water (e.g. '200 ml water', 'two glasses of water'), add LOG_WATER with amountOrValue in ml (default 250 ml per glass) and secondaryText='Water'.")
-                appendLine("2. If user mentions drinking coffee, tea, smoothie, juice, or eating food (e.g. 'I just had a coffee'), add LOG_MEAL with titleOrName (e.g. '☕ Coffee'), secondaryText='Snack' (or Breakfast/Lunch/Dinner), and sensible calories (e.g. 50 for coffee with milk, 350 for lunch). If it is a hydrating drink like coffee/tea/coconut water, you may ALSO add LOG_WATER (e.g. 180-200 ml, secondaryText='Herbal Tea' or 'Coffee') or keep it clear.")
-                appendLine("3. If user mentions taking or adding a medicine (e.g. 'Add Vitamin D3 1000IU once a day after breakfast'), emit LOG_MEDICINE.")
-                appendLine("4. If user mentions steps, walking/yoga/running, or sleeping hours, emit LOG_STEPS, LOG_EXERCISE, or LOG_SLEEP (hours*10 in amountOrValue).")
-                appendLine("5. If user asks to open or navigate to a module, emit OPEN_MODULE with moduleKey in secondaryText.")
-                appendLine("6. If user only asks a question or asks for app guidance, emit actions=[] (empty) or NONE and give helpful instructions in ${languageOption.label}.")
+                appendLine("Rules:")
+                appendLine("1. Drinking water -> LOG_WATER (ml in amountOrValue, default 250, secondaryText='Water').")
+                appendLine("2. Coffee/tea/food -> LOG_MEAL (titleOrName e.g. '☕ Coffee', secondaryText='Snack'/'Breakfast'/'Lunch'/'Dinner', calories e.g. 50) + optional LOG_WATER.")
+                appendLine("3. Medicine mention -> LOG_MEDICINE.")
+                appendLine("4. Steps/exercise/sleep -> LOG_STEPS, LOG_EXERCISE, or LOG_SLEEP (hours*10).")
+                appendLine("5. Open module request -> OPEN_MODULE with moduleKey in secondaryText.")
+                appendLine("6. Question or tip -> actions=[] and answer concisely in ${languageOption.label}.")
                 appendLine()
-                appendLine("User message: \"$userMessage\"")
+                appendLine("User: \"$userMessage\"")
             }
 
-            val response = withTimeout(60_000L) {
-                assistantModel.generateContent(prompt)
+            onStageUpdate("Streaming reply in ${languageOption.label}...")
+            withTimeout(60_000L) {
+                assistantModel.generateContentStream(prompt).collect { chunk ->
+                    val chunkText = chunk.text.orEmpty()
+                    if (chunkText.isNotEmpty()) {
+                        accumulatedJson.append(chunkText)
+                        val preview = extractStreamingFieldPreview(accumulatedJson.toString(), "assistantReply")
+                        if (preview.isNotBlank()) {
+                            onPartialPreview(preview)
+                        }
+                    }
+                }
             }
-            val rawJson = response.text ?: throw IllegalStateException("AI returned an empty response.")
+
+            val rawJson = accumulatedJson.toString()
+            if (rawJson.isBlank()) {
+                throw IllegalStateException("AI returned an empty response.")
+            }
             Result.success(parseAssistantJson(rawJson))
         } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "AI assistant request timed out", e)
-            Result.failure(IllegalStateException("AI request timed out after 60 seconds. Please try again."))
+            Log.e(TAG, "AI assistant stream timed out", e)
+            val detail = if (appCheckPassed) {
+                "Gemini streaming timed out after 60s (App Check passed; received ${accumulatedJson.length} chars). Please check network speed and retry."
+            } else {
+                "AI request timed out after 60 seconds. Please check connection and tap Diagnose."
+            }
+            Result.failure(IllegalStateException(detail))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
-            Log.e(TAG, "Firebase AI assistant call failed", e)
+            Log.e(TAG, "Firebase AI assistant stream failed", e)
             Result.failure(e)
         }
     }
 
     suspend fun generateMultilingualAppGuide(
         languageOption: VoiceLanguageOption,
-        wellnessContextSummary: String
+        wellnessContextSummary: String,
+        onStageUpdate: (String) -> Unit = {},
+        onPartialPreview: (String) -> Unit = {}
     ): Result<AiAssistantOutcome> {
         val guidePrompt =
             "Give me a warm, easy-to-follow spoken guided tour of LifeWeave in ${languageOption.label}. " +
                 "Cover how to log water/coffee by voice, upload a doctor's prescription photo, connect Fitbit/Apple Health devices, and manage alarms."
-        return processVoiceOrTextCommand(guidePrompt, languageOption, wellnessContextSummary)
+        return processVoiceOrTextCommand(
+            userMessage = guidePrompt,
+            languageOption = languageOption,
+            wellnessContextSummary = wellnessContextSummary,
+            onStageUpdate = onStageUpdate,
+            onPartialPreview = onPartialPreview
+        )
     }
 
     suspend fun extractPrescriptionFromUri(
         context: Context,
         imageUri: Uri,
-        languageOption: VoiceLanguageOption
+        languageOption: VoiceLanguageOption,
+        onStageUpdate: (String) -> Unit = {},
+        onPartialPreview: (String) -> Unit = {}
     ): Result<ExtractedPrescriptionResult> {
+        var appCheckPassed = false
+        val accumulatedJson = StringBuilder()
         return try {
+            onStageUpdate("Checking Firebase & App Check...")
             if (appContext != null && !ensureFirebaseInitialized()) {
                 return Result.failure(
                     IllegalStateException(
@@ -242,6 +307,22 @@ class LifeWeaveAiService(context: Context? = null) {
                     )
                 )
             }
+
+            if (appContext != null) {
+                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
+                    is AppCheckVerificationResult.Success -> {
+                        appCheckPassed = true
+                    }
+                    is AppCheckVerificationResult.Timeout -> {
+                        return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    }
+                    is AppCheckVerificationResult.Failure -> {
+                        return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    }
+                }
+            }
+
+            onStageUpdate("Preparing prescription image...")
             val bitmap = withContext(Dispatchers.IO) {
                 decodeScaledBitmap(context, imageUri, maxDimension = 1280)
             } ?: return Result.failure(IllegalArgumentException("Unable to read the selected prescription image."))
@@ -254,24 +335,130 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("Do not invent medicines that are not visible in the image.")
             }
 
-            val response = withTimeout(60_000L) {
-                prescriptionModel.generateContent(
+            onStageUpdate("Streaming prescription extraction...")
+            withTimeout(60_000L) {
+                prescriptionModel.generateContentStream(
                     content {
                         image(bitmap)
                         text(promptText)
                     }
-                )
+                ).collect { chunk ->
+                    val chunkText = chunk.text.orEmpty()
+                    if (chunkText.isNotEmpty()) {
+                        accumulatedJson.append(chunkText)
+                        val preview = extractStreamingFieldPreview(accumulatedJson.toString(), "summary")
+                        if (preview.isNotBlank()) {
+                            onPartialPreview(preview)
+                        }
+                    }
+                }
             }
-            val rawJson = response.text ?: throw IllegalStateException("AI returned empty prescription output.")
+            val rawJson = accumulatedJson.toString()
+            if (rawJson.isBlank()) {
+                throw IllegalStateException("AI returned empty prescription output.")
+            }
             Result.success(parsePrescriptionJson(rawJson))
         } catch (e: TimeoutCancellationException) {
-            Log.e(TAG, "Prescription scan timed out", e)
-            Result.failure(IllegalStateException("Prescription analysis timed out. Please try a clearer or smaller image."))
+            Log.e(TAG, "Prescription scan stream timed out", e)
+            val detail = if (appCheckPassed) {
+                "Prescription scan timed out after 60s (received ${accumulatedJson.length} chars). Try a clearer or smaller photo."
+            } else {
+                "Prescription scan timed out while verifying App Check."
+            }
+            Result.failure(IllegalStateException(detail))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Prescription scan failed", e)
             Result.failure(e)
+        }
+    }
+
+    suspend fun runDiagnostics(): AiDiagnosticReport {
+        val ctx = appContext
+        if (ctx != null && !ensureFirebaseInitialized()) {
+            return AiDiagnosticReport(
+                isHealthy = false,
+                firebaseStatus = "Missing google-services.json",
+                appCheckStatus = "Skipped (Firebase uninitialized)",
+                geminiStatus = "Skipped",
+                summary = "Firebase config is missing from this APK.",
+                recommendation = "Ensure GOOGLE_SERVICES_JSON is set in GitHub Actions Secrets and rebuild the APK."
+            )
+        }
+
+        val firebaseStatus = runCatching {
+            val app = FirebaseApp.getInstance()
+            "Ready (project: ${app.options.projectId ?: "unknown"})"
+        }.getOrElse { "Not initialized" }
+
+        val checkResult = verifyAppCheckToken(ctx, timeoutMs = 15_000L)
+        return when (checkResult) {
+            is AppCheckVerificationResult.Timeout -> {
+                AiDiagnosticReport(
+                    isHealthy = false,
+                    firebaseStatus = firebaseStatus,
+                    appCheckStatus = "Timed out after ${checkResult.timeoutMs / 1000}s (${checkResult.providerLabel})",
+                    geminiStatus = "Blocked by App Check",
+                    summary = "App Check attestation stalled before reaching Gemini.",
+                    recommendation = checkResult.diagnosticMessage
+                )
+            }
+            is AppCheckVerificationResult.Failure -> {
+                AiDiagnosticReport(
+                    isHealthy = false,
+                    firebaseStatus = firebaseStatus,
+                    appCheckStatus = "Failed (${checkResult.providerLabel}): ${checkResult.errorMessage}",
+                    geminiStatus = "Blocked by App Check",
+                    summary = "App Check rejected or could not fetch a token.",
+                    recommendation = checkResult.diagnosticMessage
+                )
+            }
+            is AppCheckVerificationResult.Success -> {
+                val appCheckDesc =
+                    "OK (${checkResult.providerLabel}, ${checkResult.latencyMs}ms, ttl ${checkResult.expiresInSeconds}s)"
+                val geminiStart = System.currentTimeMillis()
+                try {
+                    val replyBuilder = StringBuilder()
+                    withTimeout(20_000L) {
+                        diagnosticPingModel.generateContentStream("Reply with two words: AI Ready").collect { chunk ->
+                            replyBuilder.append(chunk.text.orEmpty())
+                        }
+                    }
+                    val geminiMs = (System.currentTimeMillis() - geminiStart).coerceAtLeast(1L)
+                    val sample = replyBuilder.toString().trim().ifEmpty { "Empty response" }
+                    AiDiagnosticReport(
+                        isHealthy = true,
+                        firebaseStatus = firebaseStatus,
+                        appCheckStatus = appCheckDesc,
+                        geminiStatus = "Connected (${geminiMs}ms): $sample",
+                        summary = "App Check and Gemini streaming are working on this device.",
+                        recommendation = "You can now use Voice, Quick Chips, and Prescription Scanner."
+                    )
+                } catch (e: TimeoutCancellationException) {
+                    AiDiagnosticReport(
+                        isHealthy = false,
+                        firebaseStatus = firebaseStatus,
+                        appCheckStatus = appCheckDesc,
+                        geminiStatus = "Stream timed out after 20s",
+                        summary = "App Check succeeded, but Gemini streaming did not respond within 20s.",
+                        recommendation = "Check mobile/Wi-Fi internet speed, disable VPN/private DNS, and retry."
+                    )
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    Log.e(TAG, "Diagnostic Gemini ping failed", e)
+                    val err = e.localizedMessage?.trim().orEmpty().ifEmpty { e.javaClass.simpleName }
+                    AiDiagnosticReport(
+                        isHealthy = false,
+                        firebaseStatus = firebaseStatus,
+                        appCheckStatus = appCheckDesc,
+                        geminiStatus = "Error: $err",
+                        summary = "App Check succeeded, but Gemini returned an error.",
+                        recommendation = "Verify Firebase AI Logic is enabled for this project and retry."
+                    )
+                }
+            }
         }
     }
 
@@ -292,6 +479,35 @@ class LifeWeaveAiService(context: Context? = null) {
     }
 
     companion object {
+        internal fun extractStreamingFieldPreview(partialJson: String, fieldName: String): String {
+            val token = "\"$fieldName\""
+            val keyIdx = partialJson.indexOf(token)
+            if (keyIdx < 0) return ""
+            val colonIdx = partialJson.indexOf(':', keyIdx + token.length)
+            if (colonIdx < 0) return ""
+            val quoteStart = partialJson.indexOf('"', colonIdx + 1)
+            if (quoteStart < 0) return ""
+
+            val out = StringBuilder()
+            var i = quoteStart + 1
+            while (i < partialJson.length) {
+                val ch = partialJson[i]
+                if (ch == '\\' && i + 1 < partialJson.length) {
+                    when (val next = partialJson[i + 1]) {
+                        'n' -> out.append(' ')
+                        '"', '\\', '/' -> out.append(next)
+                        else -> out.append(next)
+                    }
+                    i += 2
+                    continue
+                }
+                if (ch == '"') break
+                out.append(ch)
+                i++
+            }
+            return out.toString().trim()
+        }
+
         fun parseAssistantJson(jsonString: String): AiAssistantOutcome {
             val json = JSONObject(jsonString)
             val reply = json.optString("assistantReply").ifBlank { "Updated your wellness companion." }

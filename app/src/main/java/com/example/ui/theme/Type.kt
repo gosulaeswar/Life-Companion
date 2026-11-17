@@ -106,10 +106,10 @@ val LifeCompanionTypography = Typography(
         letterSpacing = 0.3.sp
     ),
     labelSmall = TextStyle(
-        fontFamily = JetBrainsMonoMetricFont,
+        fontFamily = JakartaSansBodyFont,
         fontWeight = FontWeight.Medium,
-        fontSize = 11.sp,
+        fontSize = 12.sp,
         lineHeight = 16.sp,
-        letterSpacing = 0.4.sp
+        letterSpacing = 0.2.sp
     )
 )

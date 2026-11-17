@@ -5,6 +5,7 @@ import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -216,6 +217,7 @@ fun OnDeviceAiScreen(
     val context = LocalContext.current
     var inputPrompt by remember { mutableStateOf("") }
     val selectedLang = SupportedVoiceLanguages.byTag(uiState.selectedVoiceLanguageTag)
+    val isAiBusy = uiState.aiTaskStatus is AiTaskStatus.Loading || uiState.aiTaskStatus is AiTaskStatus.Streaming
 
     LaunchedEffect(uiState.pendingNavigationModuleKey) {
         val target = uiState.pendingNavigationModuleKey
@@ -318,7 +320,7 @@ fun OnDeviceAiScreen(
                     ) {
                         Button(
                             onClick = { viewModel.playMultilingualAppGuide() },
-                            enabled = uiState.aiTaskStatus !is AiTaskStatus.Loading,
+                            enabled = !isAiBusy,
                             modifier = Modifier
                                 .weight(1f)
                                 .testTag("ai_voice_guide_button")
@@ -357,7 +359,7 @@ fun OnDeviceAiScreen(
                                 PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)
                             )
                         },
-                        enabled = uiState.aiTaskStatus !is AiTaskStatus.Loading,
+                        enabled = !isAiBusy,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("ai_upload_prescription_button")
@@ -405,24 +407,113 @@ fun OnDeviceAiScreen(
             }
         }
 
-        // Loading / Voice / Error Feedback
-        if (uiState.aiTaskStatus is AiTaskStatus.Loading) {
-            item {
-                Surface(
-                    modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
-                    shape = RoundedCornerShape(16.dp),
-                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
-                ) {
+        // App Check & AI Connection Diagnostics Card
+        item {
+            Card(
+                modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
+                shape = RoundedCornerShape(20.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
-                        modifier = Modifier.padding(14.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
-                        Text((uiState.aiTaskStatus as AiTaskStatus.Loading).label, style = MaterialTheme.typography.bodyMedium)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("🩺 AI & App Check Diagnostics", style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                "Verify Firebase config, App Check attestation, and Gemini streaming on this device.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::runAiDiagnostics,
+                            enabled = !uiState.isRunningDiagnostics,
+                            modifier = Modifier.testTag("ai_run_diagnostics_button")
+                        ) {
+                            Text(if (uiState.isRunningDiagnostics) "Testing..." else "Run Test")
+                        }
+                    }
+
+                    uiState.aiDiagnosticReport?.let { diag ->
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = if (diag.isHealthy) {
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                            } else {
+                                MaterialTheme.colorScheme.errorContainer
+                            }
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth().padding(12.dp),
+                                verticalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                Text(
+                                    text = if (diag.isHealthy) "✅ ${diag.summary}" else "⚠️ ${diag.summary}",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    color = if (diag.isHealthy) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                )
+                                Text(
+                                    text = "Firebase: ${diag.firebaseStatus}\nApp Check: ${diag.appCheckStatus}\nGemini: ${diag.geminiStatus}\nNext step: ${diag.recommendation}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (diag.isHealthy) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
+                                )
+                            }
+                        }
                     }
                 }
             }
+        }
+
+        // Loading / Streaming / Voice / Error Feedback
+        when (val status = uiState.aiTaskStatus) {
+            is AiTaskStatus.Loading -> {
+                item {
+                    Surface(
+                        modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(14.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            CircularProgressIndicator(modifier = Modifier.size(20.dp), strokeWidth = 2.dp)
+                            Text(status.label, style = MaterialTheme.typography.bodyMedium)
+                        }
+                    }
+                }
+            }
+            is AiTaskStatus.Streaming -> {
+                item {
+                    Surface(
+                        modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp),
+                        color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(14.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(10.dp)
+                            ) {
+                                CircularProgressIndicator(modifier = Modifier.size(18.dp), strokeWidth = 2.dp)
+                                Text(status.label, style = MaterialTheme.typography.titleSmall)
+                            }
+                            if (status.previewText.isNotBlank()) {
+                                Text(status.previewText, style = MaterialTheme.typography.bodyMedium)
+                            }
+                        }
+                    }
+                }
+            }
+            else -> Unit
         }
 
         if (uiState.isListeningVoice) {
@@ -542,6 +633,22 @@ fun OnDeviceAiScreen(
                                 }
                             }
                         }
+                        if (msg.isError) {
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedButton(
+                                    onClick = viewModel::retryLastAiPrompt,
+                                    enabled = !isAiBusy
+                                ) {
+                                    Text("🔄 Retry")
+                                }
+                                TextButton(
+                                    onClick = viewModel::runAiDiagnostics,
+                                    enabled = !uiState.isRunningDiagnostics
+                                ) {
+                                    Text("🩺 Diagnose")
+                                }
+                            }
+                        }
                         if (!msg.isFromUser && !msg.isError) {
                             TextButton(
                                 onClick = { viewModel.voiceManager.speak(msg.text, selectedLang.tag) }
@@ -599,7 +706,7 @@ fun OnDeviceAiScreen(
                         viewModel.askAiAssistant(inputPrompt)
                         inputPrompt = ""
                     },
-                    enabled = uiState.aiTaskStatus !is AiTaskStatus.Loading,
+                    enabled = !isAiBusy,
                     modifier = Modifier.testTag("local_ai_send_button")
                 ) {
                     Icon(Icons.AutoMirrored.Rounded.Send, contentDescription = "Send prompt")
