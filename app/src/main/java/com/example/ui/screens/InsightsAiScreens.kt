@@ -37,6 +37,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -52,6 +53,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
@@ -99,6 +101,66 @@ fun ReportsAnalyticsScreen(
         }
 
         item {
+            val alertStats = uiState.alertMetrics
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth()
+                    .testTag("reports_alert_intervals_card"),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(modifier = Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("🔔 Custom Alert Intervals & Adherence", style = MaterialTheme.typography.titleMedium)
+                        Text(
+                            text = "${alertStats.adherencePercent}% Done",
+                            style = MaterialTheme.typography.titleSmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    LinearProgressIndicator(
+                        progress = { (alertStats.adherencePercent / 100f).coerceIn(0f, 1f) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(8.dp)
+                            .clip(CircleShape)
+                    )
+                    Text(
+                        text = "${alertStats.enabledAlarmsCount} active alarms (${alertStats.intervalAlarmsCount} hourly/interval • ${alertStats.dailyAlarmsCount} daily) • ${alertStats.totalTriggered} fired • ${alertStats.totalCompleted} completed • ${alertStats.totalSnoozed} snoozed",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    if (alertStats.cadenceBreakdown.isNotEmpty()) {
+                        @OptIn(ExperimentalLayoutApi::class)
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            alertStats.cadenceBreakdown.forEach { bucket ->
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.7f)
+                                ) {
+                                    Text(
+                                        text = "🔁 ${bucket.label}: ${bucket.alarmCount}",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                        modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        item {
             Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(10.dp)) {
                 SummaryStatRow(
                     "⌚ Connected Devices",
@@ -106,6 +168,14 @@ fun ReportsAnalyticsScreen(
                         "${uiState.connectedSources.size} synced" + (latestHr?.let { " • ❤️ ${it.valuePrimary.toInt()} bpm" } ?: "")
                     } else {
                         "Tap Connected Devices to sync"
+                    }
+                )
+                SummaryStatRow(
+                    "🔔 Custom Alerts & Intervals",
+                    if (uiState.alertMetrics.totalAlarmsCount > 0) {
+                        "${uiState.alertMetrics.enabledAlarmsCount} active • ${uiState.alertMetrics.intervalAlarmsCount} repeating • ${uiState.alertMetrics.adherencePercent}% done"
+                    } else {
+                        "No custom alerts yet"
                     }
                 )
                 SummaryStatRow("💊 Medicines & Doctors", "${uiState.todayMedicineIntakes.count { it.status == "Taken" }} doses taken • ${uiState.consultations.count { it.followUpEpochDay != null && !it.isFollowUpCompleted }} follow-ups")

@@ -61,4 +61,8 @@
     <string name="settings_regional_language">प्रादेशिक भाषा</string>
     <string name="settings_screen_off_popup_title">🌙 स्क्रीन-ऑफ अलार्म पॉपअप सुरू करा</string>
     <string name="settings_screen_off_popup_cta">स्क्रीन-ऑफ पॉपअप परवानगी द्या</string>
+    <string name="permissions_setup_title">लॉगिनपूर्वी सर्व परवानग्या द्या</string>
+    <string name="permissions_setup_subtitle">बॅकग्राउंडमध्ये पाणी पिण्याच्या व औषधांच्या सूचना, स्क्रीन-ऑफ पॉपअप आणि स्क्रीन-वेळ सुरू राहण्यासाठी परवानगी द्या.</string>
+    <string name="permissions_grant_prompts_cta">सूचना व माइक परवानगी द्या</string>
+    <string name="permissions_continue_cta">लॉगिन / प्रोफाइलकडे पुढे जा</string>
 </resources>

@@ -39,27 +39,34 @@ data class CategoryToneSetting(
     val reminderMinute: Int = 0,
     val customEmoji: String? = null,
     val customMessage: String? = null,
-    val gesturePreset: String = "SWIPE_SLIDE"
+    val gesturePreset: String = "SWIPE_SLIDE",
+    val repeatIntervalMinutes: Int = 1440
 )
 
 data class UiPreferencesState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val language: SupportedLanguage = SupportedLanguage.ENGLISH,
     val welcomeCompleted: Boolean = false,
+    val permissionsSetupCompleted: Boolean = false,
     val waterTone: CategoryToneSetting = CategoryToneSetting(
         bundledToneId = "water_drop",
         reminderHour = 10,
-        reminderMinute = 0
+        reminderMinute = 0,
+        customEmoji = "💧",
+        customMessage = "Note: Drink 250 ml of water now to stay hydrated and energized."
     ),
     val periodTone: CategoryToneSetting = CategoryToneSetting(
         bundledToneId = "period_chime",
         reminderHour = 8,
-        reminderMinute = 30
+        reminderMinute = 30,
+        customEmoji = "🌸"
     ),
     val wellnessTone: CategoryToneSetting = CategoryToneSetting(
         bundledToneId = "wellness_gentle",
         reminderHour = 20,
-        reminderMinute = 0
+        reminderMinute = 0,
+        customEmoji = "💊",
+        customMessage = "Note: Take scheduled medicines on time and log today's water."
     ),
     val wellbeingOveruseAlertsEnabled: Boolean = true,
     val wellbeingWarningPercent: Int = 80,
@@ -73,6 +80,8 @@ class LocalPreferencesManager(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val LANGUAGE_CODE = stringPreferencesKey("language_code")
         val WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
+        val PERMISSIONS_SETUP_COMPLETED = booleanPreferencesKey("permissions_setup_completed")
+        val DEFAULT_REMINDERS_SEEDED = booleanPreferencesKey("default_reminders_seeded")
 
         fun toneSource(cat: String) = stringPreferencesKey("tone_source_$cat")
         fun bundledToneId(cat: String) = stringPreferencesKey("tone_bundled_id_$cat")
@@ -85,6 +94,7 @@ class LocalPreferencesManager(private val context: Context) {
         fun customEmoji(cat: String) = stringPreferencesKey("reminder_emoji_$cat")
         fun customMessage(cat: String) = stringPreferencesKey("reminder_message_$cat")
         fun gesturePreset(cat: String) = stringPreferencesKey("reminder_gesture_$cat")
+        fun reminderIntervalMin(cat: String) = intPreferencesKey("reminder_interval_min_$cat")
 
         val WELLBEING_ALERTS_ENABLED = booleanPreferencesKey("wellbeing_overuse_alerts_enabled")
         val WELLBEING_WARNING_PERCENT = intPreferencesKey("wellbeing_warning_percent")
@@ -115,7 +125,8 @@ class LocalPreferencesManager(private val context: Context) {
                 reminderMinute = prefs[Keys.reminderMinute(cat)] ?: defaultMin,
                 customEmoji = prefs[Keys.customEmoji(cat)],
                 customMessage = prefs[Keys.customMessage(cat)],
-                gesturePreset = prefs[Keys.gesturePreset(cat)] ?: "SWIPE_SLIDE"
+                gesturePreset = prefs[Keys.gesturePreset(cat)] ?: "SWIPE_SLIDE",
+                repeatIntervalMinutes = prefs[Keys.reminderIntervalMin(cat)] ?: 1440
             )
         }
 
@@ -124,6 +135,7 @@ class LocalPreferencesManager(private val context: Context) {
             language = SupportedLanguage.entries.firstOrNull { it.code == langCode }
                 ?: SupportedLanguage.ENGLISH,
             welcomeCompleted = prefs[Keys.WELCOME_COMPLETED] ?: false,
+            permissionsSetupCompleted = prefs[Keys.PERMISSIONS_SETUP_COMPLETED] ?: false,
             waterTone = readCategory("water", "water_drop", 10, 0),
             periodTone = readCategory("period", "period_chime", 8, 30),
             wellnessTone = readCategory("wellness", "wellness_gentle", 20, 0),
@@ -144,6 +156,38 @@ class LocalPreferencesManager(private val context: Context) {
 
     suspend fun setWelcomeCompleted(completed: Boolean) {
         context.lifeCompanionPrefsDataStore.edit { it[Keys.WELCOME_COMPLETED] = completed }
+    }
+
+    suspend fun setPermissionsSetupCompleted(completed: Boolean) {
+        context.lifeCompanionPrefsDataStore.edit { it[Keys.PERMISSIONS_SETUP_COMPLETED] = completed }
+    }
+
+    suspend fun enableDefaultCareRemindersIfNeeded(): Boolean {
+        var enabledNow = false
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            if (prefs[Keys.DEFAULT_REMINDERS_SEEDED] != true) {
+                prefs[Keys.DEFAULT_REMINDERS_SEEDED] = true
+                if (prefs[Keys.reminderEnabled("water")] == null) {
+                    prefs[Keys.reminderEnabled("water")] = true
+                    prefs[Keys.reminderHour("water")] = 10
+                    prefs[Keys.reminderMinute("water")] = 0
+                    prefs[Keys.reminderIntervalMin("water")] = 120
+                    prefs[Keys.customEmoji("water")] = "💧"
+                    prefs[Keys.customMessage("water")] =
+                        "Note: Drink a 250 ml glass of water now to stay hydrated & energized."
+                }
+                if (prefs[Keys.reminderEnabled("wellness")] == null) {
+                    prefs[Keys.reminderEnabled("wellness")] = true
+                    prefs[Keys.reminderHour("wellness")] = 20
+                    prefs[Keys.reminderMinute("wellness")] = 0
+                    prefs[Keys.customEmoji("wellness")] = "💊"
+                    prefs[Keys.customMessage("wellness")] =
+                        "Note: Take scheduled medicines on time and finish today's water target."
+                }
+                enabledNow = true
+            }
+        }
+        return enabledNow
     }
 
     suspend fun updateCategoryTone(
@@ -179,12 +223,16 @@ class LocalPreferencesManager(private val context: Context) {
         categoryKey: String,
         enabled: Boolean,
         hour: Int,
-        minute: Int
+        minute: Int,
+        repeatIntervalMinutes: Int? = null
     ) {
         context.lifeCompanionPrefsDataStore.edit { prefs ->
             prefs[Keys.reminderEnabled(categoryKey)] = enabled
             prefs[Keys.reminderHour(categoryKey)] = hour.coerceIn(0, 23)
             prefs[Keys.reminderMinute(categoryKey)] = minute.coerceIn(0, 59)
+            if (repeatIntervalMinutes != null) {
+                prefs[Keys.reminderIntervalMin(categoryKey)] = repeatIntervalMinutes.coerceIn(5, 10_080)
+            }
         }
     }
 

@@ -61,4 +61,8 @@
     <string name="settings_regional_language">பிராந்திய மொழி</string>
     <string name="settings_screen_off_popup_title">🌙 திரை அணைந்திருக்கும் அலாரம் பாப்அப்</string>
     <string name="settings_screen_off_popup_cta">திரை-ஆஃப் பாப்அப் அனுமதி</string>
+    <string name="permissions_setup_title">உள்நுழைவதற்கு முன் அனுமதி</string>
+    <string name="permissions_setup_subtitle">தண்ணீர், மருந்து குறிப்புகள், பின்னணி அலாரம் மற்றும் திரை-ஆஃப் பாப்அப் வேலை செய்ய கீழ்கண்ட அணுகல்களை அனுமதிக்கவும்.</string>
+    <string name="permissions_grant_prompts_cta">அறிவிப்பு &amp; மைக் அனுமதி</string>
+    <string name="permissions_continue_cta">உள்நுழைவுக்குத் தொடரவும்</string>
 </resources>

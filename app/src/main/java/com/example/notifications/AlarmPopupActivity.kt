@@ -90,13 +90,17 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
 import com.example.MainActivity
+import com.example.data.local.AppDatabase
 import com.example.security.LocalPreferencesManager
 import com.example.security.ProvideLocalizedLocale
 import com.example.security.SupportedLanguage
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.theme.LifeCompanionTheme
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -127,6 +131,16 @@ class AlarmPopupActivity : ComponentActivity() {
                         payload = currentPayload,
                         onDone = {
                             silenceAndCancelNotification(currentPayload.notificationId)
+                            val alarmId = currentPayload.alarmId
+                            if (alarmId > 0L) {
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    runCatching {
+                                        AppDatabase.getInstance(applicationContext)
+                                            .reminderDao()
+                                            .recordAlarmCompleted(alarmId)
+                                    }
+                                }
+                            }
                             Toast.makeText(
                                 this,
                                 "${currentPayload.emoji} '${currentPayload.title}' marked complete!",
@@ -136,6 +150,16 @@ class AlarmPopupActivity : ComponentActivity() {
                         },
                         onSnooze = { minutes ->
                             silenceAndCancelNotification(currentPayload.notificationId)
+                            val alarmId = currentPayload.alarmId
+                            if (alarmId > 0L) {
+                                CoroutineScope(Dispatchers.IO).launch {
+                                    runCatching {
+                                        AppDatabase.getInstance(applicationContext)
+                                            .reminderDao()
+                                            .recordAlarmSnoozed(alarmId)
+                                    }
+                                }
+                            }
                             AlertSoundManager(this).scheduleSnoozeAlarm(currentPayload, minutes)
                             Toast.makeText(
                                 this,

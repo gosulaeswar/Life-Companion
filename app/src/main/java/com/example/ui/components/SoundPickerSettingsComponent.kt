@@ -56,10 +56,14 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.KeyboardType
 import com.example.data.local.entity.ReminderEntity
 import com.example.notifications.AlarmEmojiCatalog
 import com.example.notifications.AlarmEmojiGesturePreset
 import com.example.notifications.AlertCategory
+import com.example.notifications.AlertMetricsCalculator
+import com.example.notifications.AlertMetricsSummary
 import com.example.notifications.BundledAlertTone
 import com.example.security.AlertToneSource
 import com.example.security.CategoryToneSetting
@@ -84,6 +88,7 @@ fun CategorySoundPickerCard(
     onSelectSystemTone: (AlertCategory, AlertToneSource) -> Unit,
     onPickLocalStorageAudio: (AlertCategory) -> Unit,
     onToggleDailyReminder: (AlertCategory, Boolean, Int, Int) -> Unit,
+    onUpdateCategoryInterval: (AlertCategory, Int) -> Unit = { _, _ -> },
     onUpdateCategoryStyle: (AlertCategory, String, String, String) -> Unit = { _, _, _, _ -> },
     onTestCategoryNotification: (AlertCategory) -> Unit,
     modifier: Modifier = Modifier
@@ -257,6 +262,28 @@ fun CategorySoundPickerCard(
                                 showDailyCheckInClock = false
                             }
                         )
+                    }
+
+                    // Quick Interval Cadence Row for Category Reminder
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(
+                            text = "Repeat Cadence: ${AlertMetricsCalculator.formatIntervalLabel(activeSetting.repeatIntervalMinutes)}",
+                            style = MaterialTheme.typography.labelMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            listOf(60, 120, 240, 1440).forEach { mins ->
+                                FilterChip(
+                                    selected = activeSetting.repeatIntervalMinutes == mins,
+                                    onClick = { onUpdateCategoryInterval(selectedCategory, mins) },
+                                    label = { Text(AlertMetricsCalculator.formatIntervalShort(mins)) },
+                                    modifier = Modifier.testTag("category_interval_${selectedCategory.key}_$mins")
+                                )
+                            }
+                        }
                     }
 
                     var editCategoryStyle by remember(selectedCategory) { mutableStateOf(false) }
@@ -470,6 +497,7 @@ fun CategorySoundPickerCard(
 @Composable
 fun CustomAlarmsSettingsCard(
     alarms: List<ReminderEntity>,
+    alertMetrics: AlertMetricsSummary = AlertMetricsCalculator.summarize(alarms),
     playingToneKey: String?,
     onPreviewBundledTone: (BundledAlertTone) -> Unit,
     onStopPreview: () -> Unit,
@@ -489,7 +517,8 @@ fun CustomAlarmsSettingsCard(
         customLabel: String?,
         alarmEmoji: String,
         customMessage: String,
-        gesturePreset: String
+        gesturePreset: String,
+        repeatIntervalMinutes: Int
     ) -> Unit,
     onLaunchAudioPickerForDialog: ((Uri) -> Unit) -> Unit,
     resolveAudioDisplayName: (Uri) -> String,
@@ -560,13 +589,81 @@ fun CustomAlarmsSettingsCard(
                 Text("Add Custom Alarm")
             }
 
+            if (alarms.isNotEmpty()) {
+                Surface(
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f),
+                    modifier = Modifier.testTag("custom_alarms_metrics_strip")
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            text = "📊 Alert Interval & Adherence Metrics",
+                            style = MaterialTheme.typography.labelLarge,
+                            color = MaterialTheme.colorScheme.onPrimaryContainer
+                        )
+                        FlowRow(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                Text(
+                                    text = "⏰ ${alertMetrics.enabledAlarmsCount} active",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                Text(
+                                    text = "🔁 ${alertMetrics.intervalAlarmsCount} hourly/interval",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                Text(
+                                    text = "✅ ${alertMetrics.adherencePercent}% done (${alertMetrics.totalCompleted}/${alertMetrics.totalTriggered})",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                )
+                            }
+                            if (alertMetrics.totalSnoozed > 0) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = MaterialTheme.colorScheme.surface
+                                ) {
+                                    Text(
+                                        text = "😴 ${alertMetrics.totalSnoozed} snoozed",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             if (alarms.isEmpty()) {
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)
                 ) {
                     Text(
-                        text = "No custom alarms yet. Tap 'Add Custom Alarm' to schedule a hydration, medicine, cycle, or mindfulness alarm.",
+                        text = "No custom alarms yet. Tap 'Add Custom Alarm' to schedule hourly, every 2 hours, or custom-interval reminders with popups & metrics.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(14.dp)
@@ -605,20 +702,45 @@ fun CustomAlarmsSettingsCard(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     val gesturePreset = AlarmEmojiGesturePreset.fromId(alarm.gesturePreset)
+                                    val intervalShort = AlertMetricsCalculator.formatIntervalShort(alarm.repeatIntervalMinutes)
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            verticalAlignment = Alignment.CenterVertically,
-                                            horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                        FlowRow(
+                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                            verticalArrangement = Arrangement.spacedBy(4.dp)
                                         ) {
-                                            Text(text = alarm.alarmEmoji, fontSize = 24.sp)
-                                            Text(
-                                                text = alarm.triggerTime24h,
-                                                style = MaterialTheme.typography.headlineSmall.copy(
-                                                    fontFamily = JetBrainsMonoMetricFont,
-                                                    fontWeight = FontWeight.Bold
-                                                ),
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Text(text = alarm.alarmEmoji, fontSize = 24.sp)
+                                                Text(
+                                                    text = alarm.triggerTime24h,
+                                                    style = MaterialTheme.typography.headlineSmall.copy(
+                                                        fontFamily = JetBrainsMonoMetricFont,
+                                                        fontWeight = FontWeight.Bold
+                                                    ),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                            }
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = if (alarm.repeatIntervalMinutes in 1 until 1440) {
+                                                    MaterialTheme.colorScheme.primaryContainer
+                                                } else {
+                                                    MaterialTheme.colorScheme.secondaryContainer
+                                                }
+                                            ) {
+                                                Text(
+                                                    text = "🔁 $intervalShort",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = if (alarm.repeatIntervalMinutes in 1 until 1440) {
+                                                        MaterialTheme.colorScheme.onPrimaryContainer
+                                                    } else {
+                                                        MaterialTheme.colorScheme.onSecondaryContainer
+                                                    },
+                                                    modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
+                                                )
+                                            }
                                             Surface(
                                                 shape = CircleShape,
                                                 color = MaterialTheme.colorScheme.secondaryContainer
@@ -645,6 +767,11 @@ fun CustomAlarmsSettingsCard(
                                             text = "${formatDaysMask(alarm.daysOfWeekMask)} • $soundLabel",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant
+                                        )
+                                        Text(
+                                            text = "📊 Metrics: 🔔 ${alarm.triggeredCount} fired • ✅ ${alarm.completedCount} done • 😴 ${alarm.snoozedCount} snoozed",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.primary
                                         )
                                     }
                                     Switch(
@@ -708,7 +835,7 @@ fun CustomAlarmsSettingsCard(
                 onStopPreview()
                 showAlarmDialog = false
             },
-            onSave = { title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel, alarmEmoji, customMsg, gesturePreset ->
+            onSave = { title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel, alarmEmoji, customMsg, gesturePreset, repeatIntervalMinutes ->
                 onStopPreview()
                 onSaveAlarm(
                     editingAlarm?.id ?: 0L,
@@ -722,7 +849,8 @@ fun CustomAlarmsSettingsCard(
                     customLabel,
                     alarmEmoji,
                     customMsg,
-                    gesturePreset
+                    gesturePreset,
+                    repeatIntervalMinutes
                 )
                 showAlarmDialog = false
             }
@@ -751,7 +879,8 @@ private fun CustomAlarmEditorDialog(
         customLabel: String?,
         alarmEmoji: String,
         customMessage: String,
-        gesturePreset: String
+        gesturePreset: String,
+        repeatIntervalMinutes: Int
     ) -> Unit
 ) {
     val parsedParts = existing?.triggerTime24h?.split(":")
@@ -766,6 +895,21 @@ private fun CustomAlarmEditorDialog(
     var alarmEmoji by remember { mutableStateOf(existing?.alarmEmoji ?: AlarmEmojiCatalog.defaultEmojiForCategory(moduleKey)) }
     var customMessage by remember { mutableStateOf(existing?.customMessage ?: "") }
     var gesturePreset by remember { mutableStateOf(existing?.gesturePreset ?: AlarmEmojiGesturePreset.SWIPE_SLIDE.id) }
+
+    val initialInterval = existing?.repeatIntervalMinutes ?: 1440
+    val isPreset = initialInterval in AlertMetricsCalculator.intervalPresetsMinutes
+    var repeatIntervalMinutes by remember { mutableIntStateOf(initialInterval) }
+    var showCustomIntervalInput by remember { mutableStateOf(!isPreset) }
+    var customUnitHours by remember { mutableStateOf(initialInterval >= 60 && initialInterval % 60 == 0) }
+    var customIntervalInputText by remember {
+        mutableStateOf(
+            if (initialInterval >= 60 && initialInterval % 60 == 0) {
+                (initialInterval / 60).toString()
+            } else {
+                initialInterval.toString()
+            }
+        )
+    }
 
     val dayLabels = listOf("Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat")
 
@@ -923,6 +1067,84 @@ private fun CustomAlarmEditorDialog(
                     )
                 }
 
+                Text("Repeat Interval (Hourly, Every 2h, Custom)", style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                ) {
+                    AlertMetricsCalculator.intervalPresetsMinutes.forEach { presetMins ->
+                        FilterChip(
+                            selected = !showCustomIntervalInput && repeatIntervalMinutes == presetMins,
+                            onClick = {
+                                showCustomIntervalInput = false
+                                repeatIntervalMinutes = presetMins
+                            },
+                            label = { Text(AlertMetricsCalculator.formatIntervalShort(presetMins)) },
+                            modifier = Modifier.testTag("alarm_interval_preset_$presetMins")
+                        )
+                    }
+                    FilterChip(
+                        selected = showCustomIntervalInput,
+                        onClick = { showCustomIntervalInput = true },
+                        label = { Text("Custom") },
+                        modifier = Modifier.testTag("alarm_interval_custom_chip")
+                    )
+                }
+
+                if (showCustomIntervalInput) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedTextField(
+                            value = customIntervalInputText,
+                            onValueChange = { raw ->
+                                val digits = raw.filter { it.isDigit() }.take(4)
+                                customIntervalInputText = digits
+                                val parsed = digits.toIntOrNull()
+                                if (parsed != null && parsed > 0) {
+                                    val mins = if (customUnitHours) parsed * 60 else parsed
+                                    repeatIntervalMinutes = AlertMetricsCalculator.normalizeIntervalMinutes(mins)
+                                }
+                            },
+                            label = { Text(if (customUnitHours) "Every N hours" else "Every N mins") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            singleLine = true,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("alarm_custom_interval_input")
+                        )
+                        FilterChip(
+                            selected = !customUnitHours,
+                            onClick = {
+                                customUnitHours = false
+                                val parsed = customIntervalInputText.toIntOrNull()
+                                if (parsed != null && parsed > 0) {
+                                    repeatIntervalMinutes = AlertMetricsCalculator.normalizeIntervalMinutes(parsed)
+                                }
+                            },
+                            label = { Text("Min") }
+                        )
+                        FilterChip(
+                            selected = customUnitHours,
+                            onClick = {
+                                customUnitHours = true
+                                val parsed = customIntervalInputText.toIntOrNull()
+                                if (parsed != null && parsed > 0) {
+                                    repeatIntervalMinutes = AlertMetricsCalculator.normalizeIntervalMinutes(parsed * 60)
+                                }
+                            },
+                            label = { Text("Hours") }
+                        )
+                    }
+                    Text(
+                        text = "Active cadence: ${AlertMetricsCalculator.formatIntervalLabel(repeatIntervalMinutes)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+                }
+
                 Text("Repeat Days", style = MaterialTheme.typography.labelLarge)
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                     dayLabels.forEachIndexed { idx, label ->
@@ -1016,6 +1238,13 @@ private fun CustomAlarmEditorDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    val resolvedInterval = if (showCustomIntervalInput) {
+                        val parsed = customIntervalInputText.toIntOrNull() ?: 60
+                        val rawMins = if (customUnitHours) parsed * 60 else parsed
+                        AlertMetricsCalculator.normalizeIntervalMinutes(rawMins)
+                    } else {
+                        AlertMetricsCalculator.normalizeIntervalMinutes(repeatIntervalMinutes)
+                    }
                     onSave(
                         title,
                         moduleKey,
@@ -1027,7 +1256,8 @@ private fun CustomAlarmEditorDialog(
                         customLabel,
                         alarmEmoji,
                         customMessage,
-                        gesturePreset
+                        gesturePreset,
+                        resolvedInterval
                     )
                 },
                 modifier = Modifier.testTag("save_custom_alarm_button")

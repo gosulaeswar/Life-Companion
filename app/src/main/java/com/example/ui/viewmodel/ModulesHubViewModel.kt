@@ -22,11 +22,13 @@ import com.example.data.local.entity.MedicineEntity
 import com.example.data.local.entity.MedicineIntakeEntity
 import com.example.data.local.entity.ModuleActivationEntity
 import com.example.data.local.entity.PeriodRecordEntity
+import com.example.data.local.entity.ReminderEntity
 import com.example.data.local.entity.SleepRecordEntity
 import com.example.data.local.entity.StepRecordEntity
 import com.example.data.local.entity.UserProfileEntity
 import com.example.data.local.entity.WaterRecordEntity
 import com.example.data.repository.AllModulesRepository
+import com.example.data.repository.CustomAlarmRepository
 import com.example.data.repository.ModuleRepository
 import com.example.data.repository.PeriodRepository
 import com.example.data.repository.UserProfileRepository
@@ -42,7 +44,10 @@ import com.example.healthsync.AppleAndFileFitnessImporter
 import com.example.healthsync.FitnessSyncRepository
 import com.example.healthsync.HealthConnectAvailability
 import com.example.healthsync.HealthConnectManager
+import com.example.notifications.AlertMetricsCalculator
+import com.example.notifications.AlertMetricsSummary
 import com.example.notifications.AlertSoundManager
+import com.example.notifications.BundledAlertTone
 import com.example.security.CategoryToneSetting
 import com.example.security.LocalPreferencesManager
 import com.example.wellbeing.AppUsageMetric
@@ -116,7 +121,9 @@ data class ModulesHubUiState(
     val wellbeingOveruseAlertsEnabled: Boolean = true,
     val wellbeingWarningPercent: Int = 80,
     val isSyncingWellbeing: Boolean = false,
-    val wellbeingSyncBanner: String? = null
+    val wellbeingSyncBanner: String? = null,
+    val customAlarms: List<ReminderEntity> = emptyList(),
+    val alertMetrics: AlertMetricsSummary = AlertMetricsSummary()
 )
 
 private data class AiAndSyncOverlayState(
@@ -158,7 +165,8 @@ class ModulesHubViewModel(
     val voiceManager: VoiceAssistantManager,
     private val deviceWellbeingManager: DeviceWellbeingManager,
     private val alertSoundManager: AlertSoundManager,
-    private val preferencesManager: LocalPreferencesManager
+    private val preferencesManager: LocalPreferencesManager,
+    private val customAlarmRepository: CustomAlarmRepository
 ) : ViewModel() {
 
     private val aiMessages = MutableStateFlow<List<LocalAiMessage>>(emptyList())
@@ -308,11 +316,16 @@ class ModulesHubViewModel(
 
                 combine(
                     coreFlow,
-                    allModulesRepo.observeRecentMedicineIntakes(profile.id),
+                    combine(
+                        allModulesRepo.observeRecentMedicineIntakes(profile.id),
+                        customAlarmRepository.observeAlarms(profile.id)
+                    ) { recent, alarms -> recent to alarms },
                     fitnessSyncRepo.observeConnectedSources(profile.id),
                     fitnessSyncRepo.observeVitalMetrics(profile.id),
                     aiFlow
-                ) { arr, recentIntakes, sources, vitals, overlay ->
+                ) { arr, recentAndAlarms, sources, vitals, overlay ->
+                    val recentIntakes = recentAndAlarms.first
+                    val customAlarms = recentAndAlarms.second
                     @Suppress("UNCHECKED_CAST")
                     val modules = arr[0] as List<ModuleActivationEntity>
                     @Suppress("UNCHECKED_CAST")
@@ -422,7 +435,9 @@ class ModulesHubViewModel(
                         wellbeingOveruseAlertsEnabled = overlay.alertsEnabled,
                         wellbeingWarningPercent = overlay.warningPercent,
                         isSyncingWellbeing = overlay.isSyncingWellbeing,
-                        wellbeingSyncBanner = overlay.wellbeingBanner
+                        wellbeingSyncBanner = overlay.wellbeingBanner,
+                        customAlarms = customAlarms,
+                        alertMetrics = AlertMetricsCalculator.summarize(customAlarms)
                     )
                 }
             }
@@ -639,6 +654,16 @@ class ModulesHubViewModel(
                         categoryEmoji = "💊",
                         notes = med.notes.ifBlank { "Added from prescription photo" }
                     )
+                    scheduleAutoAlarmForMedicine(
+                        profileId = pid,
+                        name = med.name,
+                        dosage = med.dosage,
+                        time24h = med.scheduleTime24h,
+                        intervalHours = med.intervalHours,
+                        mealRelation = med.mealRelation,
+                        emoji = "💊",
+                        notes = med.notes.ifBlank { "From prescription" }
+                    )
                     badges += "💊 ${med.name} (${med.dosage})"
                 }
                 if (extracted.doctorName.isNotBlank()) {
@@ -720,6 +745,16 @@ class ModulesHubViewModel(
                         intervalHours = action.intervalHours,
                         mealRelation = action.mealRelation,
                         categoryEmoji = "💊",
+                        notes = "Added via AI Assistant"
+                    )
+                    scheduleAutoAlarmForMedicine(
+                        profileId = pid,
+                        name = medName,
+                        dosage = dosage,
+                        time24h = "08:00",
+                        intervalHours = action.intervalHours,
+                        mealRelation = action.mealRelation,
+                        emoji = "💊",
                         notes = "Added via AI Assistant"
                     )
                     badges += "💊 Added $medName ($dosage)"
@@ -862,13 +897,91 @@ class ModulesHubViewModel(
                 categoryEmoji = categoryEmoji,
                 notes = notes
             )
+            scheduleAutoAlarmForMedicine(
+                profileId = pid,
+                name = name,
+                dosage = dosage,
+                time24h = time24h,
+                intervalHours = intervalHours,
+                mealRelation = mealRelation,
+                emoji = categoryEmoji,
+                notes = notes
+            )
         }
     }
 
-    fun toggleMedicine(med: MedicineEntity, active: Boolean) =
-        viewModelScope.launch { allModulesRepo.toggleMedicine(med, active) }
+    private suspend fun scheduleAutoAlarmForMedicine(
+        profileId: Long,
+        name: String,
+        dosage: String,
+        time24h: String,
+        intervalHours: Int = 24,
+        mealRelation: String,
+        emoji: String,
+        notes: String
+    ) {
+        val cleanName = name.trim()
+        if (cleanName.isEmpty()) return
+        val alarmTitle = "Take $cleanName"
+        val existing = customAlarmRepository.getAllSnapshot(profileId).firstOrNull {
+            it.moduleKey == "medicine" &&
+                it.title.equals(alarmTitle, ignoreCase = true) &&
+                it.triggerTime24h == time24h
+        }
+        if (existing != null) return
 
-    fun deleteMedicine(id: Long) = viewModelScope.launch { allModulesRepo.deleteMedicine(id) }
+        val noteDetail = buildString {
+            append("Take $cleanName")
+            if (dosage.isNotBlank()) append(" (${dosage.trim()})")
+            if (mealRelation.isNotBlank()) append(" • $mealRelation")
+            if (notes.isNotBlank()) append(" • Note: ${notes.trim()}")
+            else append(" • Drink a glass of water with your dose!")
+        }
+        val entity = ReminderEntity(
+            profileId = profileId,
+            title = alarmTitle,
+            moduleKey = "medicine",
+            triggerTime24h = time24h,
+            daysOfWeekMask = 127,
+            isEnabled = true,
+            soundKey = BundledAlertTone.WELLNESS_GENTLE.id,
+            alarmEmoji = emoji.ifBlank { "💊" },
+            customMessage = noteDetail,
+            repeatIntervalMinutes = (intervalHours.coerceIn(1, 24)) * 60
+        )
+        val savedId = customAlarmRepository.saveAlarm(entity)
+        alertSoundManager.scheduleCustomAlarm(entity.copy(id = savedId))
+    }
+
+    fun toggleMedicine(med: MedicineEntity, active: Boolean) =
+        viewModelScope.launch {
+            allModulesRepo.toggleMedicine(med, active)
+            val alarmTitle = "Take ${med.name.trim()}"
+            customAlarmRepository.getAllSnapshot(med.profileId)
+                .filter { it.moduleKey == "medicine" && it.title.equals(alarmTitle, ignoreCase = true) }
+                .forEach { alarm ->
+                    val updated = customAlarmRepository.toggleAlarm(alarm, active)
+                    if (active) {
+                        alertSoundManager.scheduleCustomAlarm(updated)
+                    } else {
+                        alertSoundManager.cancelCustomAlarm(alarm.id)
+                    }
+                }
+        }
+
+    fun deleteMedicine(id: Long) = viewModelScope.launch {
+        val target = uiState.value.medicines.firstOrNull { it.id == id }
+        allModulesRepo.deleteMedicine(id)
+        if (target != null) {
+            val alarmTitle = "Take ${target.name.trim()}"
+            customAlarmRepository.getAllSnapshot(target.profileId)
+                .filter { it.moduleKey == "medicine" && it.title.equals(alarmTitle, ignoreCase = true) }
+                .forEach { alarm ->
+                    alertSoundManager.cancelCustomAlarm(alarm.id)
+                    customAlarmRepository.deleteAlarm(alarm.id)
+                }
+        }
+    }
 
     fun logMedicineIntake(
         med: MedicineEntity,

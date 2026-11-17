@@ -61,4 +61,8 @@
     <string name="settings_regional_language">ప్రాంతీయ భాష</string>
     <string name="settings_screen_off_popup_title">🌙 స్క్రీన్ ఆఫ్ అలారం పాప్అప్</string>
     <string name="settings_screen_off_popup_cta">స్క్రీన్-ఆఫ్ పాప్అప్ అనుమతి</string>
+    <string name="permissions_setup_title">లాగిన్ ముందు అనుమతులు ఇవ్వండి</string>
+    <string name="permissions_setup_subtitle">బ్యాక్‌గ్రౌండ్‌లో నీరు, మందుల నోట్స్, అలారం పాప్అప్‌లు మరియు స్క్రీన్-టైమ్ పనిచేయడానికి ఈ అనుమతులు ఇవ్వండి.</string>
+    <string name="permissions_grant_prompts_cta">నోటిఫికేషన్ &amp; మైక్ అనుమతి</string>
+    <string name="permissions_continue_cta">లాగిన్ / ప్రొఫైల్‌కు కొనసాగండి</string>
 </resources>

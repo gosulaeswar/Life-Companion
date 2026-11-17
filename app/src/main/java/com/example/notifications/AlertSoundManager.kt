@@ -1,6 +1,7 @@
 package com.example.notifications
 
 import android.Manifest
+import android.app.ActivityManager
 import android.app.AlarmManager
 import android.app.Notification
 import android.app.NotificationChannel
@@ -16,6 +17,7 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.OpenableColumns
 import android.provider.Settings
@@ -25,12 +27,15 @@ import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import com.example.MainActivity
 import com.example.R
+import com.example.data.local.AppDatabase
 import com.example.data.local.entity.ReminderEntity
 import com.example.security.AlertToneSource
 import com.example.security.CategoryToneSetting
+import com.example.security.LocalPreferencesManager
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.first
 import java.util.Calendar
 
 enum class BundledAlertTone(
@@ -136,6 +141,38 @@ class AlertSoundManager(private val context: Context) {
             }
             activePlayer = null
             _playingToneKey.value = null
+        }
+
+        fun computeNextIntervalTriggerMillis(
+            startHour: Int,
+            startMinute: Int,
+            intervalMinutes: Int,
+            nowMs: Long = System.currentTimeMillis()
+        ): Long {
+            val cal = Calendar.getInstance().apply {
+                timeInMillis = nowMs
+                set(Calendar.HOUR_OF_DAY, startHour.coerceIn(0, 23))
+                set(Calendar.MINUTE, startMinute.coerceIn(0, 59))
+                set(Calendar.SECOND, 0)
+                set(Calendar.MILLISECOND, 0)
+            }
+            val safeInterval = if (intervalMinutes <= 0) 1440 else intervalMinutes
+            if (safeInterval >= 1440) {
+                if (cal.timeInMillis <= nowMs) {
+                    cal.add(Calendar.DAY_OF_YEAR, 1)
+                }
+                return cal.timeInMillis
+            }
+            val stepMs = safeInterval.coerceIn(5, 10_080) * 60_000L
+            val anchorMs = cal.timeInMillis
+            return if (anchorMs <= nowMs) {
+                val diff = nowMs - anchorMs
+                val steps = (diff / stepMs) + 1L
+                anchorMs + steps * stepMs
+            } else {
+                val backSteps = (anchorMs - nowMs - 1L) / stepMs
+                anchorMs - backSteps * stepMs
+            }
         }
     }
 
@@ -351,6 +388,84 @@ class AlertSoundManager(private val context: Context) {
         }
     }
 
+    fun hasMicrophonePermission(): Boolean {
+        return ContextCompat.checkSelfPermission(
+            context,
+            Manifest.permission.RECORD_AUDIO
+        ) == PackageManager.PERMISSION_GRANTED
+    }
+
+    fun canScheduleExactAlarms(): Boolean {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return true
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as? AlarmManager ?: return false
+        return alarmManager.canScheduleExactAlarms()
+    }
+
+    fun createExactAlarmSettingsIntent(): Intent {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            val exactIntent = Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM).apply {
+                data = Uri.parse("package:${context.packageName}")
+                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            }
+            if (exactIntent.resolveActivity(context.packageManager) != null) {
+                return exactIntent
+            }
+        }
+        return Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
+    fun canDrawOverlays(): Boolean {
+        return Settings.canDrawOverlays(context)
+    }
+
+    fun createOverlayPermissionIntent(): Intent {
+        val overlayIntent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (overlayIntent.resolveActivity(context.packageManager) != null) {
+            return overlayIntent
+        }
+        return Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${context.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
+    fun isIgnoringBatteryOptimizations(): Boolean {
+        val pm = context.getSystemService(Context.POWER_SERVICE) as? PowerManager ?: return false
+        return pm.isIgnoringBatteryOptimizations(context.packageName)
+    }
+
+    fun createBatteryOptimizationIntent(): Intent {
+        val directIntent = Intent(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:${context.packageName}")
+        ).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        if (directIntent.resolveActivity(context.packageManager) != null) {
+            return directIntent
+        }
+        return Intent(Settings.ACTION_IGNORE_BATTERY_OPTIMIZATION_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+    }
+
+    fun isAppInForeground(): Boolean {
+        val am = context.getSystemService(Context.ACTIVITY_SERVICE) as? ActivityManager ?: return false
+        val procs = am.runningAppProcesses ?: return false
+        return procs.any { proc ->
+            proc.processName == context.packageName &&
+                proc.importance == ActivityManager.RunningAppProcessInfo.IMPORTANCE_FOREGROUND
+        }
+    }
+
     fun showAlertNotification(
         category: AlertCategory,
         setting: CategoryToneSetting,
@@ -362,7 +477,10 @@ class AlertSoundManager(private val context: Context) {
         val soundUri = resolveSoundUri(category, setting)
         val emoji = setting.customEmoji?.takeIf { it.isNotBlank() }
             ?: AlarmEmojiCatalog.defaultEmojiForCategory(category.key)
-        val effectiveBody = setting.customMessage?.takeIf { it.isNotBlank() } ?: body
+        val effectiveBody = body.ifBlank {
+            setting.customMessage?.takeIf { it.isNotBlank() }
+                ?: AlarmEmojiCatalog.defaultMessageForCategory(category.key, title)
+        }
         val payload = AlarmPopupPayload(
             notificationId = category.notificationId,
             categoryKey = category.key,
@@ -374,12 +492,12 @@ class AlertSoundManager(private val context: Context) {
             gesturePreset = AlarmEmojiGesturePreset.fromId(setting.gesturePreset),
             soundUriString = soundUri.toString()
         )
-        if (launchPopupImmediately) {
-            AlarmRingerManager.startRinging(context, soundUri)
-            launchPopupActivity(payload)
-        }
-        if (!hasNotificationPermission()) return launchPopupImmediately
-        return postPopupAlarmNotification(channelId, payload, soundUri)
+        return dispatchPopupNotification(
+            channelId = channelId,
+            payload = payload,
+            soundUri = soundUri,
+            forceDirectLaunch = launchPopupImmediately
+        )
     }
 
     fun showWellbeingOveruseNotification(
@@ -400,16 +518,17 @@ class AlertSoundManager(private val context: Context) {
             gesturePreset = AlarmEmojiGesturePreset.SWIPE_SLIDE,
             soundUriString = soundUri.toString()
         )
-        if (launchPopupImmediately) {
-            AlarmRingerManager.startRinging(context, soundUri)
-            launchPopupActivity(payload)
-        }
-        if (!hasNotificationPermission()) return launchPopupImmediately
-        return postPopupAlarmNotification(channelId, payload, soundUri)
+        return dispatchPopupNotification(
+            channelId = channelId,
+            payload = payload,
+            soundUri = soundUri,
+            forceDirectLaunch = launchPopupImmediately
+        )
     }
 
     fun showCustomAlarmNotification(
         reminder: ReminderEntity,
+        enrichedMessage: String? = null,
         launchPopupImmediately: Boolean = false
     ): Boolean {
         val soundUri = resolveReminderSoundUri(reminder)
@@ -418,9 +537,10 @@ class AlertSoundManager(private val context: Context) {
         val emoji = reminder.alarmEmoji.ifBlank {
             AlarmEmojiCatalog.defaultEmojiForCategory(reminder.moduleKey)
         }
-        val body = reminder.customMessage.ifBlank {
-            "Scheduled ${reminder.triggerTime24h} alarm • Sound: $toneLabel"
-        }
+        val body = enrichedMessage?.takeIf { it.isNotBlank() }
+            ?: reminder.customMessage.ifBlank {
+                AlarmEmojiCatalog.defaultMessageForCategory(reminder.moduleKey, reminder.title)
+            }
         val payload = AlarmPopupPayload(
             notificationId = 5000 + reminder.id.toInt(),
             alarmId = reminder.id,
@@ -433,12 +553,31 @@ class AlertSoundManager(private val context: Context) {
             gesturePreset = AlarmEmojiGesturePreset.fromId(reminder.gesturePreset),
             soundUriString = soundUri.toString()
         )
-        if (launchPopupImmediately) {
+        return dispatchPopupNotification(
+            channelId = channelId,
+            payload = payload,
+            soundUri = soundUri,
+            forceDirectLaunch = launchPopupImmediately
+        )
+    }
+
+    fun dispatchPopupNotification(
+        channelId: String,
+        payload: AlarmPopupPayload,
+        soundUri: Uri?,
+        forceDirectLaunch: Boolean = false
+    ): Boolean {
+        val shouldLaunchOverlay = forceDirectLaunch || canDrawOverlays() || isAppInForeground()
+        if (shouldLaunchOverlay) {
             AlarmRingerManager.startRinging(context, soundUri)
             launchPopupActivity(payload)
         }
-        if (!hasNotificationPermission()) return launchPopupImmediately
-        return postPopupAlarmNotification(channelId, payload, soundUri)
+        val posted = if (hasNotificationPermission()) {
+            postPopupAlarmNotification(channelId, payload, soundUri)
+        } else {
+            false
+        }
+        return posted || shouldLaunchOverlay
     }
 
     fun postPopupAlarmNotification(
@@ -460,11 +599,26 @@ class AlertSoundManager(private val context: Context) {
         val dismissIntent = Intent(context, AlertAlarmReceiver::class.java).apply {
             action = AlertAlarmReceiver.ACTION_DISMISS_ALARM
             putExtra(AlarmPopupPayload.EXTRA_NOTIFICATION_ID, payload.notificationId)
+            putExtra(AlarmPopupPayload.EXTRA_ALARM_ID, payload.alarmId)
+            putExtra(AlertAlarmReceiver.EXTRA_MARK_DONE, false)
         }
         val dismissPending = PendingIntent.getBroadcast(
             context,
             9000 + payload.notificationId,
             dismissIntent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+
+        val doneIntent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            action = AlertAlarmReceiver.ACTION_DISMISS_ALARM
+            putExtra(AlarmPopupPayload.EXTRA_NOTIFICATION_ID, payload.notificationId)
+            putExtra(AlarmPopupPayload.EXTRA_ALARM_ID, payload.alarmId)
+            putExtra(AlertAlarmReceiver.EXTRA_MARK_DONE, true)
+        }
+        val donePending = PendingIntent.getBroadcast(
+            context,
+            9200 + payload.notificationId,
+            doneIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
 
@@ -506,7 +660,7 @@ class AlertSoundManager(private val context: Context) {
             .setContentIntent(popupPending)
             .setDeleteIntent(dismissPending)
             .setAutoCancel(true)
-            .addAction(0, "✅ Done", dismissPending)
+            .addAction(0, "✅ Done", donePending)
             .addAction(0, "😴 Snooze 10m", snoozePending)
             .addAction(0, "🔕 Stop", dismissPending)
 
@@ -522,13 +676,21 @@ class AlertSoundManager(private val context: Context) {
 
     fun launchPopupActivity(payload: AlarmPopupPayload) {
         val intent = Intent(context, AlarmPopupActivity::class.java).apply {
-            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                Intent.FLAG_ACTIVITY_SINGLE_TOP or
+                Intent.FLAG_ACTIVITY_NO_USER_ACTION
             payload.writeToIntent(this)
         }
         runCatching { context.startActivity(intent) }
     }
 
-    fun scheduleDailyReminder(category: AlertCategory, hour: Int, minute: Int) {
+    fun scheduleDailyReminder(
+        category: AlertCategory,
+        hour: Int,
+        minute: Int,
+        repeatIntervalMinutes: Int = 1440
+    ) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
             putExtra(AlertAlarmReceiver.EXTRA_CATEGORY_KEY, category.key)
@@ -539,8 +701,25 @@ class AlertSoundManager(private val context: Context) {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val triggerCal = nextTriggerCalendar(hour, minute)
-        scheduleWakeUpAlarmClock(alarmManager, triggerCal.timeInMillis, category.requestCode, pendingIntent)
+        val triggerAtMs = computeNextIntervalTriggerMillis(hour, minute, repeatIntervalMinutes)
+        scheduleWakeUpAlarmClock(alarmManager, triggerAtMs, category.requestCode, pendingIntent)
+    }
+
+    fun scheduleTestPopupInSeconds(seconds: Int = 5, category: AlertCategory = AlertCategory.WATER) {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val triggerAtMs = System.currentTimeMillis() + seconds.coerceIn(3, 60) * 1000L
+        val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            action = AlertAlarmReceiver.ACTION_TEST_BACKGROUND_POPUP
+            putExtra(AlertAlarmReceiver.EXTRA_CATEGORY_KEY, category.key)
+        }
+        val requestCode = 2999
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            requestCode,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        scheduleWakeUpAlarmClock(alarmManager, triggerAtMs, requestCode, pendingIntent)
     }
 
     fun cancelReminder(category: AlertCategory) {
@@ -573,8 +752,8 @@ class AlertSoundManager(private val context: Context) {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        val triggerCal = nextTriggerCalendar(hour, minute)
-        scheduleWakeUpAlarmClock(alarmManager, triggerCal.timeInMillis, requestCode, pendingIntent)
+        val triggerAtMs = computeNextIntervalTriggerMillis(hour, minute, reminder.repeatIntervalMinutes)
+        scheduleWakeUpAlarmClock(alarmManager, triggerAtMs, requestCode, pendingIntent)
     }
 
     fun scheduleSnoozeAlarm(payload: AlarmPopupPayload, minutes: Int = 10) {
@@ -612,10 +791,19 @@ class AlertSoundManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         val clockInfo = AlarmManager.AlarmClockInfo(triggerAtMs, showIntent)
-        runCatching {
-            alarmManager.setAlarmClock(clockInfo, operation)
-        }.onFailure {
-            alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, operation)
+        val scheduledExact = runCatching {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarmManager.canScheduleExactAlarms()) {
+                alarmManager.setAlarmClock(clockInfo, operation)
+                true
+            } else {
+                false
+            }
+        }.getOrDefault(false)
+
+        if (!scheduledExact) {
+            runCatching {
+                alarmManager.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAtMs, operation)
+            }
         }
     }
 
@@ -631,7 +819,7 @@ class AlertSoundManager(private val context: Context) {
         alarmManager.cancel(pendingIntent)
     }
 
-    fun scheduleWellbeingMonitor() {
+    fun scheduleWellbeingMonitor(delayMs: Long = 15 * 60_000L) {
         val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
         val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
             putExtra(AlertAlarmReceiver.EXTRA_WELLBEING_CHECK, true)
@@ -642,12 +830,14 @@ class AlertSoundManager(private val context: Context) {
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
-        alarmManager.setInexactRepeating(
-            AlarmManager.ELAPSED_REALTIME_WAKEUP,
-            SystemClock.elapsedRealtime() + 2 * 60_000L,
-            AlarmManager.INTERVAL_FIFTEEN_MINUTES,
-            pendingIntent
-        )
+        val triggerElapsed = SystemClock.elapsedRealtime() + delayMs.coerceAtLeast(60_000L)
+        runCatching {
+            alarmManager.setAndAllowWhileIdle(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                triggerElapsed,
+                pendingIntent
+            )
+        }
     }
 
     fun cancelWellbeingMonitor() {
@@ -662,6 +852,49 @@ class AlertSoundManager(private val context: Context) {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
         alarmManager.cancel(pendingIntent)
+    }
+
+    suspend fun rescheduleAllActiveReminders(
+        db: AppDatabase,
+        preferencesManager: LocalPreferencesManager
+    ) {
+        val prefs = preferencesManager.preferencesFlow.first()
+        if (prefs.waterTone.reminderEnabled) {
+            ensureNotificationChannel(AlertCategory.WATER, prefs.waterTone)
+            scheduleDailyReminder(
+                AlertCategory.WATER,
+                prefs.waterTone.reminderHour,
+                prefs.waterTone.reminderMinute,
+                prefs.waterTone.repeatIntervalMinutes
+            )
+        }
+        if (prefs.periodTone.reminderEnabled) {
+            ensureNotificationChannel(AlertCategory.PERIOD, prefs.periodTone)
+            scheduleDailyReminder(
+                AlertCategory.PERIOD,
+                prefs.periodTone.reminderHour,
+                prefs.periodTone.reminderMinute,
+                prefs.periodTone.repeatIntervalMinutes
+            )
+        }
+        if (prefs.wellnessTone.reminderEnabled) {
+            ensureNotificationChannel(AlertCategory.WELLNESS, prefs.wellnessTone)
+            scheduleDailyReminder(
+                AlertCategory.WELLNESS,
+                prefs.wellnessTone.reminderHour,
+                prefs.wellnessTone.reminderMinute,
+                prefs.wellnessTone.repeatIntervalMinutes
+            )
+        }
+        if (prefs.wellbeingOveruseAlertsEnabled) {
+            scheduleWellbeingMonitor(delayMs = 5 * 60_000L)
+        }
+        val profile = db.userProfileDao().getActiveProfileSnapshot()
+        if (profile != null) {
+            db.reminderDao().getRemindersSnapshot(profile.id)
+                .filter { it.isEnabled }
+                .forEach { scheduleCustomAlarm(it) }
+        }
     }
 
     private fun nextTriggerCalendar(hour: Int, minute: Int): Calendar {

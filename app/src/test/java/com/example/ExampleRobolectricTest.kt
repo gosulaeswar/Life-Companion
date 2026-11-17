@@ -19,6 +19,7 @@ import com.example.notifications.AlarmEmojiGesturePreset
 import com.example.notifications.AlarmPopupPayload
 import com.example.notifications.AlertAlarmReceiver
 import com.example.notifications.AlertCategory
+import com.example.notifications.AlertMetricsCalculator
 import com.example.notifications.AlertSoundManager
 import com.example.notifications.BootCompletedReceiver
 import com.example.notifications.BundledAlertTone
@@ -55,6 +56,7 @@ import java.nio.charset.StandardCharsets
 import java.security.KeyPairGenerator
 import java.security.Signature
 import java.security.spec.ECGenParameterSpec
+import java.util.Calendar
 
 @RunWith(RobolectricTestRunner::class)
 @Config(sdk = [36])
@@ -650,6 +652,133 @@ class ExampleRobolectricTest {
                 assertNotEquals("Home", localizedContext.getString(R.string.nav_home))
                 assertNotEquals("Daily Steps", localizedContext.getString(R.string.home_daily_steps))
             }
+        }
+    }
+
+    @Test
+    fun `default water and medicine care notes, pre-login permissions flag, and 5s popup scheduler work cleanly`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefsManager = com.example.security.LocalPreferencesManager(context)
+        prefsManager.resetAll()
+
+        val initial = prefsManager.preferencesFlow.first()
+        assertFalse(initial.permissionsSetupCompleted)
+
+        prefsManager.setPermissionsSetupCompleted(true)
+        val seeded = prefsManager.enableDefaultCareRemindersIfNeeded()
+        assertTrue(seeded)
+
+        val updated = prefsManager.preferencesFlow.first()
+        assertTrue(updated.permissionsSetupCompleted)
+        assertTrue(updated.waterTone.reminderEnabled)
+        assertTrue(updated.wellnessTone.reminderEnabled)
+        assertTrue(updated.waterTone.customMessage.orEmpty().contains("water", ignoreCase = true))
+        assertTrue(updated.wellnessTone.customMessage.orEmpty().contains("medicine", ignoreCase = true))
+
+        val soundManager = AlertSoundManager(context)
+        soundManager.scheduleTestPopupInSeconds(5, AlertCategory.WATER)
+        assertTrue(
+            soundManager.createOverlayPermissionIntent().action in setOf(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            )
+        )
+        assertTrue(
+            soundManager.createExactAlarmSettingsIntent().action in setOf(
+                Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM,
+                Settings.ACTION_APPLICATION_DETAILS_SETTINGS
+            )
+        )
+
+        val receiver = AlertAlarmReceiver()
+        receiver.onReceive(
+            context,
+            Intent(AlertAlarmReceiver.ACTION_TEST_BACKGROUND_POPUP)
+                .putExtra(AlertAlarmReceiver.EXTRA_CATEGORY_KEY, AlertCategory.WATER.key)
+        )
+    }
+
+    @Test
+    fun `repeating intervals (1h, 2h, custom) schedule accurately and alert telemetry metrics aggregate in Room`() = runTest {
+        // Verify interval trigger alignment math
+        val nowCal = Calendar.getInstance().apply {
+            set(2026, Calendar.NOVEMBER, 17, 14, 20, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        val nowMs = nowCal.timeInMillis
+
+        // Anchor 14:00 every 1h -> next trigger should be 15:00 (+40 min)
+        val nextHourlyMs = AlertSoundManager.computeNextIntervalTriggerMillis(14, 0, 60, nowMs)
+        assertEquals(40 * 60_000L, nextHourlyMs - nowMs)
+
+        // Anchor 10:00 every 2h -> next trigger should be 16:00 (+100 min)
+        val nextTwoHourMs = AlertSoundManager.computeNextIntervalTriggerMillis(10, 0, 120, nowMs)
+        assertEquals(100 * 60_000L, nextTwoHourMs - nowMs)
+
+        // Anchor 14:00 custom 45m -> next trigger should be 14:45 (+25 min)
+        val nextCustomMs = AlertSoundManager.computeNextIntervalTriggerMillis(14, 0, 45, nowMs)
+        assertEquals(25 * 60_000L, nextCustomMs - nowMs)
+
+        // Verify interval labels
+        assertEquals("Every 1h", AlertMetricsCalculator.formatIntervalShort(60))
+        assertEquals("Every 2h", AlertMetricsCalculator.formatIntervalShort(120))
+        assertEquals("Every 45m", AlertMetricsCalculator.formatIntervalShort(45))
+        assertEquals("Daily", AlertMetricsCalculator.formatIntervalShort(1440))
+
+        // Verify Room DAO metric increments & summary aggregation
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+        try {
+            val profileId = db.userProfileDao().insertProfile(
+                UserProfileEntity(
+                    fullName = "Aarav",
+                    age = 28,
+                    genderIdentity = "Male",
+                    dailyWaterGoalMl = 2500
+                )
+            )
+            val waterAlarmId = db.reminderDao().insertReminder(
+                ReminderEntity(
+                    profileId = profileId,
+                    title = "Drink Water",
+                    moduleKey = "water",
+                    triggerTime24h = "09:00",
+                    repeatIntervalMinutes = 60,
+                    alarmEmoji = "💧"
+                )
+            )
+            val medAlarmId = db.reminderDao().insertReminder(
+                ReminderEntity(
+                    profileId = profileId,
+                    title = "Take Vitamin D",
+                    moduleKey = "medicine",
+                    triggerTime24h = "20:00",
+                    repeatIntervalMinutes = 120,
+                    alarmEmoji = "💊"
+                )
+            )
+            db.reminderDao().recordAlarmTriggered(waterAlarmId, nowMs)
+            db.reminderDao().recordAlarmTriggered(waterAlarmId, nowMs + 60_000L)
+            db.reminderDao().recordAlarmCompleted(waterAlarmId)
+            db.reminderDao().recordAlarmSnoozed(waterAlarmId)
+            db.reminderDao().recordAlarmTriggered(medAlarmId, nowMs)
+            db.reminderDao().recordAlarmCompleted(medAlarmId)
+
+            val allAlarms = db.reminderDao().getRemindersSnapshot(profileId)
+            val metrics = AlertMetricsCalculator.summarize(allAlarms)
+            assertEquals(2, metrics.totalAlarmsCount)
+            assertEquals(2, metrics.enabledAlarmsCount)
+            assertEquals(2, metrics.intervalAlarmsCount)
+            assertEquals(0, metrics.dailyAlarmsCount)
+            assertEquals(3, metrics.totalTriggered)
+            assertEquals(2, metrics.totalCompleted)
+            assertEquals(1, metrics.totalSnoozed)
+            assertEquals(67, metrics.adherencePercent)
+            assertEquals(2, metrics.cadenceBreakdown.size)
+        } finally {
+            db.close()
         }
     }
 }

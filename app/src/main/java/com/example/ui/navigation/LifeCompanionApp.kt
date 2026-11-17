@@ -76,6 +76,7 @@ import com.example.ui.screens.ModuleSubRoutes
 import com.example.ui.screens.ModulesHubScreen
 import com.example.ui.screens.OnDeviceAiScreen
 import com.example.ui.screens.PeriodTrackerScreen
+import com.example.ui.screens.PermissionsSetupScreen
 import com.example.ui.screens.ProfileSetupScreen
 import com.example.ui.screens.ReportsAnalyticsScreen
 import com.example.ui.screens.SettingsPrivacyScreen
@@ -143,13 +144,23 @@ fun LifeCompanionApp(container: AppContainer) {
                 )
             }
 
+            AppLaunchDestination.PermissionsSetup -> {
+                PermissionsSetupScreen(
+                    alertSoundManager = container.alertSoundManager,
+                    deviceWellbeingManager = container.deviceWellbeingManager,
+                    onContinueToLogin = sessionViewModel::completePermissionsSetup
+                )
+            }
+
             AppLaunchDestination.ProfileSetup -> {
                 val profileViewModel: ProfileSetupViewModel = viewModel(
                     factory = SimpleViewModelFactory {
                         ProfileSetupViewModel(
                             userProfileRepository = container.userProfileRepository,
                             moduleRepository = container.moduleRepository,
-                            preferencesManager = container.preferencesManager
+                            preferencesManager = container.preferencesManager,
+                            alertSoundManager = container.alertSoundManager,
+                            database = container.database
                         )
                     }
                 )
@@ -208,7 +219,8 @@ private fun MainShell(
                 voiceManager = container.voiceAssistantManager,
                 deviceWellbeingManager = container.deviceWellbeingManager,
                 alertSoundManager = container.alertSoundManager,
-                preferencesManager = container.preferencesManager
+                preferencesManager = container.preferencesManager,
+                customAlarmRepository = container.customAlarmRepository
             )
         }
     )
@@ -610,7 +622,9 @@ private fun MainShell(
                                 ProfileSetupViewModel(
                                     userProfileRepository = container.userProfileRepository,
                                     moduleRepository = container.moduleRepository,
-                                    preferencesManager = container.preferencesManager
+                                    preferencesManager = container.preferencesManager,
+                                    alertSoundManager = container.alertSoundManager,
+                                    database = container.database
                                 )
                             }
                         )

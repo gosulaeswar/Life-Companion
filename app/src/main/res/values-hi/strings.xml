@@ -61,4 +61,8 @@
     <string name="settings_regional_language">क्षेत्रीय भाषा</string>
     <string name="settings_screen_off_popup_title">🌙 स्क्रीन-ऑफ अलार्म पॉपअप चालू करें</string>
     <string name="settings_screen_off_popup_cta">स्क्रीन-ऑफ पॉपअप अनुमति दें</string>
+    <string name="permissions_setup_title">लॉगिन से पहले अनुमतियाँ दें</string>
+    <string name="permissions_setup_subtitle">बैकग्राउंड में पानी पीने और दवा लेने के नोटिफिकेशन, लॉक-स्क्रीन अलार्म पॉपअप व स्क्रीन-टाइम के लिए आवश्यक अनुमतियाँ दें।</string>
+    <string name="permissions_grant_prompts_cta">नोटिफिकेशन व माइक अनुमति दें</string>
+    <string name="permissions_continue_cta">प्रोफ़ाइल लॉगिन पर आगे बढ़ें</string>
 </resources>

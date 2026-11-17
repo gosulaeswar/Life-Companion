@@ -61,4 +61,8 @@
     <string name="settings_regional_language">আঞ্চলিক ভাষা</string>
     <string name="settings_screen_off_popup_title">🌙 স্ক্রিন-অফ অ্যালার্ম পপআপ</string>
     <string name="settings_screen_off_popup_cta">স্ক্রিন-অফ পপআপ অনুমতি</string>
+    <string name="permissions_setup_title">লগইনের আগে অনুমতি দিন</string>
+    <string name="permissions_setup_subtitle">ব্যাকগ্রাউন্ডে জল ও ওষুধের নোট, অ্যালার্ম পপআপ এবং স্ক্রিন-টাইম চালু রাখতে নিচের অনুমতিগুলো দিন।</string>
+    <string name="permissions_grant_prompts_cta">নোটিফিকেশন ও মাইক অনুমতি দিন</string>
+    <string name="permissions_continue_cta">লগইন / প্রোফাইলে এগিয়ে যান</string>
 </resources>

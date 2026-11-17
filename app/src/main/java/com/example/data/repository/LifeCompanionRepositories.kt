@@ -147,6 +147,18 @@ class CustomAlarmRepository(private val database: AppDatabase) {
     suspend fun deleteAlarm(reminderId: Long) {
         dao.deleteReminderById(reminderId)
     }
+
+    suspend fun recordTriggered(reminderId: Long) {
+        if (reminderId > 0L) dao.recordAlarmTriggered(reminderId)
+    }
+
+    suspend fun recordCompleted(reminderId: Long) {
+        if (reminderId > 0L) dao.recordAlarmCompleted(reminderId)
+    }
+
+    suspend fun recordSnoozed(reminderId: Long) {
+        if (reminderId > 0L) dao.recordAlarmSnoozed(reminderId)
+    }
 }
 
 class ModuleRepository(
@@ -299,6 +311,10 @@ class PrivacyBackupRepository(
                                 put("isEnabled", a.isEnabled)
                                 put("soundKey", a.soundKey)
                                 put("customSoundLabel", a.customSoundLabel)
+                                put("repeatIntervalMinutes", a.repeatIntervalMinutes)
+                                put("triggeredCount", a.triggeredCount)
+                                put("completedCount", a.completedCount)
+                                put("snoozedCount", a.snoozedCount)
                             }
                         )
                     }

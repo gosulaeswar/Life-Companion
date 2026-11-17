@@ -61,4 +61,8 @@
     <string name="settings_regional_language">Language</string>
     <string name="settings_screen_off_popup_title">🌙 Enable Screen-Off Alarm Popups</string>
     <string name="settings_screen_off_popup_cta">Allow Screen-Off Popups</string>
+    <string name="permissions_setup_title">Allow Access Before Sign-In</string>
+    <string name="permissions_setup_subtitle">Grant notifications, exact alarms, lock-screen popups, overlay window, battery &amp; wellbeing access so drink-water and medicine notes fire reliably in background.</string>
+    <string name="permissions_grant_prompts_cta">Allow Notification &amp; Mic Prompts</string>
+    <string name="permissions_continue_cta">Continue to Local Login</string>
 </resources>

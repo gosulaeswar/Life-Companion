@@ -205,7 +205,12 @@ data class ReminderEntity(
     val customSoundLabel: String? = null,
     val alarmEmoji: String = "⏰",
     val customMessage: String = "",
-    val gesturePreset: String = "SWIPE_SLIDE"
+    val gesturePreset: String = "SWIPE_SLIDE",
+    val repeatIntervalMinutes: Int = 1440,
+    val triggeredCount: Int = 0,
+    val completedCount: Int = 0,
+    val snoozedCount: Int = 0,
+    val lastTriggeredEpochMs: Long = 0L
 )
 
 @Entity(

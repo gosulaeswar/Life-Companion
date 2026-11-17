@@ -2,10 +2,12 @@ package com.example.ui.viewmodel
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.data.local.AppDatabase
 import com.example.data.local.entity.UserProfileEntity
 import com.example.data.repository.ModuleRepository
 import com.example.data.repository.UserProfileRepository
 import com.example.domain.HydrationCalculator
+import com.example.notifications.AlertSoundManager
 import com.example.security.LocalPreferencesManager
 import com.example.security.SupportedLanguage
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -36,7 +38,9 @@ data class ProfileFormState(
 class ProfileSetupViewModel(
     private val userProfileRepository: UserProfileRepository,
     private val moduleRepository: ModuleRepository,
-    private val preferencesManager: LocalPreferencesManager
+    private val preferencesManager: LocalPreferencesManager,
+    private val alertSoundManager: AlertSoundManager? = null,
+    private val database: AppDatabase? = null
 ) : ViewModel() {
 
     private val _formState = MutableStateFlow(ProfileFormState())
@@ -184,6 +188,13 @@ class ProfileSetupViewModel(
             userProfileRepository.saveOrUpdateProfile(entity)
             moduleRepository.ensureSeeded()
             preferencesManager.setWelcomeCompleted(true)
+            preferencesManager.setPermissionsSetupCompleted(true)
+            preferencesManager.enableDefaultCareRemindersIfNeeded()
+            if (database != null && alertSoundManager != null) {
+                runCatching {
+                    alertSoundManager.rescheduleAllActiveReminders(database, preferencesManager)
+                }
+            }
             _formState.update { it.copy(isSaving = false) }
             onSaved()
         }

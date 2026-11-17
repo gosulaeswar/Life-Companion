@@ -13,6 +13,8 @@ import com.example.data.repository.ModuleRepository
 import com.example.data.repository.PrivacyBackupRepository
 import com.example.data.repository.UserProfileRepository
 import com.example.notifications.AlertCategory
+import com.example.notifications.AlertMetricsCalculator
+import com.example.notifications.AlertMetricsSummary
 import com.example.notifications.AlertSoundManager
 import com.example.notifications.BundledAlertTone
 import com.example.security.AlertToneSource
@@ -35,15 +37,25 @@ import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+data class PopupPermissionsSnapshot(
+    val hasNotifications: Boolean = true,
+    val canUseFullScreenPopup: Boolean = true,
+    val canScheduleExactAlarms: Boolean = true,
+    val canDrawOverlays: Boolean = false,
+    val isIgnoringBatteryOptimizations: Boolean = false
+)
+
 data class SettingsPrivacyUiState(
     val preferences: UiPreferencesState = UiPreferencesState(),
     val profile: UserProfileEntity? = null,
     val customAlarms: List<ReminderEntity> = emptyList(),
+    val alertMetrics: AlertMetricsSummary = AlertMetricsSummary(),
     val modules: List<ModuleActivationEntity> = emptyList(),
     val playingToneKey: String? = null,
     val vaultStatus: VaultSecurityStatus = VaultSecurityStatus(false, KeystoreVaultManager.DATA_KEY_ALIAS),
     val publicKeyReady: Boolean = true,
     val canUseFullScreenPopup: Boolean = true,
+    val popupPermissions: PopupPermissionsSnapshot = PopupPermissionsSnapshot(),
     val activationBanner: String? = null,
     val activationSuccess: Boolean? = null,
     val statusMessage: String? = null
@@ -61,9 +73,17 @@ class SettingsPrivacyViewModel(
     licenseVerifier: OfflineLicenseVerifier
 ) : ViewModel() {
 
+    private fun readPopupPermissions(): PopupPermissionsSnapshot = PopupPermissionsSnapshot(
+        hasNotifications = alertSoundManager.hasNotificationPermission(),
+        canUseFullScreenPopup = alertSoundManager.canUseFullScreenIntent(),
+        canScheduleExactAlarms = alertSoundManager.canScheduleExactAlarms(),
+        canDrawOverlays = alertSoundManager.canDrawOverlays(),
+        isIgnoringBatteryOptimizations = alertSoundManager.isIgnoringBatteryOptimizations()
+    )
+
     private val activationBanner = MutableStateFlow<Pair<String, Boolean>?>(null)
     private val statusMessage = MutableStateFlow<String?>(null)
-    private val fullScreenPopupAllowed = MutableStateFlow(alertSoundManager.canUseFullScreenIntent())
+    private val popupPermissionsFlow = MutableStateFlow(readPopupPermissions())
     private val vaultStatus = vaultManager.inspectVaultStatus()
     private val publicKeyReady = licenseVerifier.isPublicKeyReady()
 
@@ -85,9 +105,9 @@ class SettingsPrivacyViewModel(
         combine(
             activationBanner,
             statusMessage,
-            fullScreenPopupAllowed
-        ) { act, msg, fsi ->
-            Triple(act, msg, fsi)
+            popupPermissionsFlow
+        ) { act, msg, perms ->
+            Triple(act, msg, perms)
         }
     ) { mainList, meta ->
         val prefs = mainList[0] as UiPreferencesState
@@ -97,16 +117,19 @@ class SettingsPrivacyViewModel(
         @Suppress("UNCHECKED_CAST")
         val modules = mainList[3] as List<ModuleActivationEntity>
         val playingKey = mainList[4] as String?
+        val perms = meta.third
 
         SettingsPrivacyUiState(
             preferences = prefs,
             profile = profile,
             customAlarms = alarms,
+            alertMetrics = AlertMetricsCalculator.summarize(alarms),
             modules = modules,
             playingToneKey = playingKey,
             vaultStatus = vaultStatus,
             publicKeyReady = publicKeyReady,
-            canUseFullScreenPopup = meta.third,
+            canUseFullScreenPopup = perms.canUseFullScreenPopup,
+            popupPermissions = perms,
             activationBanner = meta.first?.first,
             activationSuccess = meta.first?.second,
             statusMessage = meta.second
@@ -117,18 +140,43 @@ class SettingsPrivacyViewModel(
         initialValue = SettingsPrivacyUiState(
             vaultStatus = vaultStatus,
             publicKeyReady = publicKeyReady,
-            canUseFullScreenPopup = fullScreenPopupAllowed.value
+            canUseFullScreenPopup = popupPermissionsFlow.value.canUseFullScreenPopup,
+            popupPermissions = popupPermissionsFlow.value
         )
     )
 
     fun refreshFullScreenPopupStatus() {
-        fullScreenPopupAllowed.value = alertSoundManager.canUseFullScreenIntent()
+        popupPermissionsFlow.value = readPopupPermissions()
     }
 
     fun openFullScreenPopupSettings(context: Context) {
         runCatching {
             context.startActivity(alertSoundManager.createFullScreenIntentSettingsIntent())
         }
+    }
+
+    fun openExactAlarmSettings(context: Context) {
+        runCatching {
+            context.startActivity(alertSoundManager.createExactAlarmSettingsIntent())
+        }
+    }
+
+    fun openOverlayPopupSettings(context: Context) {
+        runCatching {
+            context.startActivity(alertSoundManager.createOverlayPermissionIntent())
+        }
+    }
+
+    fun openBatteryOptimizationSettings(context: Context) {
+        runCatching {
+            context.startActivity(alertSoundManager.createBatteryOptimizationIntent())
+        }
+    }
+
+    fun scheduleTestBackgroundPopup() {
+        alertSoundManager.scheduleTestPopupInSeconds(seconds = 5, category = AlertCategory.WATER)
+        statusMessage.value =
+            "⏰ 5-second background alarm armed! Lock your screen or switch apps now — your Water & Medicine popup will appear in 5s."
     }
 
     fun setThemeMode(mode: ThemeMode) {
@@ -238,28 +286,48 @@ class SettingsPrivacyViewModel(
         alertSoundManager.previewUri(uri, key)
     }
 
-    fun toggleReminder(category: AlertCategory, enabled: Boolean, hour: Int, minute: Int) {
+    fun toggleReminder(
+        category: AlertCategory,
+        enabled: Boolean,
+        hour: Int,
+        minute: Int,
+        repeatIntervalMinutes: Int = settingFor(category).repeatIntervalMinutes
+    ) {
+        val safeInterval = AlertMetricsCalculator.normalizeIntervalMinutes(repeatIntervalMinutes)
         viewModelScope.launch {
-            preferencesManager.updateReminderSchedule(category.key, enabled, hour, minute)
+            preferencesManager.updateReminderSchedule(category.key, enabled, hour, minute, safeInterval)
             val setting = settingFor(category).copy(
                 reminderEnabled = enabled,
                 reminderHour = hour,
-                reminderMinute = minute
+                reminderMinute = minute,
+                repeatIntervalMinutes = safeInterval
             )
             alertSoundManager.ensureNotificationChannel(category, setting)
             if (enabled) {
-                alertSoundManager.scheduleDailyReminder(category, hour, minute)
+                alertSoundManager.scheduleDailyReminder(category, hour, minute, safeInterval)
                 statusMessage.value = String.format(
-                    "%s daily reminder scheduled for %02d:%02d.",
+                    "%s reminder scheduled (%s, from %02d:%02d).",
                     category.title,
+                    AlertMetricsCalculator.formatIntervalShort(safeInterval),
                     hour,
                     minute
                 )
             } else {
                 alertSoundManager.cancelReminder(category)
-                statusMessage.value = "${category.title} daily reminder paused."
+                statusMessage.value = "${category.title} reminder paused."
             }
         }
+    }
+
+    fun updateCategoryInterval(category: AlertCategory, repeatIntervalMinutes: Int) {
+        val current = settingFor(category)
+        toggleReminder(
+            category = category,
+            enabled = current.reminderEnabled,
+            hour = current.reminderHour,
+            minute = current.reminderMinute,
+            repeatIntervalMinutes = repeatIntervalMinutes
+        )
     }
 
     fun updateCategoryNotificationStyle(
@@ -317,33 +385,23 @@ class SettingsPrivacyViewModel(
         alarmEmoji: String = "⏰",
         customMessage: String = "",
         gesturePreset: String = "SWIPE_SLIDE",
+        repeatIntervalMinutes: Int = 1440,
         isEnabled: Boolean = true
     ) {
         val profileId = uiState.value.profile?.id ?: return
         val cleanTitle = title.trim().ifEmpty { "Custom Wellness Alarm" }
         val cleanEmoji = alarmEmoji.trim().ifEmpty { "⏰" }
         val cleanMsg = customMessage.trim()
+        val safeInterval = AlertMetricsCalculator.normalizeIntervalMinutes(repeatIntervalMinutes)
         val time24h = String.format("%02d:%02d", hour.coerceIn(0, 23), minute.coerceIn(0, 59))
+        val prior = if (existingId > 0L) {
+            uiState.value.customAlarms.firstOrNull { it.id == existingId }
+        } else {
+            null
+        }
         viewModelScope.launch {
-            val savedId = customAlarmRepository.saveAlarm(
-                ReminderEntity(
-                    id = existingId,
-                    profileId = profileId,
-                    title = cleanTitle,
-                    moduleKey = moduleKey,
-                    triggerTime24h = time24h,
-                    daysOfWeekMask = if (daysOfWeekMask == 0) 127 else daysOfWeekMask,
-                    isEnabled = isEnabled,
-                    soundKey = soundKey,
-                    customSoundUri = customSoundUri,
-                    customSoundLabel = customSoundLabel,
-                    alarmEmoji = cleanEmoji,
-                    customMessage = cleanMsg,
-                    gesturePreset = gesturePreset
-                )
-            )
-            val savedEntity = ReminderEntity(
-                id = savedId,
+            val baseEntity = ReminderEntity(
+                id = existingId,
                 profileId = profileId,
                 title = cleanTitle,
                 moduleKey = moduleKey,
@@ -355,11 +413,19 @@ class SettingsPrivacyViewModel(
                 customSoundLabel = customSoundLabel,
                 alarmEmoji = cleanEmoji,
                 customMessage = cleanMsg,
-                gesturePreset = gesturePreset
+                gesturePreset = gesturePreset,
+                repeatIntervalMinutes = safeInterval,
+                triggeredCount = prior?.triggeredCount ?: 0,
+                completedCount = prior?.completedCount ?: 0,
+                snoozedCount = prior?.snoozedCount ?: 0,
+                lastTriggeredEpochMs = prior?.lastTriggeredEpochMs ?: 0L
             )
+            val savedId = customAlarmRepository.saveAlarm(baseEntity)
+            val savedEntity = baseEntity.copy(id = savedId)
             if (isEnabled) {
                 alertSoundManager.scheduleCustomAlarm(savedEntity)
-                statusMessage.value = "$cleanEmoji Alarm '$cleanTitle' set for $time24h."
+                val intervalBadge = AlertMetricsCalculator.formatIntervalShort(safeInterval)
+                statusMessage.value = "$cleanEmoji Alarm '$cleanTitle' set for $time24h ($intervalBadge)."
             } else {
                 alertSoundManager.cancelCustomAlarm(savedId)
                 statusMessage.value = "$cleanEmoji Alarm '$cleanTitle' saved (paused)."

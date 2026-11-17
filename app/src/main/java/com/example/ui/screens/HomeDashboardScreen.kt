@@ -606,6 +606,20 @@ fun HomeDashboardScreen(
                             value = screenBadge,
                             onClick = { onOpenModuleKey("digital_wellbeing") }
                         )
+                        val alertMetrics = modulesState.alertMetrics
+                        val alertBadge = when {
+                            alertMetrics.enabledAlarmsCount == 0 -> "Set Alert"
+                            alertMetrics.intervalAlarmsCount > 0 ->
+                                "${alertMetrics.intervalAlarmsCount} intv • ${alertMetrics.adherencePercent}%"
+                            else ->
+                                "${alertMetrics.enabledAlarmsCount} active • ${alertMetrics.adherencePercent}%"
+                        }
+                        HomeMiniMetricChip(
+                            emoji = "🔔",
+                            label = "Alerts",
+                            value = alertBadge,
+                            onClick = onOpenSettingsPrivacy
+                        )
                     }
 
                     val activeOveruse = modulesState.wellbeingOveruseAlert

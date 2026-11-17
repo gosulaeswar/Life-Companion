@@ -117,6 +117,15 @@ interface ReminderDao {
     @Query("DELETE FROM reminders WHERE id = :reminderId")
     suspend fun deleteReminderById(reminderId: Long)
 
+    @Query("UPDATE reminders SET triggeredCount = triggeredCount + 1, lastTriggeredEpochMs = :timestampMs WHERE id = :reminderId")
+    suspend fun recordAlarmTriggered(reminderId: Long, timestampMs: Long = System.currentTimeMillis())
+
+    @Query("UPDATE reminders SET completedCount = completedCount + 1 WHERE id = :reminderId")
+    suspend fun recordAlarmCompleted(reminderId: Long)
+
+    @Query("UPDATE reminders SET snoozedCount = snoozedCount + 1 WHERE id = :reminderId")
+    suspend fun recordAlarmSnoozed(reminderId: Long)
+
     @Query("DELETE FROM reminders")
     suspend fun deleteAllReminders()
 }

@@ -184,36 +184,92 @@ fun SettingsPrivacyScreen(
             }
         }
 
-        if (!uiState.canUseFullScreenPopup) {
-            item {
-                Card(
-                    modifier = Modifier
-                        .widthIn(max = 600.dp)
-                        .fillMaxWidth(),
-                    shape = RoundedCornerShape(22.dp),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
-                    )
+        item {
+            val perms = uiState.popupPermissions
+            val allPopupPermsGranted = perms.hasNotifications &&
+                perms.canScheduleExactAlarms &&
+                perms.canUseFullScreenPopup &&
+                perms.canDrawOverlays &&
+                perms.isIgnoringBatteryOptimizations
+
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (allPopupPermsGranted) {
+                        MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f)
+                    } else {
+                        MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.7f)
+                    }
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    Text(
+                        text = if (allPopupPermsGranted) {
+                            "✅ Background Alerts & Screen-Off Popups Ready"
+                        } else {
+                            stringResource(id = R.string.settings_screen_off_popup_title)
+                        },
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = "Allow these permissions so water & medicine notes pop up on screen even when locked or using other apps:",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
                     ) {
-                        Text(
-                            text = stringResource(id = R.string.settings_screen_off_popup_title),
-                            style = MaterialTheme.typography.titleSmall
-                        )
-                        Text(
-                            text = "Allow full-screen notifications in Android settings so your mini-alarm & emoji gesture card pops up even when the phone screen is locked or off.",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onTertiaryContainer
-                        )
-                        Button(
-                            onClick = { viewModel.openFullScreenPopupSettings(context) },
-                            modifier = Modifier.testTag("enable_fullscreen_alarm_button")
-                        ) {
-                            Text(stringResource(id = R.string.settings_screen_off_popup_cta))
+                        if (!perms.hasNotifications) {
+                            Button(
+                                onClick = { runWithNotificationPermission { viewModel.refreshFullScreenPopupStatus() } },
+                                modifier = Modifier.testTag("fix_notifications_perm_button")
+                            ) { Text("🔔 Allow Notifications") }
                         }
+                        if (!perms.canScheduleExactAlarms) {
+                            Button(
+                                onClick = { viewModel.openExactAlarmSettings(context) },
+                                modifier = Modifier.testTag("fix_exact_alarm_button")
+                            ) { Text("⏰ Allow Exact Alarms") }
+                        }
+                        if (!perms.canUseFullScreenPopup) {
+                            Button(
+                                onClick = { viewModel.openFullScreenPopupSettings(context) },
+                                modifier = Modifier.testTag("enable_fullscreen_alarm_button")
+                            ) { Text(stringResource(id = R.string.settings_screen_off_popup_cta)) }
+                        }
+                        if (!perms.canDrawOverlays) {
+                            Button(
+                                onClick = { viewModel.openOverlayPopupSettings(context) },
+                                modifier = Modifier.testTag("fix_overlay_popup_button")
+                            ) { Text("🪟 Allow Popup Over Apps") }
+                        }
+                        if (!perms.isIgnoringBatteryOptimizations) {
+                            OutlinedButton(
+                                onClick = { viewModel.openBatteryOptimizationSettings(context) },
+                                modifier = Modifier.testTag("fix_battery_opt_button")
+                            ) { Text("🔋 Allow Background Run") }
+                        }
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            runWithNotificationPermission {
+                                viewModel.scheduleTestBackgroundPopup()
+                            }
+                        },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("test_5s_background_popup_button")
+                    ) {
+                        Text("⏱️ Test Background Popup in 5s (Lock Screen Now)")
                     }
                 }
             }
@@ -249,6 +305,9 @@ fun SettingsPrivacyScreen(
                         viewModel.toggleReminder(category, false, hour, min)
                     }
                 },
+                onUpdateCategoryInterval = { category, intervalMinutes ->
+                    viewModel.updateCategoryInterval(category, intervalMinutes)
+                },
                 onUpdateCategoryStyle = { category, emoji, message, gesturePreset ->
                     viewModel.updateCategoryNotificationStyle(category, emoji, message, gesturePreset)
                 },
@@ -265,6 +324,7 @@ fun SettingsPrivacyScreen(
             CustomAlarmsSettingsCard(
                 modifier = Modifier.widthIn(max = 600.dp),
                 alarms = uiState.customAlarms,
+                alertMetrics = uiState.alertMetrics,
                 playingToneKey = uiState.playingToneKey,
                 onPreviewBundledTone = viewModel::previewBundledTone,
                 onStopPreview = viewModel::stopAudioPreview,
@@ -284,7 +344,7 @@ fun SettingsPrivacyScreen(
                         viewModel.testCustomAlarmNotification(alarm)
                     }
                 },
-                onSaveAlarm = { existingId, title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel, alarmEmoji, customMsg, gesturePreset ->
+                onSaveAlarm = { existingId, title, moduleKey, hour, minute, mask, soundKey, customUri, customLabel, alarmEmoji, customMsg, gesturePreset, repeatIntervalMinutes ->
                     runWithNotificationPermission {
                         viewModel.saveCustomAlarm(
                             existingId = existingId,
@@ -298,7 +358,8 @@ fun SettingsPrivacyScreen(
                             customSoundLabel = customLabel,
                             alarmEmoji = alarmEmoji,
                             customMessage = customMsg,
-                            gesturePreset = gesturePreset
+                            gesturePreset = gesturePreset,
+                            repeatIntervalMinutes = repeatIntervalMinutes
                         )
                     }
                 },
