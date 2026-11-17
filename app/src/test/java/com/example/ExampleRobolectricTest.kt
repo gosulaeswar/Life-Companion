@@ -30,8 +30,13 @@ import com.example.security.OfflineLicenseVerifier
 import com.example.security.SupportedLanguage
 import com.example.security.VerificationResult
 import com.example.ai.AiActionType
+import com.example.ai.AppCheckProviderChoice
 import com.example.ai.LifeWeaveAiService
 import com.example.ai.SupportedVoiceLanguages
+import com.example.ai.configureAppCheck
+import com.example.ai.resolveRecaptchaSiteKey
+import com.example.ai.selectAppCheckProviderChoice
+import com.google.firebase.FirebaseApp
 import com.example.healthsync.AppleAndFileFitnessImporter
 import com.example.healthsync.FitnessSourceCatalog
 import com.example.healthsync.FitnessSyncRepository
@@ -780,5 +785,75 @@ class ExampleRobolectricTest {
         } finally {
             db.close()
         }
+    }
+
+    @Test
+    fun `app check provider uses recaptcha on physical devices without injected debug token and honors intent extra`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val siteKey = resolveRecaptchaSiteKey(context)
+        assertTrue(!siteKey.isNullOrBlank())
+
+        assertEquals(
+            AppCheckProviderChoice.RECAPTCHA_ENTERPRISE,
+            selectAppCheckProviderChoice(
+                isDebugBuild = true,
+                hasIntentDebugToken = false,
+                hasPersistedInjectedToken = false,
+                isEmulator = false,
+                hasRecaptchaSiteKey = true
+            )
+        )
+        assertEquals(
+            AppCheckProviderChoice.DEBUG_WITH_INTENT_TOKEN,
+            selectAppCheckProviderChoice(
+                isDebugBuild = true,
+                hasIntentDebugToken = true,
+                hasPersistedInjectedToken = false,
+                isEmulator = false,
+                hasRecaptchaSiteKey = true
+            )
+        )
+        assertEquals(
+            AppCheckProviderChoice.DEBUG_PROVIDER,
+            selectAppCheckProviderChoice(
+                isDebugBuild = true,
+                hasIntentDebugToken = false,
+                hasPersistedInjectedToken = true,
+                isEmulator = false,
+                hasRecaptchaSiteKey = true
+            )
+        )
+        assertEquals(
+            AppCheckProviderChoice.DEBUG_PROVIDER,
+            selectAppCheckProviderChoice(
+                isDebugBuild = true,
+                hasIntentDebugToken = false,
+                hasPersistedInjectedToken = false,
+                isEmulator = true,
+                hasRecaptchaSiteKey = true
+            )
+        )
+        assertEquals(
+            AppCheckProviderChoice.RECAPTCHA_ENTERPRISE,
+            selectAppCheckProviderChoice(
+                isDebugBuild = false,
+                hasIntentDebugToken = false,
+                hasPersistedInjectedToken = false,
+                isEmulator = false,
+                hasRecaptchaSiteKey = true
+            )
+        )
+
+        val testToken = "00000000-1111-2222-3333-444444444444"
+        configureAppCheck(
+            context,
+            Intent().putExtra("FIREBASE_APPCHECK_DEBUG_TOKEN", testToken)
+        )
+        val persistenceKey = FirebaseApp.getInstance().persistenceKey
+        val debugPrefs = context.getSharedPreferences(
+            "com.google.firebase.appcheck.debug.store.$persistenceKey",
+            Context.MODE_PRIVATE
+        )
+        assertEquals(testToken, debugPrefs.getString("com.google.firebase.appcheck.debug.DEBUG_SECRET", null))
     }
 }

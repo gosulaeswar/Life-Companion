@@ -36,21 +36,27 @@ private val LightColorScheme = lightColorScheme(
     surfaceVariant = OatSurfaceVariant,
     onSurfaceVariant = MutedPineInk,
     outline = SandOutline,
-    outlineVariant = OatSurfaceVariant,
-    error = ErrorCoralLight
+    outlineVariant = CardHairlineLight,
+    surfaceContainerLowest = Color.White,
+    surfaceContainerLow = Color(0xFFF8FBFA),
+    surfaceContainer = Color(0xFFF1F6F5),
+    error = ErrorCoralLight,
+    onError = Color.White,
+    errorContainer = Color(0xFFFEE4E2),
+    onErrorContainer = Color(0xFF7A271A)
 )
 
 private val DarkColorScheme = darkColorScheme(
     primary = SoftSagePrimary,
-    onPrimary = Color(0xFF0A2E23),
+    onPrimary = Color(0xFF042920),
     primaryContainer = DarkSageContainer,
     onPrimaryContainer = OnDarkSageContainer,
     secondary = MistAquaSecondary,
-    onSecondary = Color(0xFF082E3B),
+    onSecondary = Color(0xFF032838),
     secondaryContainer = DarkTealContainer,
     onSecondaryContainer = OnDarkTealContainer,
     tertiary = WarmCoralTertiary,
-    onTertiary = Color(0xFF471812),
+    onTertiary = Color(0xFF47120D),
     tertiaryContainer = DarkTerracottaContainer,
     onTertiaryContainer = OnDarkTerracottaContainer,
     background = DeepPineBackground,
@@ -61,7 +67,13 @@ private val DarkColorScheme = darkColorScheme(
     onSurfaceVariant = SoftSageMutedInk,
     outline = PineOutline,
     outlineVariant = SlateOliveSurfaceVariant,
-    error = ErrorCoralDark
+    surfaceContainerLowest = Color(0xFF08100E),
+    surfaceContainerLow = Color(0xFF0F1B18),
+    surfaceContainer = Color(0xFF152420),
+    error = ErrorCoralDark,
+    onError = Color(0xFF690005),
+    errorContainer = Color(0xFF6B1D18),
+    onErrorContainer = Color(0xFFFFDAD6)
 )
 
 val LifeCompanionShapes = Shapes(

@@ -1,5 +1,7 @@
 package com.example.ui.screens
 
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
@@ -14,6 +16,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -26,12 +29,17 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.R
 import com.example.ui.components.ModuleStatusPill
+import com.example.ui.theme.AiStudioMidnight
+import com.example.ui.theme.HeroTealDeep
 import com.example.ui.viewmodel.ModulesHubUiState
 
 private data class ModuleTileSpec(
@@ -204,13 +212,84 @@ fun ModulesHubScreen(
             Column(modifier = Modifier.widthIn(max = 620.dp).fillMaxWidth()) {
                 Text(
                     text = "✨ ${stringResource(id = R.string.modules_hub_title)}",
-                    style = MaterialTheme.typography.headlineMedium
+                    style = MaterialTheme.typography.headlineMedium.copy(fontWeight = FontWeight.Bold)
                 )
                 Text(
                     text = "Explore every tracker, routine, and insight—kept 100% private on your phone.",
                     style = MaterialTheme.typography.bodyMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
+            }
+        }
+
+        // Featured AI Voice & Scanner Studio Banner
+        item {
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 620.dp)
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(24.dp))
+                    .clickable { onNavigateModule(ModuleSubRoutes.ROUTE_ON_DEVICE_AI) },
+                shape = RoundedCornerShape(24.dp),
+                elevation = CardDefaults.cardElevation(defaultElevation = 3.dp),
+                colors = CardDefaults.cardColors(containerColor = AiStudioMidnight)
+            ) {
+                Box(modifier = Modifier.fillMaxWidth()) {
+                    Image(
+                        painter = painterResource(id = R.drawable.img_ai_aurora_art),
+                        contentDescription = null,
+                        modifier = Modifier.matchParentSize(),
+                        contentScale = ContentScale.Crop,
+                        alpha = 0.55f
+                    )
+                    Box(
+                        modifier = Modifier
+                            .matchParentSize()
+                            .background(
+                                Brush.horizontalGradient(
+                                    colors = listOf(
+                                        AiStudioMidnight.copy(alpha = 0.85f),
+                                        HeroTealDeep.copy(alpha = 0.55f)
+                                    )
+                                )
+                            )
+                    )
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(16.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(4.dp)
+                        ) {
+                            Text(
+                                text = "🎙️ AI Voice & Rx Studio",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color.White
+                            )
+                            Text(
+                                text = "Log meals, water & prescriptions by voice or camera.",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White.copy(alpha = 0.86f)
+                            )
+                        }
+                        Surface(
+                            shape = CircleShape,
+                            color = Color(0xFF2CE5B5).copy(alpha = 0.24f),
+                            border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.5f))
+                        ) {
+                            Text(
+                                text = "Open →",
+                                style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF9DF7DF),
+                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 
@@ -266,6 +345,8 @@ private fun ModuleEmojiTileCard(
             .clickable(onClick = onClick)
             .testTag("module_tile_${tile.key}"),
         shape = RoundedCornerShape(24.dp),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(

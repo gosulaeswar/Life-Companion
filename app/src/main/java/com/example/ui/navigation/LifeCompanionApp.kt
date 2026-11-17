@@ -26,12 +26,15 @@ import androidx.compose.material.icons.rounded.Home
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.WaterDrop
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.NavigationBarItemDefaults
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
+import androidx.compose.material3.NavigationRailItemDefaults
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -362,25 +365,36 @@ private fun MainShell(
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 if (!useNavigationRail && isTopLevelRoute) {
-                    NavigationBar(
-                        containerColor = MaterialTheme.colorScheme.surface
-                    ) {
-                        tabs.forEach { tab ->
-                            val selected = currentDestination?.hierarchy?.any {
-                                it.route == tab.route
-                            } == true
-                            NavigationBarItem(
-                                selected = selected,
-                                onClick = { navigateToTab(tab.route) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = stringResource(id = tab.labelRes)
-                                    )
-                                },
-                                label = { Text(stringResource(id = tab.labelRes)) },
-                                modifier = Modifier.testTag(tab.testTag)
-                            )
+                    androidx.compose.foundation.layout.Column {
+                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
+                        NavigationBar(
+                            containerColor = MaterialTheme.colorScheme.surface,
+                            tonalElevation = 4.dp
+                        ) {
+                            tabs.forEach { tab ->
+                                val selected = currentDestination?.hierarchy?.any {
+                                    it.route == tab.route
+                                } == true
+                                NavigationBarItem(
+                                    selected = selected,
+                                    onClick = { navigateToTab(tab.route) },
+                                    icon = {
+                                        Icon(
+                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
+                                            contentDescription = stringResource(id = tab.labelRes)
+                                        )
+                                    },
+                                    label = { Text(stringResource(id = tab.labelRes)) },
+                                    colors = NavigationBarItemDefaults.colors(
+                                        selectedIconColor = MaterialTheme.colorScheme.primary,
+                                        selectedTextColor = MaterialTheme.colorScheme.primary,
+                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                                    ),
+                                    modifier = Modifier.testTag(tab.testTag)
+                                )
+                            }
                         }
                     }
                 }
@@ -410,6 +424,11 @@ private fun MainShell(
                                     )
                                 },
                                 label = { Text(stringResource(id = tab.labelRes)) },
+                                colors = NavigationRailItemDefaults.colors(
+                                    selectedIconColor = MaterialTheme.colorScheme.primary,
+                                    selectedTextColor = MaterialTheme.colorScheme.primary,
+                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
+                                ),
                                 modifier = Modifier.testTag(tab.testTag)
                             )
                         }
@@ -453,6 +472,7 @@ private fun MainShell(
                             onStopVoiceCapture = modulesHubViewModel::stopVoiceCapture,
                             onStopVoicePlayback = modulesHubViewModel::stopVoicePlayback,
                             onClearVoiceError = modulesHubViewModel::clearVoiceError,
+                            onQuickAiPrompt = modulesHubViewModel::askAiAssistant,
                             onSnoozeWellbeingAlert = { modulesHubViewModel.snoozeWellbeingHomeAlert(30) },
                             onStartFocusBreak = { modulesHubViewModel.updateWellbeing(addFocus = 1) },
                             onOpenUsageAccessSettings = {
