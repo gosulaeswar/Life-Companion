@@ -284,13 +284,20 @@ fun DigitalWellbeingScreen(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
+                        val openUsageSettings = {
+                            val opened = runCatching {
+                                context.startActivity(viewModel.usageAccessSettingsIntent(true))
+                                true
+                            }.getOrDefault(false)
+                            if (!opened) {
+                                runCatching {
+                                    context.startActivity(viewModel.usageAccessSettingsIntent(false))
+                                }
+                            }
+                        }
                         if (!uiState.hasUsageAccessPermission) {
                             Button(
-                                onClick = {
-                                    runCatching {
-                                        context.startActivity(viewModel.usageAccessSettingsIntent())
-                                    }
-                                },
+                                onClick = { openUsageSettings() },
                                 modifier = Modifier.weight(1f)
                             ) {
                                 Text("Grant Usage Access")
@@ -318,11 +325,7 @@ fun DigitalWellbeingScreen(
                                 Text("🔄 Sync Live Usage")
                             }
                             androidx.compose.material3.OutlinedButton(
-                                onClick = {
-                                    runCatching {
-                                        context.startActivity(viewModel.usageAccessSettingsIntent())
-                                    }
-                                }
+                                onClick = { openUsageSettings() }
                             ) {
                                 Text("Settings")
                             }
@@ -549,15 +552,122 @@ fun DigitalWellbeingScreen(
                             text = if (uiState.hasUsageAccessPermission) {
                                 "No app foreground usage recorded yet for today—open a few apps or tap Sync Live Usage."
                             } else {
-                                "Grant Android Usage Access above to see per-app screen time (YouTube, Instagram, WhatsApp, etc.) and detect heavy single-app overuse."
+                                "Grant Android Usage Access above to see per-app screen time (YouTube, Instagram, WhatsApp, etc.) and highlight long-used apps."
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        topApps.forEach { app ->
-                            val isHeavySingleApp = app.minutesUsed >= 45 ||
-                                app.minutesUsed >= (goalMins * 0.4f).roundToInt()
+                        val longApps = uiState.longUsedApps
+                        val normalApps = topApps.filterNot { candidate ->
+                            longApps.any { it.packageName == candidate.packageName && it.appName == candidate.appName }
+                        }
+
+                        if (longApps.isNotEmpty()) {
+                            Surface(
+                                shape = RoundedCornerShape(18.dp),
+                                color = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.55f),
+                                border = androidx.compose.foundation.BorderStroke(
+                                    1.5.dp,
+                                    MaterialTheme.colorScheme.error.copy(alpha = 0.7f)
+                                )
+                            ) {
+                                Column(
+                                    modifier = Modifier.padding(14.dp),
+                                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = "🔥 Long-Used Apps (${longApps.size})",
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                        Text(
+                                            text = "High Screen Share",
+                                            style = MaterialTheme.typography.labelSmall,
+                                            color = MaterialTheme.colorScheme.onErrorContainer
+                                        )
+                                    }
+                                    longApps.forEach { app ->
+                                        val capSharePct = ((app.minutesUsed * 100f) / goalMins.coerceAtLeast(30).toFloat()).roundToInt()
+                                        Surface(
+                                            shape = RoundedCornerShape(14.dp),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f),
+                                            border = androidx.compose.foundation.BorderStroke(
+                                                1.dp,
+                                                MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                                            )
+                                        ) {
+                                            Column(
+                                                modifier = Modifier.padding(12.dp),
+                                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                                            ) {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Row(
+                                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Text(
+                                                                text = "🔥 ${app.appName}",
+                                                                style = MaterialTheme.typography.titleSmall,
+                                                                color = MaterialTheme.colorScheme.error
+                                                            )
+                                                            Surface(
+                                                                shape = CircleShape,
+                                                                color = MaterialTheme.colorScheme.error
+                                                            ) {
+                                                                Text(
+                                                                    text = "${capSharePct}% of cap",
+                                                                    style = MaterialTheme.typography.labelSmall,
+                                                                    color = MaterialTheme.colorScheme.onError,
+                                                                    modifier = Modifier.padding(horizontal = 7.dp, vertical = 2.dp)
+                                                                )
+                                                            }
+                                                        }
+                                                        Text(
+                                                            text = "${app.categoryLabel} • ${app.launchCount} opens today",
+                                                            style = MaterialTheme.typography.bodySmall,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                    Text(
+                                                        text = formatHoursMins(app.minutesUsed),
+                                                        style = MaterialTheme.typography.titleMedium.copy(fontFamily = JetBrainsMonoMetricFont),
+                                                        color = MaterialTheme.colorScheme.error
+                                                    )
+                                                }
+                                                LinearProgressIndicator(
+                                                    progress = { (app.minutesUsed.toFloat() / maxAppMins.toFloat()).coerceIn(0.08f, 1f) },
+                                                    color = MaterialTheme.colorScheme.error,
+                                                    trackColor = MaterialTheme.colorScheme.errorContainer,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(8.dp)
+                                                        .clip(CircleShape)
+                                                )
+                                            }
+                                        }
+                                    }
+                                    androidx.compose.material3.OutlinedButton(
+                                        onClick = { viewModel.updateWellbeing(addFocus = 1) },
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Text("🎯 Pause Long-Used Apps • Log 15m Break")
+                                    }
+                                }
+                            }
+                        }
+
+                        normalApps.forEach { app ->
                             Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                                 Row(
                                     modifier = Modifier.fillMaxWidth(),
@@ -565,25 +675,7 @@ fun DigitalWellbeingScreen(
                                     verticalAlignment = Alignment.CenterVertically
                                 ) {
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Row(
-                                            horizontalArrangement = Arrangement.spacedBy(6.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Text(app.appName, style = MaterialTheme.typography.titleSmall)
-                                            if (isHeavySingleApp) {
-                                                Surface(
-                                                    shape = CircleShape,
-                                                    color = MaterialTheme.colorScheme.errorContainer
-                                                ) {
-                                                    Text(
-                                                        text = "Overuse",
-                                                        style = MaterialTheme.typography.labelSmall,
-                                                        color = MaterialTheme.colorScheme.onErrorContainer,
-                                                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                                    )
-                                                }
-                                            }
-                                        }
+                                        Text(app.appName, style = MaterialTheme.typography.titleSmall)
                                         Text(
                                             text = "${app.categoryLabel} • ${app.launchCount} launches",
                                             style = MaterialTheme.typography.bodySmall,
@@ -593,12 +685,12 @@ fun DigitalWellbeingScreen(
                                     Text(
                                         text = formatHoursMins(app.minutesUsed),
                                         style = MaterialTheme.typography.labelLarge.copy(fontFamily = JetBrainsMonoMetricFont),
-                                        color = if (isHeavySingleApp) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                                        color = MaterialTheme.colorScheme.primary
                                     )
                                 }
                                 LinearProgressIndicator(
                                     progress = { (app.minutesUsed.toFloat() / maxAppMins.toFloat()).coerceIn(0.05f, 1f) },
-                                    color = if (isHeavySingleApp) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary,
+                                    color = MaterialTheme.colorScheme.primary,
                                     modifier = Modifier
                                         .fillMaxWidth()
                                         .height(6.dp)

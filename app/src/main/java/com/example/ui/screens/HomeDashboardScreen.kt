@@ -54,11 +54,28 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
+import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.offset
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.unit.IntOffset
 import androidx.core.content.ContextCompat
 import com.example.ai.SupportedVoiceLanguages
 import com.example.domain.DateEpochUtils
@@ -72,6 +89,8 @@ import com.example.ui.viewmodel.AiTaskStatus
 import com.example.ui.viewmodel.HomeUiState
 import com.example.ui.viewmodel.ModulesHubUiState
 import com.example.wellbeing.OveruseSeverity
+import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 
 private data class HomeCategoryVisual(
     val key: String,
@@ -98,7 +117,11 @@ fun HomeDashboardScreen(
     onStartVoiceCapture: () -> Unit = {},
     onStopVoiceCapture: () -> Unit = {},
     onStopVoicePlayback: () -> Unit = {},
-    onClearVoiceError: () -> Unit = {}
+    onClearVoiceError: () -> Unit = {},
+    onSnoozeWellbeingAlert: () -> Unit = {},
+    onStartFocusBreak: () -> Unit = {},
+    onOpenUsageAccessSettings: () -> Unit = {},
+    onRequestNotificationPermission: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val profile = uiState.profile
@@ -571,54 +594,209 @@ fun HomeDashboardScreen(
                     }
 
                     val activeOveruse = modulesState.wellbeingOveruseAlert
-                    if (activeOveruse != null && activeOveruse.severity != OveruseSeverity.BALANCED) {
+                    val hasLongApps = modulesState.longUsedApps.isNotEmpty()
+                    val showGestureAlert = !modulesState.isWellbeingAlertSnoozed &&
+                        activeOveruse != null &&
+                        (activeOveruse.severity != OveruseSeverity.BALANCED || hasLongApps)
+
+                    if (!modulesState.hasUsageAccessPermission || !modulesState.hasNotificationPermission) {
+                        FlowRow(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(6.dp)
+                        ) {
+                            if (!modulesState.hasUsageAccessPermission) {
+                                QuickAmountChip(
+                                    label = "🔓 Grant Screen Time Access",
+                                    accentColor = MaterialTheme.colorScheme.primary
+                                ) {
+                                    onOpenUsageAccessSettings()
+                                }
+                            }
+                            if (!modulesState.hasNotificationPermission) {
+                                QuickAmountChip(
+                                    label = "🔔 Enable Mobile Alerts",
+                                    accentColor = MaterialTheme.colorScheme.error
+                                ) {
+                                    onRequestNotificationPermission()
+                                }
+                            }
+                        }
+                    }
+
+                    if (showGestureAlert && activeOveruse != null) {
                         val isOverCap = activeOveruse.severity == OveruseSeverity.EXCEEDED ||
                             activeOveruse.severity == OveruseSeverity.CRITICAL
+                        val haptic = LocalHapticFeedback.current
+                        val coroutineScope = rememberCoroutineScope()
+                        val swipeOffsetX = remember { Animatable(0f) }
+                        var gestureBannerFeedback by remember { mutableStateOf<String?>(null) }
+
+                        val infinitePulse = rememberInfiniteTransition(label = "overuse_pulse")
+                        val pulseScale by infinitePulse.animateFloat(
+                            initialValue = 1f,
+                            targetValue = 1.08f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(750),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "pulse_scale"
+                        )
+                        val borderAlpha by infinitePulse.animateFloat(
+                            initialValue = 0.35f,
+                            targetValue = 0.95f,
+                            animationSpec = infiniteRepeatable(
+                                animation = tween(900),
+                                repeatMode = RepeatMode.Reverse
+                            ),
+                            label = "border_alpha"
+                        )
+
+                        val containerColor = when {
+                            swipeOffsetX.value > 60f -> FertileLeafGreen.copy(alpha = 0.24f)
+                            swipeOffsetX.value < -60f -> MaterialTheme.colorScheme.surfaceVariant
+                            isOverCap -> MaterialTheme.colorScheme.errorContainer
+                            else -> AmberNotice.copy(alpha = 0.24f)
+                        }
+                        val accentBorder = if (isOverCap) {
+                            MaterialTheme.colorScheme.error.copy(alpha = borderAlpha)
+                        } else {
+                            AmberNotice.copy(alpha = borderAlpha)
+                        }
+
                         Surface(
                             modifier = Modifier
                                 .fillMaxWidth()
-                                .clip(RoundedCornerShape(14.dp))
-                                .clickable { onOpenModuleKey("digital_wellbeing") }
-                                .testTag("home_wellbeing_overuse_alert"),
-                            shape = RoundedCornerShape(14.dp),
-                            color = if (isOverCap) {
-                                MaterialTheme.colorScheme.errorContainer
-                            } else {
-                                AmberNotice.copy(alpha = 0.22f)
-                            }
-                        ) {
-                            Row(
-                                modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Column(
-                                    modifier = Modifier.weight(1f),
-                                    verticalArrangement = Arrangement.spacedBy(2.dp)
-                                ) {
-                                    Text(
-                                        text = if (isOverCap) "🚨 ${activeOveruse.title}" else "⚠️ ${activeOveruse.title}",
-                                        style = MaterialTheme.typography.labelLarge,
-                                        color = if (isOverCap) {
-                                            MaterialTheme.colorScheme.onErrorContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurface
+                                .offset { IntOffset(swipeOffsetX.value.roundToInt(), 0) }
+                                .pointerInput(activeOveruse.stageKey) {
+                                    detectHorizontalDragGestures(
+                                        onDragEnd = {
+                                            coroutineScope.launch {
+                                                when {
+                                                    swipeOffsetX.value > 140f -> {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                        onStartFocusBreak()
+                                                        gestureBannerFeedback = "🎯 Focus Break logged! Rest your eyes."
+                                                        swipeOffsetX.animateTo(0f, spring())
+                                                    }
+                                                    swipeOffsetX.value < -140f -> {
+                                                        haptic.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                                        onSnoozeWellbeingAlert()
+                                                        swipeOffsetX.animateTo(0f, spring())
+                                                    }
+                                                    else -> swipeOffsetX.animateTo(0f, spring())
+                                                }
+                                            }
+                                        },
+                                        onDragCancel = {
+                                            coroutineScope.launch { swipeOffsetX.animateTo(0f, spring()) }
                                         }
-                                    )
-                                    Text(
-                                        text = activeOveruse.message,
-                                        style = MaterialTheme.typography.bodySmall,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        color = if (isOverCap) {
-                                            MaterialTheme.colorScheme.onErrorContainer
-                                        } else {
-                                            MaterialTheme.colorScheme.onSurfaceVariant
+                                    ) { change, dragAmount ->
+                                        change.consume()
+                                        coroutineScope.launch {
+                                            val next = (swipeOffsetX.value + dragAmount).coerceIn(-260f, 260f)
+                                            swipeOffsetX.snapTo(next)
                                         }
+                                    }
+                                }
+                                .pointerInput(activeOveruse.stageKey) {
+                                    detectTapGestures(
+                                        onLongPress = {
+                                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                                            onStartFocusBreak()
+                                            gestureBannerFeedback = "✋ Long-press recognized • Focus Break +1!"
+                                        },
+                                        onTap = { onOpenModuleKey("digital_wellbeing") }
                                     )
                                 }
-                                TextButton(onClick = { onOpenModuleKey("digital_wellbeing") }) {
-                                    Text("Inspect →")
+                                .testTag("home_wellbeing_overuse_alert"),
+                            shape = RoundedCornerShape(16.dp),
+                            color = containerColor,
+                            border = BorderStroke(1.5.dp, accentBorder)
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 12.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Row(
+                                        modifier = Modifier.weight(1f),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Text(
+                                            text = if (isOverCap) "🚨" else "⚠️",
+                                            fontSize = 20.sp,
+                                            modifier = Modifier.graphicsLayer {
+                                                scaleX = pulseScale
+                                                scaleY = pulseScale
+                                            }
+                                        )
+                                        Text(
+                                            text = activeOveruse.title,
+                                            style = MaterialTheme.typography.titleSmall,
+                                            color = if (isOverCap) {
+                                                MaterialTheme.colorScheme.onErrorContainer
+                                            } else {
+                                                MaterialTheme.colorScheme.onSurface
+                                            }
+                                        )
+                                    }
+                                    TextButton(onClick = { onOpenModuleKey("digital_wellbeing") }) {
+                                        Text("Apps →")
+                                    }
+                                }
+
+                                Text(
+                                    text = gestureBannerFeedback ?: activeOveruse.message,
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = if (isOverCap) {
+                                        MaterialTheme.colorScheme.onErrorContainer
+                                    } else {
+                                        MaterialTheme.colorScheme.onSurfaceVariant
+                                    }
+                                )
+
+                                if (modulesState.longUsedApps.isNotEmpty()) {
+                                    FlowRow(
+                                        horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                                    ) {
+                                        modulesState.longUsedApps.take(3).forEach { app ->
+                                            Surface(
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.error,
+                                                modifier = Modifier.clickable { onOpenModuleKey("digital_wellbeing") }
+                                            ) {
+                                                Text(
+                                                    text = "🔥 ${app.appName}: ${app.minutesUsed}m",
+                                                    style = MaterialTheme.typography.labelSmall,
+                                                    color = MaterialTheme.colorScheme.onError,
+                                                    modifier = Modifier.padding(horizontal = 9.dp, vertical = 4.dp)
+                                                )
+                                            }
+                                        }
+                                    }
+                                }
+
+                                Surface(
+                                    shape = RoundedCornerShape(10.dp),
+                                    color = MaterialTheme.colorScheme.surface.copy(alpha = 0.65f)
+                                ) {
+                                    Text(
+                                        text = when {
+                                            swipeOffsetX.value > 60f -> "🎯 Release right to log Focus Break"
+                                            swipeOffsetX.value < -60f -> "😴 Release left to snooze 30m"
+                                            else -> "↔️ Swipe Left: Snooze 30m • Swipe Right / Hold: Focus Break • Tap: Apps"
+                                        },
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 5.dp)
+                                    )
                                 }
                             }
                         }

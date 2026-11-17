@@ -1,5 +1,10 @@
 package com.example.ui.navigation
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -33,12 +38,17 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
@@ -200,6 +210,30 @@ private fun MainShell(
         }
     )
     val modulesHubState by modulesHubViewModel.uiState.collectAsStateWithLifecycle()
+
+    val shellContext = LocalContext.current
+    var askedNotifOnce by rememberSaveable { mutableStateOf(false) }
+    val notifPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { granted ->
+        modulesHubViewModel.refreshNotificationPermissionState()
+        if (granted) {
+            container.alertSoundManager.scheduleWellbeingMonitor()
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        if (!askedNotifOnce && Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            askedNotifOnce = true
+            val granted = ContextCompat.checkSelfPermission(
+                shellContext,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+            if (!granted) {
+                notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+            }
+        }
+    }
 
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
@@ -403,7 +437,25 @@ private fun MainShell(
                             onStartVoiceCapture = modulesHubViewModel::startVoiceCapture,
                             onStopVoiceCapture = modulesHubViewModel::stopVoiceCapture,
                             onStopVoicePlayback = modulesHubViewModel::stopVoicePlayback,
-                            onClearVoiceError = modulesHubViewModel::clearVoiceError
+                            onClearVoiceError = modulesHubViewModel::clearVoiceError,
+                            onSnoozeWellbeingAlert = { modulesHubViewModel.snoozeWellbeingHomeAlert(30) },
+                            onStartFocusBreak = { modulesHubViewModel.updateWellbeing(addFocus = 1) },
+                            onOpenUsageAccessSettings = {
+                                val opened = runCatching {
+                                    shellContext.startActivity(modulesHubViewModel.usageAccessSettingsIntent(true))
+                                    true
+                                }.getOrDefault(false)
+                                if (!opened) {
+                                    runCatching {
+                                        shellContext.startActivity(modulesHubViewModel.usageAccessSettingsIntent(false))
+                                    }
+                                }
+                            },
+                            onRequestNotificationPermission = {
+                                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                                    notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                                }
+                            }
                         )
                     }
 

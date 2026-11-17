@@ -105,11 +105,14 @@ data class ModulesHubUiState(
     val isSyncingFitness: Boolean = false,
     val fitnessSyncBanner: String? = null,
     val hasUsageAccessPermission: Boolean = false,
+    val hasNotificationPermission: Boolean = true,
     val wellbeingHistory: List<DigitalWellbeingRecordEntity> = emptyList(),
     val topAppsUsage: List<AppUsageMetric> = emptyList(),
+    val longUsedApps: List<AppUsageMetric> = emptyList(),
     val categoryScreenMinutes: Map<String, Int> = emptyMap(),
     val mindfulBalanceScore: Int = 100,
     val wellbeingOveruseAlert: WellbeingOveruseAlert? = null,
+    val isWellbeingAlertSnoozed: Boolean = false,
     val wellbeingOveruseAlertsEnabled: Boolean = true,
     val wellbeingWarningPercent: Int = 80,
     val isSyncingWellbeing: Boolean = false,
@@ -132,6 +135,8 @@ private data class AiAndSyncOverlayState(
     val isSyncingFitness: Boolean,
     val syncBanner: String?,
     val hasUsageAccess: Boolean,
+    val hasNotificationPermission: Boolean,
+    val snoozedUntilMs: Long,
     val alertsEnabled: Boolean,
     val warningPercent: Int,
     val wellnessTone: CategoryToneSetting,
@@ -169,6 +174,8 @@ class ModulesHubViewModel(
     private val fitnessSyncBanner = MutableStateFlow<String?>(null)
 
     private val hasUsageAccess = MutableStateFlow(deviceWellbeingManager.hasUsageAccessPermission())
+    private val hasNotificationPerm = MutableStateFlow(alertSoundManager.hasNotificationPermission())
+    private val snoozedUntilMs = MutableStateFlow(0L)
     private val isSyncingWellbeing = MutableStateFlow(false)
     private val wellbeingSyncBanner = MutableStateFlow<String?>(null)
     private var nextMsgId = 1L
@@ -176,6 +183,12 @@ class ModulesHubViewModel(
     init {
         refreshHealthConnectState()
         refreshWellbeingFromDevice(includePastWeek = true)
+        viewModelScope.launch {
+            val prefs = preferencesManager.preferencesFlow.first()
+            if (prefs.wellbeingOveruseAlertsEnabled) {
+                alertSoundManager.scheduleWellbeingMonitor()
+            }
+        }
     }
 
     private val aiFlow = combine(
@@ -201,6 +214,8 @@ class ModulesHubViewModel(
             isSyncingFitness = false,
             syncBanner = null,
             hasUsageAccess = false,
+            hasNotificationPermission = true,
+            snoozedUntilMs = 0L,
             alertsEnabled = true,
             warningPercent = 80,
             wellnessTone = CategoryToneSetting(),
@@ -248,14 +263,19 @@ class ModulesHubViewModel(
             hasUsageAccess,
             preferencesManager.preferencesFlow,
             isSyncingWellbeing,
-            wellbeingSyncBanner
-        ) { usagePerm, prefs, syncingWb, wbBanner ->
-            listOf(usagePerm, prefs, syncingWb, wbBanner)
+            wellbeingSyncBanner,
+            combine(hasNotificationPerm, snoozedUntilMs) { n, s -> n to s }
+        ) { usagePerm, prefs, syncingWb, wbBanner, notifAndSnooze ->
+            listOf(usagePerm, prefs, syncingWb, wbBanner, notifAndSnooze)
         }
     ) { base, arr ->
         val prefs = arr[1] as com.example.security.UiPreferencesState
+        @Suppress("UNCHECKED_CAST")
+        val notifAndSnooze = arr[4] as Pair<Boolean, Long>
         base.copy(
             hasUsageAccess = arr[0] as Boolean,
+            hasNotificationPermission = notifAndSnooze.first,
+            snoozedUntilMs = notifAndSnooze.second,
             alertsEnabled = prefs.wellbeingOveruseAlertsEnabled,
             warningPercent = prefs.wellbeingWarningPercent,
             wellnessTone = prefs.wellnessTone,
@@ -322,6 +342,10 @@ class ModulesHubViewModel(
                     val topApps = wellbeing?.let {
                         WellbeingMetricsCalculator.decodeTopApps(it.topAppsJson)
                     }.orEmpty()
+                    val longApps = WellbeingMetricsCalculator.longUsedApps(
+                        apps = topApps,
+                        dailyCapMinutes = wellbeing?.mindfulGoalMinutes ?: 120
+                    )
                     val categories = WellbeingMetricsCalculator.categoryBreakdown(topApps)
                     val balanceScore = WellbeingMetricsCalculator.computeMindfulBalanceScore(wellbeing)
                     val overuseAlert = WellbeingMetricsCalculator.evaluateOveruse(
@@ -329,6 +353,7 @@ class ModulesHubViewModel(
                         warningPercent = overlay.warningPercent,
                         topApps = topApps
                     )
+                    val isSnoozed = System.currentTimeMillis() < overlay.snoozedUntilMs
 
                     val hydration = HydrationCalculator.summarize(water, profile.dailyWaterGoalMl)
                     val cycle = CycleCalculator.analyze(
@@ -386,11 +411,14 @@ class ModulesHubViewModel(
                         isSyncingFitness = overlay.isSyncingFitness,
                         fitnessSyncBanner = overlay.syncBanner,
                         hasUsageAccessPermission = overlay.hasUsageAccess,
+                        hasNotificationPermission = overlay.hasNotificationPermission,
                         wellbeingHistory = wellbeingHistory.take(7),
                         topAppsUsage = topApps,
+                        longUsedApps = longApps,
                         categoryScreenMinutes = categories,
                         mindfulBalanceScore = balanceScore,
                         wellbeingOveruseAlert = overuseAlert,
+                        isWellbeingAlertSnoozed = isSnoozed,
                         wellbeingOveruseAlertsEnabled = overlay.alertsEnabled,
                         wellbeingWarningPercent = overlay.warningPercent,
                         isSyncingWellbeing = overlay.isSyncingWellbeing,
@@ -913,12 +941,22 @@ class ModulesHubViewModel(
         }
     }
 
-    fun usageAccessSettingsIntent() = deviceWellbeingManager.createUsageAccessSettingsIntent()
+    fun refreshNotificationPermissionState() {
+        hasNotificationPerm.value = alertSoundManager.hasNotificationPermission()
+    }
+
+    fun snoozeWellbeingHomeAlert(minutes: Int = 30) {
+        snoozedUntilMs.value = System.currentTimeMillis() + minutes * 60_000L
+    }
+
+    fun usageAccessSettingsIntent(includePackageUri: Boolean = true) =
+        deviceWellbeingManager.createUsageAccessSettingsIntent(includePackageUri)
 
     fun refreshWellbeingFromDevice(
         includePastWeek: Boolean = false,
         userTriggered: Boolean = false
     ) {
+        hasNotificationPerm.value = alertSoundManager.hasNotificationPermission()
         val permitted = deviceWellbeingManager.hasUsageAccessPermission()
         hasUsageAccess.value = permitted
         if (!permitted) {
@@ -958,9 +996,9 @@ class ModulesHubViewModel(
                         }
                     }
                     wellbeingSyncBanner.value = if (snapshot.totalScreenMinutes > 0) {
-                        "Synced ${snapshot.totalScreenMinutes}m screen time & ${snapshot.unlockCount} unlocks from Digital Wellbeing."
+                        "${snapshot.syncDiagnostic} • ${snapshot.totalScreenMinutes}m & ${snapshot.unlockCount} unlocks."
                     } else {
-                        "Usage Access active • Waiting for today's screen activity events."
+                        snapshot.syncDiagnostic
                     }
                     evaluateAndNotifyOveruse()
                 }.onFailure { err ->
@@ -977,6 +1015,12 @@ class ModulesHubViewModel(
     fun setWellbeingAlertSettings(enabled: Boolean, warningPercent: Int) {
         viewModelScope.launch {
             preferencesManager.updateWellbeingAlertSettings(enabled, warningPercent)
+            if (enabled) {
+                alertSoundManager.scheduleWellbeingMonitor()
+                evaluateAndNotifyOveruse()
+            } else {
+                alertSoundManager.cancelWellbeingMonitor()
+            }
         }
     }
 

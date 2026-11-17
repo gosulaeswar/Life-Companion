@@ -16,6 +16,7 @@ import com.example.domain.HydrationSummary
 import com.example.domain.OnDeviceWellnessAdvisor
 import com.example.notifications.AlertCategory
 import com.example.notifications.AlertSoundManager
+import com.example.notifications.BootCompletedReceiver
 import com.example.notifications.BundledAlertTone
 import com.example.security.AlertToneSource
 import com.example.security.CategoryToneSetting
@@ -29,8 +30,11 @@ import com.example.healthsync.FitnessSourceCatalog
 import com.example.healthsync.FitnessSyncRepository
 import com.example.wellbeing.AppUsageMetric
 import com.example.wellbeing.DeviceUsageSnapshot
+import com.example.wellbeing.DeviceWellbeingManager
 import com.example.wellbeing.OveruseSeverity
 import com.example.wellbeing.WellbeingMetricsCalculator
+import android.content.Intent
+import android.provider.Settings
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
@@ -498,22 +502,65 @@ class ExampleRobolectricTest {
             assertEquals(2, synced.focusSessionsCount)
             assertEquals(3, WellbeingMetricsCalculator.decodeTopApps(synced.topAppsJson).size)
 
+            val heavyApps = WellbeingMetricsCalculator.longUsedApps(apps, dailyCapMinutes = 120)
+            assertEquals(listOf("Instagram", "YouTube"), heavyApps.map { it.appName })
+            assertTrue(apps[0].isLongUsed(120))
+            assertFalse(apps[2].isLongUsed(120))
+
             val exceededAlert = WellbeingMetricsCalculator.evaluateOveruse(synced, warningPercent = 80, topApps = apps)
             assertEquals(OveruseSeverity.EXCEEDED, exceededAlert.severity)
             assertTrue(exceededAlert.message.contains("Instagram"))
+            assertEquals(2, exceededAlert.flaggedApps.size)
 
             val criticalAlert = WellbeingMetricsCalculator.evaluateOveruse(synced.copy(screenTimeMinutes = 200), warningPercent = 80, topApps = apps)
             assertEquals(OveruseSeverity.CRITICAL, criticalAlert.severity)
 
-            val approachingAlert = WellbeingMetricsCalculator.evaluateOveruse(synced.copy(screenTimeMinutes = 100, nightScreenMinutes = 5, longestSessionMinutes = 20), warningPercent = 80, topApps = apps)
+            val singleAppOveruse = WellbeingMetricsCalculator.evaluateOveruse(
+                synced.copy(screenTimeMinutes = 70, nightScreenMinutes = 5, longestSessionMinutes = 20),
+                warningPercent = 80,
+                topApps = listOf(AppUsageMetric("com.instagram.android", "Instagram", "Social", minutesUsed = 50, launchCount = 12))
+            )
+            assertEquals(OveruseSeverity.EXCEEDED, singleAppOveruse.severity)
+            assertTrue(singleAppOveruse.title.contains("Instagram"))
+
+            val mildApps = listOf(
+                AppUsageMetric("com.whatsapp", "WhatsApp", "Messaging", minutesUsed = 20, launchCount = 10),
+                AppUsageMetric("com.spotify.music", "Spotify", "Music & Audio", minutesUsed = 25, launchCount = 4)
+            )
+            val approachingAlert = WellbeingMetricsCalculator.evaluateOveruse(
+                synced.copy(screenTimeMinutes = 100, nightScreenMinutes = 5, longestSessionMinutes = 20, topAppName = "Spotify", topAppMinutes = 25),
+                warningPercent = 80,
+                topApps = mildApps
+            )
             assertEquals(OveruseSeverity.APPROACHING, approachingAlert.severity)
 
-            val balancedAlert = WellbeingMetricsCalculator.evaluateOveruse(synced.copy(screenTimeMinutes = 45, nightScreenMinutes = 5, longestSessionMinutes = 15), warningPercent = 80, topApps = apps)
+            val balancedAlert = WellbeingMetricsCalculator.evaluateOveruse(
+                synced.copy(screenTimeMinutes = 45, nightScreenMinutes = 5, longestSessionMinutes = 15, topAppName = "Spotify", topAppMinutes = 25),
+                warningPercent = 80,
+                topApps = mildApps
+            )
             assertEquals(OveruseSeverity.BALANCED, balancedAlert.severity)
 
             assertTrue(WellbeingMetricsCalculator.computeMindfulBalanceScore(synced) in 5..95)
         } finally {
             db.close()
         }
+    }
+
+    @Test
+    fun `wellbeing manager intent fallback and background monitor scheduling work safely`() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val manager = DeviceWellbeingManager(context)
+        val fallbackIntent = manager.createUsageAccessSettingsIntent(includePackageUri = false)
+        assertEquals(Settings.ACTION_USAGE_ACCESS_SETTINGS, fallbackIntent.action)
+        assertTrue(fallbackIntent.data == null)
+
+        val alertSoundManager = AlertSoundManager(context)
+        alertSoundManager.scheduleWellbeingMonitor()
+        alertSoundManager.cancelWellbeingMonitor()
+
+        // Ensure BootCompletedReceiver safely handles boot intent without throwing
+        val receiver = BootCompletedReceiver()
+        receiver.onReceive(context, Intent(Intent.ACTION_BOOT_COMPLETED))
     }
 }

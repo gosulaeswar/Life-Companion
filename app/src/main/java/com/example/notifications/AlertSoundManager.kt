@@ -14,6 +14,7 @@ import android.media.MediaPlayer
 import android.media.RingtoneManager
 import android.net.Uri
 import android.os.Build
+import android.os.SystemClock
 import android.provider.OpenableColumns
 import androidx.annotation.RawRes
 import androidx.core.app.NotificationCompat
@@ -494,6 +495,39 @@ class AlertSoundManager(private val context: Context) {
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             5000 + reminderId.toInt(),
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.cancel(pendingIntent)
+    }
+
+    fun scheduleWellbeingMonitor() {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            putExtra(AlertAlarmReceiver.EXTRA_WELLBEING_CHECK, true)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            2901,
+            intent,
+            PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
+        )
+        alarmManager.setInexactRepeating(
+            AlarmManager.ELAPSED_REALTIME_WAKEUP,
+            SystemClock.elapsedRealtime() + 2 * 60_000L,
+            AlarmManager.INTERVAL_FIFTEEN_MINUTES,
+            pendingIntent
+        )
+    }
+
+    fun cancelWellbeingMonitor() {
+        val alarmManager = context.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+        val intent = Intent(context, AlertAlarmReceiver::class.java).apply {
+            putExtra(AlertAlarmReceiver.EXTRA_WELLBEING_CHECK, true)
+        }
+        val pendingIntent = PendingIntent.getBroadcast(
+            context,
+            2901,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

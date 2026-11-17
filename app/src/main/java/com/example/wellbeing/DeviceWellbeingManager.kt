@@ -28,7 +28,12 @@ data class AppUsageMetric(
     val categoryLabel: String,
     val minutesUsed: Int,
     val launchCount: Int = 1
-)
+) {
+    fun isLongUsed(dailyCapMinutes: Int): Boolean {
+        val capThreshold = (dailyCapMinutes.coerceAtLeast(30) * 0.30f).roundToInt().coerceIn(20, 45)
+        return minutesUsed >= capThreshold
+    }
+}
 
 enum class OveruseSeverity {
     BALANCED,
@@ -44,7 +49,8 @@ data class WellbeingOveruseAlert(
     val message: String,
     val usageRatio: Float,
     val remainingMinutes: Int,
-    val recommendation: String
+    val recommendation: String,
+    val flaggedApps: List<AppUsageMetric> = emptyList()
 )
 
 data class DeviceUsageSnapshot(
@@ -56,6 +62,8 @@ data class DeviceUsageSnapshot(
     val longestSessionMinutes: Int,
     val topApps: List<AppUsageMetric>,
     val categoryMinutes: Map<String, Int>,
+    val eventsScannedCount: Int = 0,
+    val syncDiagnostic: String = "",
     val syncedAtEpochMs: Long = System.currentTimeMillis()
 )
 
@@ -110,6 +118,14 @@ object WellbeingMetricsCalculator {
             .associate { it.key to it.value }
     }
 
+    fun longUsedApps(
+        apps: List<AppUsageMetric>,
+        dailyCapMinutes: Int = 120
+    ): List<AppUsageMetric> {
+        return apps.filter { it.isLongUsed(dailyCapMinutes) }
+            .sortedByDescending { it.minutesUsed }
+    }
+
     fun computeMindfulBalanceScore(record: DigitalWellbeingRecordEntity?): Int {
         if (record == null) return 100
         val cap = record.mindfulGoalMinutes.coerceAtLeast(30).toFloat()
@@ -147,12 +163,14 @@ object WellbeingMetricsCalculator {
         val longestSession = record?.longestSessionMinutes ?: 0
         val nightMins = record?.nightScreenMinutes ?: 0
 
-        val dominantApp = topApps.maxByOrNull { it.minutesUsed }
+        val heavyApps = longUsedApps(topApps, capMins)
+        val dominantApp = heavyApps.firstOrNull()
+            ?: topApps.maxByOrNull { it.minutesUsed }
             ?: record?.takeIf { it.topAppName.isNotBlank() && it.topAppMinutes > 0 }?.let {
                 AppUsageMetric("", it.topAppName, "Top App", it.topAppMinutes)
             }
         val dominantNote = dominantApp?.let {
-            " Top app: ${it.appName} (${it.minutesUsed}m)."
+            " Long-used app: ${it.appName} (${it.minutesUsed}m)."
         }.orEmpty()
 
         return when {
@@ -160,20 +178,33 @@ object WellbeingMetricsCalculator {
                 severity = OveruseSeverity.CRITICAL,
                 stageKey = "critical_150",
                 title = "Heavy Screen Overuse (${(ratio * 100).roundToInt()}% of cap)",
-                message = "You've logged ${screenMins}m today (${overBy}m over your ${capMins}m limit).$dominantNote",
+                message = "Logged ${screenMins}m today (${overBy}m over your ${capMins}m limit).$dominantNote",
                 usageRatio = ratio,
                 remainingMinutes = 0,
-                recommendation = "Put your phone down for a 20-minute screen-free walk or hydrate."
+                recommendation = "Put your phone down for a 20-minute screen-free walk or hydrate.",
+                flaggedApps = heavyApps
             )
 
             ratio >= 1.0f -> WellbeingOveruseAlert(
                 severity = OveruseSeverity.EXCEEDED,
                 stageKey = "exceeded_100",
                 title = "Daily Screen Limit Exceeded (+${overBy}m)",
-                message = "Screen time reached ${screenMins}m against your ${capMins}m goal.$dominantNote",
+                message = "Screen time reached ${screenMins}m against your ${capMins}m cap.$dominantNote",
                 usageRatio = ratio,
                 remainingMinutes = 0,
-                recommendation = "Start a Deep Focus block or silence distracting apps now."
+                recommendation = "Start a Deep Focus block or pause distracting apps now.",
+                flaggedApps = heavyApps
+            )
+
+            dominantApp != null && dominantApp.minutesUsed >= 45 -> WellbeingOveruseAlert(
+                severity = OveruseSeverity.EXCEEDED,
+                stageKey = "long_app_${dominantApp.appName.lowercase(Locale.US).take(16)}",
+                title = "Long App Session: ${dominantApp.appName} (${dominantApp.minutesUsed}m)",
+                message = "You've spent ${dominantApp.minutesUsed}m in ${dominantApp.appName} alone today ($screenMins/${capMins}m total).",
+                usageRatio = ratio,
+                remainingMinutes = remaining,
+                recommendation = "Close ${dominantApp.appName} for 15 minutes and give your eyes a rest.",
+                flaggedApps = heavyApps
             )
 
             longestSession >= 60 -> WellbeingOveruseAlert(
@@ -183,7 +214,8 @@ object WellbeingMetricsCalculator {
                 message = "You've had a continuous ${longestSession}-minute screen stretch without a break.$dominantNote",
                 usageRatio = ratio,
                 remainingMinutes = remaining,
-                recommendation = "Follow the 20-20-20 rule: rest your eyes for 20 seconds and stretch."
+                recommendation = "Follow the 20-20-20 rule: rest your eyes for 20 seconds and stretch.",
+                flaggedApps = heavyApps
             )
 
             (ratio * 100f) >= safeWarnPct -> WellbeingOveruseAlert(
@@ -193,7 +225,8 @@ object WellbeingMetricsCalculator {
                 message = "${screenMins}m of ${capMins}m used (${(ratio * 100).roundToInt()}%).$dominantNote",
                 usageRatio = ratio,
                 remainingMinutes = remaining,
-                recommendation = "Wrap up active tasks and pause social/video scrolling."
+                recommendation = "Wrap up active tasks and pause social/video scrolling.",
+                flaggedApps = heavyApps
             )
 
             nightMins >= 30 -> WellbeingOveruseAlert(
@@ -203,7 +236,8 @@ object WellbeingMetricsCalculator {
                 message = "${nightMins}m used during wind-down hours (10 PM–6 AM), which can delay deep sleep.",
                 usageRatio = ratio,
                 remainingMinutes = remaining,
-                recommendation = "Switch to Wind-Down mode and dim blue light before bed."
+                recommendation = "Switch to Wind-Down mode and dim blue light before bed.",
+                flaggedApps = heavyApps
             )
 
             else -> WellbeingOveruseAlert(
@@ -217,7 +251,8 @@ object WellbeingMetricsCalculator {
                 },
                 usageRatio = ratio,
                 remainingMinutes = remaining,
-                recommendation = "Great pacing—keep taking short visual breaks every 30 minutes."
+                recommendation = "Great pacing—keep taking short visual breaks every 30 minutes.",
+                flaggedApps = heavyApps
             )
         }
     }
@@ -249,18 +284,18 @@ class DeviceWellbeingManager(private val context: Context) {
         }
     }
 
-    fun createUsageAccessSettingsIntent(): Intent {
-        val packageSpecific = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
-            data = Uri.parse("package:${context.packageName}")
-            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        }
-        val pm = context.packageManager
-        return if (packageSpecific.resolveActivity(pm) != null) {
-            packageSpecific
-        } else {
-            Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+    fun createUsageAccessSettingsIntent(includePackageUri: Boolean = true): Intent {
+        if (includePackageUri) {
+            val packageSpecific = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+                data = Uri.parse("package:${context.packageName}")
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            if (packageSpecific.resolveActivity(context.packageManager) != null) {
+                return packageSpecific
+            }
+        }
+        return Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS).apply {
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         }
     }
 
@@ -280,72 +315,95 @@ class DeviceWellbeingManager(private val context: Context) {
         val ignoredPackages = resolveIgnoredSystemPackages()
 
         return runCatching {
-            val events = usageManager.queryEvents(startMs, endMs)
-            val appTotalsMs = mutableMapOf<String, Long>()
+            // Query 4h before midnight so apps opened before 00:00 are tracked accurately
+            val queryStartMs = startMs - 4 * 3_600_000L
+            val events = usageManager.queryEvents(queryStartMs, endMs)
+
+            // pkg -> (componentKey -> startTimestampMs)
+            val activeComponents = mutableMapOf<String, MutableMap<String, Long>>()
+            val appIntervals = mutableMapOf<String, MutableList<Pair<Long, Long>>>()
             val appLaunches = mutableMapOf<String, Int>()
-            val activeStarts = mutableMapOf<String, Long>()
 
             var unlockCount = 0
             var totalLaunchCount = 0
-            var nightMs = 0L
-
             var sessionStartMs: Long? = null
             var lastActiveEndMs = startMs
             var longestSessionMs = 0L
+            var eventsScanned = 0
+
+            fun closeSlice(pkg: String, rawStart: Long, rawEnd: Long) {
+                if (pkg in ignoredPackages) return
+                val clampedStart = max(rawStart, startMs)
+                val clampedEnd = min(rawEnd, endMs)
+                if (clampedEnd > clampedStart) {
+                    val slice = min(clampedEnd - clampedStart, 6 * 3_600_000L)
+                    appIntervals.getOrPut(pkg) { mutableListOf() }
+                        .add(clampedStart to (clampedStart + slice))
+                }
+            }
+
+            fun closeAllActive(atTs: Long) {
+                activeComponents.entries.toList().forEach { (openPkg, components) ->
+                    components.values.forEach { openedAt ->
+                        closeSlice(openPkg, openedAt, atTs)
+                    }
+                    activeComponents.remove(openPkg)
+                }
+            }
 
             val event = UsageEvents.Event()
-            var sawAnyUsageEvent = false
-
             while (events != null && events.hasNextEvent()) {
                 events.getNextEvent(event)
-                sawAnyUsageEvent = true
+                eventsScanned++
                 val pkg = event.packageName ?: continue
-                val ts = event.timeStamp.coerceIn(startMs, endMs)
+                val componentKey = event.className?.takeIf { it.isNotBlank() } ?: "_default_"
+                val ts = event.timeStamp
+                val inDay = ts >= startMs
 
                 when (event.eventType) {
                     UsageEvents.Event.KEYGUARD_HIDDEN -> {
-                        unlockCount++
+                        if (inDay) unlockCount++
                     }
 
                     UsageEvents.Event.SCREEN_INTERACTIVE -> {
-                        if (sessionStartMs == null) {
+                        if (inDay && sessionStartMs == null) {
                             sessionStartMs = ts
                         }
                     }
 
                     UsageEvents.Event.SCREEN_NON_INTERACTIVE -> {
-                        // Close any open foreground app slices when screen turns off
-                        activeStarts.entries.toList().forEach { (openPkg, openedAt) ->
-                            val slice = (ts - openedAt).coerceIn(0L, 4 * 3_600_000L)
-                            appTotalsMs[openPkg] = (appTotalsMs[openPkg] ?: 0L) + slice
-                            nightMs += computeNightOverlapMs(openedAt, openedAt + slice)
-                            activeStarts.remove(openPkg)
-                        }
-                        sessionStartMs?.let { sStart ->
-                            longestSessionMs = max(longestSessionMs, ts - sStart)
+                        closeAllActive(ts)
+                        if (inDay) {
+                            sessionStartMs?.let { sStart ->
+                                longestSessionMs = max(longestSessionMs, ts - max(sStart, startMs))
+                            }
+                            lastActiveEndMs = ts
                         }
                         sessionStartMs = null
-                        lastActiveEndMs = ts
                     }
 
                     UsageEvents.Event.ACTIVITY_RESUMED,
                     @Suppress("DEPRECATION")
                     UsageEvents.Event.MOVE_TO_FOREGROUND -> {
                         if (pkg !in ignoredPackages) {
-                            if (activeStarts[pkg] == null) {
+                            val pkgMap = activeComponents.getOrPut(pkg) { mutableMapOf() }
+                            if (inDay && pkgMap.isEmpty()) {
                                 appLaunches[pkg] = (appLaunches[pkg] ?: 0) + 1
                                 totalLaunchCount++
                             }
-                            activeStarts[pkg] = ts
-
-                            if (sessionStartMs == null) {
-                                sessionStartMs = if (ts - lastActiveEndMs <= 120_000L) {
-                                    ts
-                                } else {
-                                    ts
-                                }
+                            if (componentKey !in pkgMap) {
+                                pkgMap[componentKey] = ts
                             }
-                            lastActiveEndMs = ts
+                            if (inDay) {
+                                if (sessionStartMs == null) {
+                                    sessionStartMs = if (ts - lastActiveEndMs <= 120_000L) {
+                                        lastActiveEndMs
+                                    } else {
+                                        ts
+                                    }
+                                }
+                                lastActiveEndMs = ts
+                            }
                         }
                     }
 
@@ -353,41 +411,75 @@ class DeviceWellbeingManager(private val context: Context) {
                     UsageEvents.Event.ACTIVITY_STOPPED,
                     @Suppress("DEPRECATION")
                     UsageEvents.Event.MOVE_TO_BACKGROUND -> {
-                        val startedAt = activeStarts.remove(pkg)
-                        if (startedAt != null && pkg !in ignoredPackages) {
-                            val slice = (ts - startedAt).coerceIn(0L, 4 * 3_600_000L)
-                            appTotalsMs[pkg] = (appTotalsMs[pkg] ?: 0L) + slice
-                            nightMs += computeNightOverlapMs(startedAt, startedAt + slice)
-                            lastActiveEndMs = ts
-                            sessionStartMs?.let { sStart ->
-                                longestSessionMs = max(longestSessionMs, ts - sStart)
+                        val pkgMap = activeComponents[pkg]
+                        val startedAt = pkgMap?.remove(componentKey)
+                            ?: pkgMap?.entries?.firstOrNull()?.let { first ->
+                                val key = first.key
+                                val v = first.value
+                                pkgMap.remove(key)
+                                v
                             }
+                        if (startedAt != null && pkg !in ignoredPackages) {
+                            closeSlice(pkg, startedAt, ts)
+                            if (inDay) {
+                                lastActiveEndMs = ts
+                                sessionStartMs?.let { sStart ->
+                                    longestSessionMs = max(longestSessionMs, ts - max(sStart, startMs))
+                                }
+                            }
+                        }
+                        if (pkgMap != null && pkgMap.isEmpty()) {
+                            activeComponents.remove(pkg)
                         }
                     }
                 }
             }
 
-            // Close any still-foreground apps at endMs
-            activeStarts.forEach { (pkg, startedAt) ->
-                if (pkg !in ignoredPackages) {
-                    val slice = (endMs - startedAt).coerceIn(0L, 4 * 3_600_000L)
-                    appTotalsMs[pkg] = (appTotalsMs[pkg] ?: 0L) + slice
-                    nightMs += computeNightOverlapMs(startedAt, startedAt + slice)
-                    sessionStartMs?.let { sStart ->
-                        longestSessionMs = max(longestSessionMs, endMs - sStart)
-                    }
+            // Close any still-foreground activities at endMs
+            closeAllActive(endMs)
+            sessionStartMs?.let { sStart ->
+                longestSessionMs = max(longestSessionMs, endMs - max(sStart, startMs))
+            }
+
+            // Merge overlapping intervals per package & compute night overlap
+            val appTotalsMs = mutableMapOf<String, Long>()
+            var nightMs = 0L
+            appIntervals.forEach { (pkg, rawIntervals) ->
+                val merged = mergeIntervals(rawIntervals)
+                var sumMs = 0L
+                merged.forEach { (s, e) ->
+                    sumMs += (e - s)
+                    nightMs += computeNightOverlapMs(s, e)
+                }
+                if (sumMs > 0L) {
+                    appTotalsMs[pkg] = sumMs
                 }
             }
 
-            // Fallback to queryUsageStats if UsageEvents produced zero foreground time
-            if ((!sawAnyUsageEvent || appTotalsMs.values.sum() == 0L)) {
-                val stats = usageManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startMs, endMs)
-                stats?.forEach { stat ->
+            // Fallback / OEM supplement using UsageStats (INTERVAL_BEST & INTERVAL_DAILY)
+            if (appTotalsMs.values.sum() < 60_000L) {
+                val statsBest = usageManager.queryUsageStats(UsageStatsManager.INTERVAL_BEST, startMs, endMs).orEmpty()
+                val statsDaily = usageManager.queryUsageStats(UsageStatsManager.INTERVAL_DAILY, startMs, endMs).orEmpty()
+                val combinedStats = statsBest + statsDaily
+                val maxPossibleDayMs = (endMs - startMs).coerceAtLeast(60_000L)
+
+                combinedStats.forEach { stat ->
                     val pkg = stat.packageName ?: return@forEach
-                    val fgMs = stat.totalTimeInForeground
-                    if (pkg !in ignoredPackages && fgMs >= 60_000L && stat.lastTimeUsed >= startMs) {
-                        val cappedMs = fgMs.coerceAtMost(endMs - startMs)
-                        appTotalsMs[pkg] = max(appTotalsMs[pkg] ?: 0L, cappedMs)
+                    if (pkg in ignoredPackages) return@forEach
+                    val fgMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        max(stat.totalTimeInForeground, stat.totalTimeVisible)
+                    } else {
+                        stat.totalTimeInForeground
+                    }
+                    // Guard against stale multi-day buckets leaking yesterday's totals
+                    val belongsToToday = stat.lastTimeUsed in startMs..endMs &&
+                        (stat.firstTimeStamp >= startMs - 3_600_000L || fgMs <= maxPossibleDayMs)
+                    if (belongsToToday && fgMs >= 15_000L) {
+                        val cappedMs = fgMs.coerceAtMost(maxPossibleDayMs)
+                        val existingMs = appTotalsMs[pkg] ?: 0L
+                        if (cappedMs > existingMs) {
+                            appTotalsMs[pkg] = cappedMs
+                        }
                         if ((appLaunches[pkg] ?: 0) == 0) {
                             appLaunches[pkg] = 1
                             totalLaunchCount++
@@ -398,7 +490,11 @@ class DeviceWellbeingManager(private val context: Context) {
 
             val topApps = appTotalsMs.entries
                 .mapNotNull { (pkg, totalMs) ->
-                    val mins = (totalMs / 60_000L).toInt()
+                    val mins = when {
+                        totalMs >= 60_000L -> ((totalMs + 29_000L) / 60_000L).toInt()
+                        totalMs >= 15_000L -> 1
+                        else -> 0
+                    }
                     if (mins <= 0) return@mapNotNull null
                     val (label, category) = resolveAppInfo(pkg)
                     AppUsageMetric(
@@ -410,12 +506,18 @@ class DeviceWellbeingManager(private val context: Context) {
                     )
                 }
                 .sortedByDescending { it.minutesUsed }
-                .take(8)
+                .take(10)
 
-            val totalMinutesFromSum = (appTotalsMs.values.sum() / 60_000L).toInt()
+            val totalMinutesFromSum = ((appTotalsMs.values.sum() + 29_000L) / 60_000L).toInt()
             val totalScreenMinutes = max(totalMinutesFromSum, topApps.sumOf { it.minutesUsed })
                 .coerceIn(0, 1440)
             val computedUnlocks = if (unlockCount > 0) unlockCount else (totalLaunchCount / 2)
+
+            val diagnostic = if (topApps.isEmpty()) {
+                "Scanned $eventsScanned system events for $dayKey • Open any app briefly and tap Sync."
+            } else {
+                "Synced $eventsScanned events • ${topApps.size} active apps ($dayKey)"
+            }
 
             DeviceUsageSnapshot(
                 dayKey = dayKey,
@@ -426,9 +528,31 @@ class DeviceWellbeingManager(private val context: Context) {
                 longestSessionMinutes = (longestSessionMs / 60_000L).toInt().coerceIn(0, totalScreenMinutes),
                 topApps = topApps,
                 categoryMinutes = WellbeingMetricsCalculator.categoryBreakdown(topApps),
+                eventsScannedCount = eventsScanned,
+                syncDiagnostic = diagnostic,
                 syncedAtEpochMs = nowMs
             )
         }
+    }
+
+    private fun mergeIntervals(intervals: List<Pair<Long, Long>>): List<Pair<Long, Long>> {
+        if (intervals.isEmpty()) return emptyList()
+        val sorted = intervals.sortedBy { it.first }
+        val result = mutableListOf<Pair<Long, Long>>()
+        var curStart = sorted.first().first
+        var curEnd = sorted.first().second
+        for (i in 1 until sorted.size) {
+            val (s, e) = sorted[i]
+            if (s <= curEnd) {
+                curEnd = max(curEnd, e)
+            } else {
+                result.add(curStart to curEnd)
+                curStart = s
+                curEnd = e
+            }
+        }
+        result.add(curStart to curEnd)
+        return result
     }
 
     private fun dayBounds(daysAgo: Int, nowMs: Long): Triple<Long, Long, String> {
@@ -463,12 +587,16 @@ class DeviceWellbeingManager(private val context: Context) {
             "com.sec.android.app.launcher",
             "com.miui.home",
             "com.oppo.launcher",
+            "com.coloros.launcher",
             "com.oneplus.launcher"
         )
         runCatching {
             val homeIntent = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_HOME)
             context.packageManager.queryIntentActivities(homeIntent, 0).forEach { res ->
-                res.activityInfo?.packageName?.let { ignored.add(it) }
+                val pkg = res.activityInfo?.packageName
+                if (!pkg.isNullOrBlank() && pkg != context.packageName && !pkg.contains("resolver", ignoreCase = true)) {
+                    ignored.add(pkg)
+                }
             }
         }
         return ignored
@@ -487,6 +615,7 @@ class DeviceWellbeingManager(private val context: Context) {
 
         val label = appInfo?.let { runCatching { pm.getApplicationLabel(it).toString() }.getOrNull() }
             ?.takeIf { it.isNotBlank() }
+            ?: knownPackageDisplayName(packageName)
             ?: humanizePackageName(packageName)
 
         val category = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && appInfo != null) {
@@ -505,6 +634,26 @@ class DeviceWellbeingManager(private val context: Context) {
         }
 
         return label to category
+    }
+
+    private fun knownPackageDisplayName(pkg: String): String? {
+        return when (pkg) {
+            "com.google.android.youtube" -> "YouTube"
+            "com.instagram.android" -> "Instagram"
+            "com.whatsapp" -> "WhatsApp"
+            "com.facebook.katana" -> "Facebook"
+            "com.facebook.orca" -> "Messenger"
+            "com.snapchat.android" -> "Snapchat"
+            "com.zhiliaoapp.musically", "com.ss.android.ugc.trill" -> "TikTok"
+            "com.twitter.android" -> "X"
+            "com.reddit.frontpage" -> "Reddit"
+            "com.netflix.mediaclient" -> "Netflix"
+            "com.spotify.music" -> "Spotify"
+            "com.android.chrome" -> "Chrome"
+            "com.google.android.gm" -> "Gmail"
+            context.packageName -> "LifeWeave"
+            else -> null
+        }
     }
 
     private fun inferCategoryFromPackage(pkg: String, label: String): String {
