@@ -61,7 +61,11 @@ class WaterViewModel(
         selectedDrinkType.value = type
     }
 
-    fun logWater(amountMl: Int, note: String = "") {
+    fun logWater(
+        amountMl: Int,
+        note: String = "",
+        loggedAtEpochMs: Long = System.currentTimeMillis()
+    ) {
         val profileId = uiState.value.profileId ?: return
         val drink = selectedDrinkType.value
         viewModelScope.launch {
@@ -69,7 +73,8 @@ class WaterViewModel(
                 profileId = profileId,
                 amountMl = amountMl,
                 drinkType = drink,
-                note = note
+                note = note,
+                loggedAtEpochMs = loggedAtEpochMs
             )
         }
     }

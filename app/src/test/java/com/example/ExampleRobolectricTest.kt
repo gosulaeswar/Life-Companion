@@ -371,4 +371,77 @@ class ExampleRobolectricTest {
         assertTrue(SupportedVoiceLanguages.options.any { it.tag == "hi-IN" })
         assertTrue(SupportedVoiceLanguages.options.any { it.tag == "es-ES" })
     }
+
+    @Test
+    fun `date epoch helpers and custom calendar time scheduling work for medicine intake and doctor appointment`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val db = Room.inMemoryDatabaseBuilder(context, AppDatabase::class.java)
+            .allowMainThreadQueries()
+            .build()
+
+        try {
+            val targetEpochDay = DateEpochUtils.todayEpochDay() + 3
+            val utcPickerMillis = DateEpochUtils.epochDayToUtcPickerMillis(targetEpochDay)
+            assertEquals(targetEpochDay, DateEpochUtils.utcPickerMillisToEpochDay(utcPickerMillis))
+
+            val combinedMs = DateEpochUtils.combineEpochDayAndTime(targetEpochDay, 14, 35)
+            val (parsedHour, parsedMinute) = DateEpochUtils.epochMsToHourMinute(combinedMs)
+            assertEquals(14, parsedHour)
+            assertEquals(35, parsedMinute)
+            assertEquals(9 to 15, DateEpochUtils.parseHourMinute("09:15"))
+
+            val profileId = db.userProfileDao().insertProfile(
+                UserProfileEntity(
+                    fullName = "Meera",
+                    age = 31,
+                    genderIdentity = "Female",
+                    dailyWaterGoalMl = 2400
+                )
+            )
+            val repo = AllModulesRepository(db)
+
+            repo.addMedicine(
+                profileId = profileId,
+                name = "Vitamin D3",
+                dosage = "1000 IU",
+                scheduleTime24h = "09:15",
+                frequency = "Daily",
+                dosesPerDay = 1,
+                intervalHours = 24
+            )
+            val medicine = repo.observeMedicines(profileId).first().first()
+
+            val customIntakeDay = DateEpochUtils.todayEpochDay() - 1
+            val customIntakeMs = DateEpochUtils.combineEpochDayAndTime(customIntakeDay, 20, 45)
+            repo.logMedicineIntake(
+                profileId = profileId,
+                medicine = medicine,
+                slotLabel = "20:45",
+                status = "Taken",
+                takenAtEpochMs = customIntakeMs
+            )
+
+            val recentIntakes = repo.observeRecentMedicineIntakes(profileId).first()
+            assertEquals(1, recentIntakes.size)
+            assertEquals(customIntakeMs, recentIntakes.first().takenAtEpochMs)
+            assertEquals(DateEpochUtils.todayDayKey(customIntakeMs), recentIntakes.first().dayKey)
+
+            val followUpDay = targetEpochDay + 14
+            repo.addConsultation(
+                profileId = profileId,
+                doctorName = "Dr. Sharma",
+                specialty = "Cardiology",
+                clinicOrHospital = "City Care",
+                summary = "Routine annual checkup",
+                followUpEpochDay = followUpDay,
+                followUpNotes = "Bring lipid profile",
+                consultationEpochMs = combinedMs
+            )
+            val consultation = repo.observeConsultations(profileId).first().first()
+            assertEquals(combinedMs, consultation.consultationEpochMs)
+            assertEquals(followUpDay, consultation.followUpEpochDay)
+        } finally {
+            db.close()
+        }
+    }
 }

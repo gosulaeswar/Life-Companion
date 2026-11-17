@@ -34,7 +34,7 @@ class AppContainer(context: Context) {
     val appleAndFileFitnessImporter = AppleAndFileFitnessImporter()
     val fitnessSyncRepository = FitnessSyncRepository(database)
 
-    val lifeWeaveAiService = LifeWeaveAiService()
+    val lifeWeaveAiService = LifeWeaveAiService(appContext)
     val voiceAssistantManager = VoiceAssistantManager(appContext)
 
     val userProfileRepository = UserProfileRepository(database)

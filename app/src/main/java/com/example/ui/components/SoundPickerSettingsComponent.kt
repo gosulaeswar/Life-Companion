@@ -196,6 +196,7 @@ fun CategorySoundPickerCard(
                         }
                     }
 
+                    var showDailyCheckInClock by remember(selectedCategory) { mutableStateOf(false) }
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
@@ -210,22 +211,17 @@ fun CategorySoundPickerCard(
                             text = "Daily ${selectedCategory.title} Check-In ($timeText)",
                             style = MaterialTheme.typography.bodySmall.copy(
                                 fontFamily = JetBrainsMonoMetricFont
-                            )
+                            ),
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { showDailyCheckInClock = true }
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             TextButton(
-                                onClick = {
-                                    val nextHour = (activeSetting.reminderHour + 1) % 24
-                                    onToggleDailyReminder(
-                                        selectedCategory,
-                                        activeSetting.reminderEnabled,
-                                        nextHour,
-                                        activeSetting.reminderMinute
-                                    )
-                                },
-                                modifier = Modifier.testTag("bump_time_${selectedCategory.key}")
+                                onClick = { showDailyCheckInClock = true },
+                                modifier = Modifier.testTag("pick_time_${selectedCategory.key}")
                             ) {
-                                Text("+1h")
+                                Text("Set Time")
                             }
                             Switch(
                                 checked = activeSetting.reminderEnabled,
@@ -240,6 +236,23 @@ fun CategorySoundPickerCard(
                                 modifier = Modifier.testTag("toggle_reminder_${selectedCategory.key}")
                             )
                         }
+                    }
+                    if (showDailyCheckInClock) {
+                        ClockTimePickerDialog(
+                            initialHour = activeSetting.reminderHour,
+                            initialMinute = activeSetting.reminderMinute,
+                            title = "Daily ${selectedCategory.title} Time",
+                            onDismiss = { showDailyCheckInClock = false },
+                            onTimeSelected = { h, m ->
+                                onToggleDailyReminder(
+                                    selectedCategory,
+                                    activeSetting.reminderEnabled,
+                                    h,
+                                    m
+                                )
+                                showDailyCheckInClock = false
+                            }
+                        )
                     }
                 }
             }
@@ -674,6 +687,7 @@ private fun CustomAlarmEditorDialog(
                 }
 
                 // Time Picker Row
+                var showAlarmClockPicker by remember { mutableStateOf(false) }
                 Surface(
                     shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
@@ -690,8 +704,25 @@ private fun CustomAlarmEditorDialog(
                             style = MaterialTheme.typography.displaySmall.copy(
                                 fontFamily = JetBrainsMonoMetricFont
                             ),
-                            color = MaterialTheme.colorScheme.primary
+                            color = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .clickable { showAlarmClockPicker = true }
+                                .padding(horizontal = 10.dp, vertical = 2.dp)
+                                .testTag("alarm_time_display")
                         )
+                        OutlinedButton(
+                            onClick = { showAlarmClockPicker = true },
+                            modifier = Modifier.testTag("alarm_clock_picker_button")
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.Alarm,
+                                contentDescription = "Pick exact alarm time",
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("Clock Picker")
+                        }
                         Row(
                             horizontalArrangement = Arrangement.spacedBy(8.dp),
                             verticalAlignment = Alignment.CenterVertically
@@ -714,6 +745,19 @@ private fun CustomAlarmEditorDialog(
                             ) { Text("+5m") }
                         }
                     }
+                }
+                if (showAlarmClockPicker) {
+                    ClockTimePickerDialog(
+                        initialHour = hour,
+                        initialMinute = minute,
+                        title = "Alarm Time",
+                        onDismiss = { showAlarmClockPicker = false },
+                        onTimeSelected = { h, m ->
+                            hour = h
+                            minute = m
+                            showAlarmClockPicker = false
+                        }
+                    )
                 }
 
                 Text("Repeat Days", style = MaterialTheme.typography.labelLarge)

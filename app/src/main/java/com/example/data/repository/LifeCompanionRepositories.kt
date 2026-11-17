@@ -80,17 +80,17 @@ class WaterRepository(private val database: AppDatabase) {
         profileId: Long,
         amountMl: Int,
         drinkType: String = "Water",
-        note: String = ""
+        note: String = "",
+        loggedAtEpochMs: Long = System.currentTimeMillis()
     ) {
-        val now = System.currentTimeMillis()
         dao.insertRecord(
             WaterRecordEntity(
                 profileId = profileId,
                 amountMl = amountMl.coerceIn(25, 3000),
                 drinkType = drinkType,
                 note = note.trim(),
-                dayKey = DateEpochUtils.todayDayKey(now),
-                loggedAtEpochMs = now
+                dayKey = DateEpochUtils.todayDayKey(loggedAtEpochMs),
+                loggedAtEpochMs = loggedAtEpochMs
             )
         )
     }

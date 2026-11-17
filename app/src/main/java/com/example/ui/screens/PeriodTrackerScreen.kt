@@ -25,6 +25,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Favorite
 import androidx.compose.material.icons.rounded.NotificationsActive
@@ -59,6 +60,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.example.data.local.entity.PeriodRecordEntity
 import com.example.domain.DateEpochUtils
+import com.example.ui.components.CalendarDatePickerDialog
 import com.example.ui.components.ModuleStatusPill
 import com.example.ui.theme.FertileLeafGreen
 import com.example.ui.theme.JetBrainsMonoMetricFont
@@ -652,6 +654,8 @@ private fun PeriodLogDialog(
     var endDay by remember {
         mutableLongStateOf(existing?.endDateEpochDay ?: (initialStartEpochDay + defaultPeriodDays - 1))
     }
+    var showStartCalendar by remember { mutableStateOf(false) }
+    var showEndCalendar by remember { mutableStateOf(false) }
     var flow by remember { mutableStateOf(existing?.flowIntensity ?: "Medium") }
     var selectedSymptoms by remember {
         mutableStateOf(
@@ -687,17 +691,13 @@ private fun PeriodLogDialog(
         title = { Text(if (existing == null) "🌸 Log Period" else "🌸 Edit Period Entry") },
         text = {
             Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
+                OutlinedButton(
+                    onClick = { showStartCalendar = true },
+                    modifier = Modifier.fillMaxWidth().testTag("period_start_calendar_button")
                 ) {
-                    Text("Start: ${DateEpochUtils.formatEpochDayFull(startDay)}", style = MaterialTheme.typography.titleSmall)
-                    Row {
-                        OutlinedButton(onClick = { startDay -= 1 }) { Text("-1d") }
-                        Spacer(modifier = Modifier.size(4.dp))
-                        OutlinedButton(onClick = { startDay += 1 }) { Text("+1d") }
-                    }
+                    Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text("📅 Start: ${DateEpochUtils.formatEpochDayFull(startDay)}")
                 }
 
                 Row(
@@ -716,17 +716,13 @@ private fun PeriodLogDialog(
                 }
 
                 if (hasEndDate) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    OutlinedButton(
+                        onClick = { showEndCalendar = true },
+                        modifier = Modifier.fillMaxWidth().testTag("period_end_calendar_button")
                     ) {
-                        Text("End: ${DateEpochUtils.formatEpochDayFull(endDay)}", style = MaterialTheme.typography.titleSmall)
-                        Row {
-                            OutlinedButton(onClick = { if (endDay > startDay) endDay -= 1 }) { Text("-1d") }
-                            Spacer(modifier = Modifier.size(4.dp))
-                            OutlinedButton(onClick = { endDay += 1 }) { Text("+1d") }
-                        }
+                        Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("📅 End: ${DateEpochUtils.formatEpochDayFull(endDay)}")
                     }
                 }
 
@@ -798,4 +794,27 @@ private fun PeriodLogDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+
+    if (showStartCalendar) {
+        CalendarDatePickerDialog(
+            initialEpochDay = startDay,
+            onDismiss = { showStartCalendar = false },
+            onDateSelected = { picked ->
+                startDay = picked
+                if (endDay < startDay) endDay = startDay + defaultPeriodDays - 1
+                showStartCalendar = false
+            }
+        )
+    }
+
+    if (showEndCalendar) {
+        CalendarDatePickerDialog(
+            initialEpochDay = endDay.coerceAtLeast(startDay),
+            onDismiss = { showEndCalendar = false },
+            onDateSelected = { picked ->
+                endDay = picked.coerceAtLeast(startDay)
+                showEndCalendar = false
+            }
+        )
+    }
 }

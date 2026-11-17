@@ -6,6 +6,7 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import android.util.Log
 import com.google.firebase.Firebase
+import com.google.firebase.FirebaseApp
 import com.google.firebase.ai.ai
 import com.google.firebase.ai.type.Schema
 import com.google.firebase.ai.type.content
@@ -68,7 +69,16 @@ data class ExtractedPrescriptionResult(
     val medicines: List<ExtractedPrescriptionMedicine>
 )
 
-class LifeWeaveAiService {
+class LifeWeaveAiService(context: Context? = null) {
+    private val appContext = context?.applicationContext
+
+    private fun ensureFirebaseInitialized(): Boolean {
+        val ctx = appContext ?: return false
+        if (FirebaseApp.getApps(ctx).isEmpty()) {
+            FirebaseApp.initializeApp(ctx)
+        }
+        return FirebaseApp.getApps(ctx).isNotEmpty()
+    }
 
     private val assistantSchema = Schema.obj(
         properties = mapOf(
@@ -154,6 +164,14 @@ class LifeWeaveAiService {
         wellnessContextSummary: String
     ): Result<AiAssistantOutcome> {
         return try {
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "AI Voice needs Firebase configuration bundled in the APK (missing google-services.json). " +
+                            "Use AI Studio Preview or add GOOGLE_SERVICES_JSON to your GitHub Secrets and rebuild."
+                    )
+                )
+            }
             val prompt = buildString {
                 appendLine("You are LifeWeave's friendly, voice-ready wellness assistant inside an Android health app.")
                 appendLine("Respond naturally in this language: ${languageOption.label} (${languageOption.tag}). Keep spoken replies concise (2-4 sentences).")
@@ -216,6 +234,14 @@ class LifeWeaveAiService {
         languageOption: VoiceLanguageOption
     ): Result<ExtractedPrescriptionResult> {
         return try {
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Prescription Scanner needs Firebase configuration bundled in the APK (missing google-services.json). " +
+                            "Use AI Studio Preview or add GOOGLE_SERVICES_JSON to your GitHub Secrets and rebuild."
+                    )
+                )
+            }
             val bitmap = withContext(Dispatchers.IO) {
                 decodeScaledBitmap(context, imageUri, maxDimension = 1280)
             } ?: return Result.failure(IllegalArgumentException("Unable to read the selected prescription image."))

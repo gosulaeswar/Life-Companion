@@ -39,6 +39,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -49,6 +50,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.domain.DateEpochUtils
+import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.ModulesHubUiState
@@ -243,7 +245,7 @@ fun FitnessYogaScreen(
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    String.format("🌙 %.1f hrs • %s %s", hrs, stars, s.notes),
+                                    String.format("🌙 %.1f hrs • %s (%s) %s", hrs, stars, DateEpochUtils.formatEpochDayAndTime(s.wakeEpochMs), s.notes),
                                     style = MaterialTheme.typography.bodyMedium,
                                     modifier = Modifier.weight(1f)
                                 )
@@ -277,7 +279,7 @@ fun FitnessYogaScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("${ex.activityType} • ${ex.durationMinutes} min", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "${ex.category} • ${ex.intensity} • ${ex.caloriesBurned} kcal • ${DateEpochUtils.formatTime(ex.loggedAtEpochMs)}",
+                            "${ex.category} • ${ex.intensity} • ${ex.caloriesBurned} kcal • ${DateEpochUtils.formatEpochDayAndTime(ex.loggedAtEpochMs)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -297,11 +299,28 @@ fun FitnessYogaScreen(
         var category by remember { mutableStateOf("Exercise") }
         var mins by remember { mutableStateOf("30") }
         var cals by remember { mutableStateOf("210") }
+        var selectedDay by remember { mutableLongStateOf(DateEpochUtils.todayEpochDay()) }
+        val initHm = remember { DateEpochUtils.epochMsToHourMinute() }
+        var selectedHour by remember { mutableIntStateOf(initHm.first) }
+        var selectedMinute by remember { mutableIntStateOf(initHm.second) }
         AlertDialog(
             onDismissRequest = { showWorkoutDialog = false },
             title = { Text("Log Movement or Yoga") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DateTimeSelectorRow(
+                        selectedEpochDay = selectedDay,
+                        selectedHour = selectedHour,
+                        selectedMinute = selectedMinute,
+                        onEpochDayChanged = { selectedDay = it },
+                        onTimeChanged = { h, m ->
+                            selectedHour = h
+                            selectedMinute = m
+                        },
+                        dateLabel = "Date",
+                        timeLabel = "Time",
+                        testTagPrefix = "fitness_dt"
+                    )
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         FilterChip(selected = category == "Exercise", onClick = { category = "Exercise" }, label = { Text("🏃 Exercise") })
                         FilterChip(selected = category == "Yoga", onClick = { category = "Yoga" }, label = { Text("🧘 Yoga") })
@@ -325,12 +344,14 @@ fun FitnessYogaScreen(
             },
             confirmButton = {
                 Button(onClick = {
+                    val ts = DateEpochUtils.combineEpochDayAndTime(selectedDay, selectedHour, selectedMinute)
                     viewModel.logExercise(
                         activityType = activity.ifBlank { "🏃 Workout" },
                         category = category,
                         durationMinutes = mins.toIntOrNull() ?: 25,
                         intensity = "Moderate",
-                        caloriesBurned = cals.toIntOrNull() ?: 120
+                        caloriesBurned = cals.toIntOrNull() ?: 120,
+                        loggedAtEpochMs = ts
                     )
                     showWorkoutDialog = false
                 }) { Text("Save") }
@@ -343,11 +364,28 @@ fun FitnessYogaScreen(
         var hours by remember { mutableFloatStateOf(7.5f) }
         var quality by remember { mutableIntStateOf(4) }
         var notes by remember { mutableStateOf("") }
+        var wakeDay by remember { mutableLongStateOf(DateEpochUtils.todayEpochDay()) }
+        val initHm = remember { DateEpochUtils.epochMsToHourMinute() }
+        var wakeHour by remember { mutableIntStateOf(initHm.first) }
+        var wakeMinute by remember { mutableIntStateOf(initHm.second) }
         AlertDialog(
             onDismissRequest = { showSleepDialog = false },
             title = { Text("😴 Log Sleep") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DateTimeSelectorRow(
+                        selectedEpochDay = wakeDay,
+                        selectedHour = wakeHour,
+                        selectedMinute = wakeMinute,
+                        onEpochDayChanged = { wakeDay = it },
+                        onTimeChanged = { h, m ->
+                            wakeHour = h
+                            wakeMinute = m
+                        },
+                        dateLabel = "Wake Date",
+                        timeLabel = "Wake Time",
+                        testTagPrefix = "sleep_dt"
+                    )
                     Text(String.format("Duration: %.1f hours", hours), style = MaterialTheme.typography.titleSmall)
                     Slider(value = hours, onValueChange = { hours = (it * 2).roundToInt() / 2f }, valueRange = 3f..12f)
                     Text("Quality: ${"⭐".repeat(quality)}", style = MaterialTheme.typography.titleSmall)
@@ -357,7 +395,8 @@ fun FitnessYogaScreen(
             },
             confirmButton = {
                 Button(onClick = {
-                    viewModel.logSleep(hours, quality, notes)
+                    val wakeMs = DateEpochUtils.combineEpochDayAndTime(wakeDay, wakeHour, wakeMinute)
+                    viewModel.logSleep(hours, quality, notes, wakeMs)
                     showSleepDialog = false
                 }) { Text("Save") }
             },
@@ -453,7 +492,7 @@ fun DietNutritionScreen(
                     Column(modifier = Modifier.weight(1f)) {
                         Text("${meal.mealType}: ${meal.foodSummary}", style = MaterialTheme.typography.titleSmall)
                         Text(
-                            "${meal.calories} kcal • P:${meal.proteinGrams}g C:${meal.carbsGrams}g F:${meal.fatGrams}g",
+                            "${meal.calories} kcal • P:${meal.proteinGrams}g C:${meal.carbsGrams}g F:${meal.fatGrams}g • ${DateEpochUtils.formatEpochDayAndTime(meal.loggedAtEpochMs)}",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -473,11 +512,28 @@ fun DietNutritionScreen(
         var food by remember { mutableStateOf("") }
         var cals by remember { mutableStateOf("450") }
         var prot by remember { mutableStateOf("20") }
+        var selectedDay by remember { mutableLongStateOf(DateEpochUtils.todayEpochDay()) }
+        val initHm = remember { DateEpochUtils.epochMsToHourMinute() }
+        var selectedHour by remember { mutableIntStateOf(initHm.first) }
+        var selectedMinute by remember { mutableIntStateOf(initHm.second) }
         AlertDialog(
             onDismissRequest = { showMealDialog = false },
             title = { Text("🥗 Log Meal") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    DateTimeSelectorRow(
+                        selectedEpochDay = selectedDay,
+                        selectedHour = selectedHour,
+                        selectedMinute = selectedMinute,
+                        onEpochDayChanged = { selectedDay = it },
+                        onTimeChanged = { h, m ->
+                            selectedHour = h
+                            selectedMinute = m
+                        },
+                        dateLabel = "Meal Date",
+                        timeLabel = "Meal Time",
+                        testTagPrefix = "diet_dt"
+                    )
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                         listOf("🍳 Breakfast", "🥗 Lunch", "🍲 Dinner", "🍎 Snack").forEach { label ->
                             val clean = label.substringAfter(" ")
@@ -503,13 +559,15 @@ fun DietNutritionScreen(
             },
             confirmButton = {
                 Button(onClick = {
+                    val ts = DateEpochUtils.combineEpochDayAndTime(selectedDay, selectedHour, selectedMinute)
                     viewModel.logMeal(
                         mealType = mealType,
                         foodSummary = food.ifBlank { "Balanced meal" },
                         calories = cals.toIntOrNull() ?: 350,
                         protein = prot.toIntOrNull() ?: 15,
                         carbs = 45,
-                        fat = 12
+                        fat = 12,
+                        loggedAtEpochMs = ts
                     )
                     showMealDialog = false
                 }) { Text("Save") }

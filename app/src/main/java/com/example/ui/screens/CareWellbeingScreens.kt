@@ -32,6 +32,8 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -40,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 import com.example.domain.DateEpochUtils
+import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.ModulesHubUiState
@@ -55,6 +58,10 @@ fun BeautyCareScreen(
 ) {
     var customStep by remember { mutableStateOf("") }
     var routineType by remember { mutableStateOf("Skincare") }
+    var selectedDay by remember { mutableLongStateOf(DateEpochUtils.todayEpochDay()) }
+    val initHm = remember { DateEpochUtils.epochMsToHourMinute() }
+    var selectedHour by remember { mutableIntStateOf(initHm.first) }
+    var selectedMinute by remember { mutableIntStateOf(initHm.second) }
 
     LazyColumn(
         modifier = Modifier.fillMaxSize().padding(horizontal = 20.dp),
@@ -91,6 +98,19 @@ fun BeautyCareScreen(
                             FilterChip(selected = routineType == t, onClick = { routineType = t }, label = { Text(t) })
                         }
                     }
+                    DateTimeSelectorRow(
+                        selectedEpochDay = selectedDay,
+                        selectedHour = selectedHour,
+                        selectedMinute = selectedMinute,
+                        onEpochDayChanged = { selectedDay = it },
+                        onTimeChanged = { h, m ->
+                            selectedHour = h
+                            selectedMinute = m
+                        },
+                        dateLabel = "Ritual Date",
+                        timeLabel = "Ritual Time",
+                        testTagPrefix = "beauty_dt"
+                    )
                     OutlinedTextField(
                         value = customStep,
                         onValueChange = { customStep = it },
@@ -101,7 +121,8 @@ fun BeautyCareScreen(
                     Button(
                         onClick = {
                             if (customStep.isNotBlank()) {
-                                viewModel.logBeautyCare(routineType, customStep, "")
+                                val ts = DateEpochUtils.combineEpochDayAndTime(selectedDay, selectedHour, selectedMinute)
+                                viewModel.logBeautyCare(routineType, customStep, "", ts)
                                 customStep = ""
                             }
                         },
@@ -116,7 +137,7 @@ fun BeautyCareScreen(
                 Row(modifier = Modifier.padding(14.dp), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(item.productOrStep, style = MaterialTheme.typography.titleSmall)
-                        Text("${item.routineType} • ${DateEpochUtils.formatTime(item.completedAtEpochMs)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("${item.routineType} • ${DateEpochUtils.formatEpochDayAndTime(item.completedAtEpochMs)}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     IconButton(onClick = { viewModel.deleteBeautyCare(item.id) }) {
                         Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete ritual")

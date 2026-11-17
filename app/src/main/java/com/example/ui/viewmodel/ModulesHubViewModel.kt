@@ -73,6 +73,7 @@ data class ModulesHubUiState(
     val dietRecords: List<DietRecordEntity> = emptyList(),
     val medicines: List<MedicineEntity> = emptyList(),
     val todayMedicineIntakes: List<MedicineIntakeEntity> = emptyList(),
+    val recentMedicineIntakes: List<MedicineIntakeEntity> = emptyList(),
     val consultations: List<DoctorConsultationEntity> = emptyList(),
     val beautyRecords: List<BeautyCareRecordEntity> = emptyList(),
     val todayWellbeing: DigitalWellbeingRecordEntity? = null,
@@ -228,10 +229,11 @@ class ModulesHubViewModel(
 
                 combine(
                     coreFlow,
+                    allModulesRepo.observeRecentMedicineIntakes(profile.id),
                     fitnessSyncRepo.observeConnectedSources(profile.id),
                     fitnessSyncRepo.observeVitalMetrics(profile.id),
                     aiFlow
-                ) { arr, sources, vitals, overlay ->
+                ) { arr, recentIntakes, sources, vitals, overlay ->
                     @Suppress("UNCHECKED_CAST")
                     val modules = arr[0] as List<ModuleActivationEntity>
                     @Suppress("UNCHECKED_CAST")
@@ -289,6 +291,7 @@ class ModulesHubViewModel(
                         dietRecords = diet,
                         medicines = medicines,
                         todayMedicineIntakes = medicineIntakes,
+                        recentMedicineIntakes = recentIntakes,
                         consultations = consultations,
                         beautyRecords = beauty,
                         todayWellbeing = wellbeing,
@@ -677,11 +680,12 @@ class ModulesHubViewModel(
         category: String,
         durationMinutes: Int,
         intensity: String,
-        caloriesBurned: Int
+        caloriesBurned: Int,
+        loggedAtEpochMs: Long = System.currentTimeMillis()
     ) {
         val pid = uiState.value.profile?.id ?: return
         viewModelScope.launch {
-            allModulesRepo.logExercise(pid, activityType, category, durationMinutes, intensity, caloriesBurned)
+            allModulesRepo.logExercise(pid, activityType, category, durationMinutes, intensity, caloriesBurned, loggedAtEpochMs)
         }
     }
 
@@ -694,9 +698,14 @@ class ModulesHubViewModel(
         }
     }
 
-    fun logSleep(hours: Float, quality: Int, notes: String) {
+    fun logSleep(
+        hours: Float,
+        quality: Int,
+        notes: String,
+        wakeEpochMs: Long = System.currentTimeMillis()
+    ) {
         val pid = uiState.value.profile?.id ?: return
-        viewModelScope.launch { allModulesRepo.logSleep(pid, hours, quality, notes) }
+        viewModelScope.launch { allModulesRepo.logSleep(pid, hours, quality, notes, wakeEpochMs) }
     }
 
     fun deleteSleep(id: Long) = viewModelScope.launch { allModulesRepo.deleteSleep(id) }
@@ -707,11 +716,12 @@ class ModulesHubViewModel(
         calories: Int,
         protein: Int,
         carbs: Int,
-        fat: Int
+        fat: Int,
+        loggedAtEpochMs: Long = System.currentTimeMillis()
     ) {
         val pid = uiState.value.profile?.id ?: return
         viewModelScope.launch {
-            allModulesRepo.logMeal(pid, mealType, foodSummary, calories, protein, carbs, fat)
+            allModulesRepo.logMeal(pid, mealType, foodSummary, calories, protein, carbs, fat, loggedAtEpochMs)
         }
     }
 
@@ -750,10 +760,15 @@ class ModulesHubViewModel(
 
     fun deleteMedicine(id: Long) = viewModelScope.launch { allModulesRepo.deleteMedicine(id) }
 
-    fun logMedicineIntake(med: MedicineEntity, slotLabel: String, status: String = "Taken") {
+    fun logMedicineIntake(
+        med: MedicineEntity,
+        slotLabel: String,
+        status: String = "Taken",
+        takenAtEpochMs: Long = System.currentTimeMillis()
+    ) {
         val pid = uiState.value.profile?.id ?: return
         viewModelScope.launch {
-            allModulesRepo.logMedicineIntake(pid, med, slotLabel, status)
+            allModulesRepo.logMedicineIntake(pid, med, slotLabel, status, takenAtEpochMs)
         }
     }
 
@@ -767,7 +782,8 @@ class ModulesHubViewModel(
         clinicOrHospital: String = "",
         summary: String,
         followUpEpochDay: Long? = null,
-        followUpNotes: String = ""
+        followUpNotes: String = "",
+        consultationEpochMs: Long = System.currentTimeMillis()
     ) {
         val pid = uiState.value.profile?.id ?: return
         viewModelScope.launch {
@@ -778,7 +794,8 @@ class ModulesHubViewModel(
                 clinicOrHospital = clinicOrHospital,
                 summary = summary,
                 followUpEpochDay = followUpEpochDay,
-                followUpNotes = followUpNotes
+                followUpNotes = followUpNotes,
+                consultationEpochMs = consultationEpochMs
             )
         }
     }
@@ -788,9 +805,14 @@ class ModulesHubViewModel(
 
     fun deleteConsultation(id: Long) = viewModelScope.launch { allModulesRepo.deleteConsultation(id) }
 
-    fun logBeautyCare(routineType: String, productOrStep: String, notes: String) {
+    fun logBeautyCare(
+        routineType: String,
+        productOrStep: String,
+        notes: String,
+        completedAtEpochMs: Long = System.currentTimeMillis()
+    ) {
         val pid = uiState.value.profile?.id ?: return
-        viewModelScope.launch { allModulesRepo.logBeautyCare(pid, routineType, productOrStep, notes) }
+        viewModelScope.launch { allModulesRepo.logBeautyCare(pid, routineType, productOrStep, notes, completedAtEpochMs) }
     }
 
     fun deleteBeautyCare(id: Long) = viewModelScope.launch { allModulesRepo.deleteBeautyCare(id) }

@@ -39,6 +39,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
@@ -48,6 +49,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.domain.DateEpochUtils
+import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.HydrationRingGauge
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.components.WeeklyHydrationBarChart
@@ -340,7 +342,7 @@ fun WaterTrackerScreen(
                                     )
                                 )
                                 val subtitle = buildString {
-                                    append(DateEpochUtils.formatTime(record.loggedAtEpochMs))
+                                    append(DateEpochUtils.formatEpochDayAndTime(record.loggedAtEpochMs))
                                     if (record.note.isNotBlank()) append(" • ${record.note}")
                                 }
                                 Text(
@@ -371,11 +373,28 @@ fun WaterTrackerScreen(
     if (showCustomDialog) {
         var amountText by remember { mutableStateOf("350") }
         var noteText by remember { mutableStateOf("") }
+        var selectedDay by remember { mutableLongStateOf(DateEpochUtils.todayEpochDay()) }
+        val initHm = remember { DateEpochUtils.epochMsToHourMinute() }
+        var selectedHour by remember { mutableIntStateOf(initHm.first) }
+        var selectedMinute by remember { mutableIntStateOf(initHm.second) }
         AlertDialog(
             onDismissRequest = { showCustomDialog = false },
             title = { Text("Log ${uiState.selectedDrinkType}") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    DateTimeSelectorRow(
+                        selectedEpochDay = selectedDay,
+                        selectedHour = selectedHour,
+                        selectedMinute = selectedMinute,
+                        onEpochDayChanged = { selectedDay = it },
+                        onTimeChanged = { h, m ->
+                            selectedHour = h
+                            selectedMinute = m
+                        },
+                        dateLabel = "Drink Date",
+                        timeLabel = "Drink Time",
+                        testTagPrefix = "water_dt"
+                    )
                     OutlinedTextField(
                         value = amountText,
                         onValueChange = { if (it.all(Char::isDigit) && it.length <= 4) amountText = it },
@@ -396,7 +415,8 @@ fun WaterTrackerScreen(
                 Button(
                     onClick = {
                         val ml = amountText.toIntOrNull()?.takeIf { it in 25..3000 } ?: 250
-                        viewModel.logWater(ml, noteText)
+                        val ts = DateEpochUtils.combineEpochDayAndTime(selectedDay, selectedHour, selectedMinute)
+                        viewModel.logWater(ml, noteText, ts)
                         showCustomDialog = false
                     },
                     modifier = Modifier.testTag("confirm_custom_water_button")

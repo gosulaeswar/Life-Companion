@@ -18,8 +18,13 @@ private const val RECAPTCHA_SITE_KEY_RES = "recaptcha_site_key"
 
 fun configureAppCheck(context: Context, intent: Intent?) {
     try {
-        if (FirebaseApp.getApps(context).isEmpty()) {
-            FirebaseApp.initializeApp(context)
+        val appContext = context.applicationContext ?: context
+        if (FirebaseApp.getApps(appContext).isEmpty()) {
+            val initialized = FirebaseApp.initializeApp(appContext)
+            if (initialized == null) {
+                Log.w(TAG, "FirebaseApp.initializeApp returned null; google-services config may not be bundled in this build.")
+                return
+            }
         }
 
         if (BuildConfig.DEBUG) {

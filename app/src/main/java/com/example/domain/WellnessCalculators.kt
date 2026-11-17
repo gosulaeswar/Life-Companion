@@ -115,6 +115,55 @@ object DateEpochUtils {
         // Sunday = 1 -> 0 offset
         return cal.get(Calendar.DAY_OF_WEEK) - Calendar.SUNDAY
     }
+
+    fun epochDayToUtcPickerMillis(epochDay: Long): Long =
+        TimeUnit.DAYS.toMillis(epochDay)
+
+    fun utcPickerMillisToEpochDay(utcMillis: Long): Long =
+        TimeUnit.MILLISECONDS.toDays(utcMillis)
+
+    fun combineEpochDayAndTime(epochDay: Long, hour24: Int, minute: Int): Long {
+        val (y, m, d) = ymdFromEpochDay(epochDay)
+        val cal = Calendar.getInstance().apply {
+            clear()
+            set(Calendar.YEAR, y)
+            set(Calendar.MONTH, m)
+            set(Calendar.DAY_OF_MONTH, d)
+            set(Calendar.HOUR_OF_DAY, hour24.coerceIn(0, 23))
+            set(Calendar.MINUTE, minute.coerceIn(0, 59))
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        return cal.timeInMillis
+    }
+
+    fun epochMsToHourMinute(epochMs: Long = System.currentTimeMillis()): Pair<Int, Int> {
+        val cal = Calendar.getInstance().apply { timeInMillis = epochMs }
+        return cal.get(Calendar.HOUR_OF_DAY) to cal.get(Calendar.MINUTE)
+    }
+
+    fun formatTime24h(hour24: Int, minute: Int): String =
+        String.format(Locale.US, "%02d:%02d", hour24.coerceIn(0, 23), minute.coerceIn(0, 59))
+
+    fun formatTime12h(hour24: Int, minute: Int): String {
+        val cal = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour24.coerceIn(0, 23))
+            set(Calendar.MINUTE, minute.coerceIn(0, 59))
+        }
+        return timeFormat.format(cal.time)
+    }
+
+    fun formatEpochDayAndTime(epochMs: Long): String {
+        val d = Date(epochMs)
+        return "${displayDateFormat.format(d)} • ${timeFormat.format(d)}"
+    }
+
+    fun parseHourMinute(time24h: String): Pair<Int, Int> {
+        val parts = time24h.split(":")
+        val h = parts.getOrNull(0)?.trim()?.toIntOrNull()?.coerceIn(0, 23) ?: 8
+        val m = parts.getOrNull(1)?.trim()?.toIntOrNull()?.coerceIn(0, 59) ?: 0
+        return h to m
+    }
 }
 
 data class DailyHydrationBar(

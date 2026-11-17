@@ -56,12 +56,17 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.platform.LocalContext
 import com.example.data.local.entity.DoctorConsultationEntity
 import com.example.data.local.entity.MedicineEntity
 import com.example.domain.DateEpochUtils
+import com.example.ui.components.CalendarDatePickerDialog
+import com.example.ui.components.ClockTimePickerDialog
+import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.AiTaskStatus
@@ -79,6 +84,7 @@ fun MedicalCareScreen(
     val context = LocalContext.current
     var showMedDialog by remember { mutableStateOf(false) }
     var showVisitDialog by remember { mutableStateOf(false) }
+    var intakeDialogMed by remember { mutableStateOf<MedicineEntity?>(null) }
     val prescriptionPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -460,7 +466,20 @@ fun MedicalCareScreen(
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 }
                             )
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                IconButton(
+                                    onClick = { intakeDialogMed = med },
+                                    modifier = Modifier.testTag("pick_time_dose_btn_${med.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Schedule,
+                                        contentDescription = "Pick intake date and time",
+                                        tint = MaterialTheme.colorScheme.primary
+                                    )
+                                }
                                 OutlinedButton(
                                     onClick = {
                                         viewModel.logMedicineIntake(
@@ -470,7 +489,7 @@ fun MedicalCareScreen(
                                         )
                                     }
                                 ) {
-                                    Text("⏭️ Skip")
+                                    Text("Skip")
                                 }
                                 Button(
                                     onClick = {
@@ -491,17 +510,18 @@ fun MedicalCareScreen(
             }
         }
 
-        // Today's Intake History
-        if (uiState.todayMedicineIntakes.isNotEmpty()) {
+        // Intake History (Today + Scheduled/Custom Date Intakes)
+        val displayedIntakes = uiState.recentMedicineIntakes.ifEmpty { uiState.todayMedicineIntakes }
+        if (displayedIntakes.isNotEmpty()) {
             item {
                 Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
                     Text(
-                        "📋 Today's Intake Log (${uiState.todayMedicineIntakes.size})",
+                        "📋 Medicine Intake Log (${displayedIntakes.size})",
                         style = MaterialTheme.typography.titleMedium
                     )
                 }
             }
-            items(uiState.todayMedicineIntakes, key = { "intake_${it.id}" }) { intake ->
+            items(displayedIntakes, key = { "intake_${it.id}" }) { intake ->
                 Surface(
                     modifier = Modifier
                         .widthIn(max = 600.dp)
@@ -521,7 +541,7 @@ fun MedicalCareScreen(
                                 style = MaterialTheme.typography.titleSmall
                             )
                             Text(
-                                "${intake.slotLabel} • ${DateEpochUtils.formatTime(intake.takenAtEpochMs)}",
+                                "${intake.slotLabel} • ${DateEpochUtils.formatEpochDayAndTime(intake.takenAtEpochMs)}",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -610,16 +630,33 @@ fun MedicalCareScreen(
         AddConsultationDialog(
             todayEpochDay = todayEpochDay,
             onDismiss = { showVisitDialog = false },
-            onSave = { doctor, specialty, clinic, summary, followUpDay, followUpNotes ->
+            onSave = { doctor, specialty, clinic, summary, visitEpochMs, followUpDay, followUpNotes ->
                 viewModel.addConsultation(
                     doctorName = doctor,
                     specialty = specialty,
                     clinicOrHospital = clinic,
                     summary = summary,
                     followUpEpochDay = followUpDay,
-                    followUpNotes = followUpNotes
+                    followUpNotes = followUpNotes,
+                    consultationEpochMs = visitEpochMs
                 )
                 showVisitDialog = false
+            }
+        )
+    }
+
+    intakeDialogMed?.let { selectedMed ->
+        LogMedicineIntakeDialog(
+            medicine = selectedMed,
+            onDismiss = { intakeDialogMed = null },
+            onSave = { slotLabel, status, takenAtEpochMs ->
+                viewModel.logMedicineIntake(
+                    med = selectedMed,
+                    slotLabel = slotLabel,
+                    status = status,
+                    takenAtEpochMs = takenAtEpochMs
+                )
+                intakeDialogMed = null
             }
         )
     }
@@ -652,6 +689,11 @@ private fun ConsultationCard(
                     Text(
                         "🩺 Dr. ${visit.doctorName} (${visit.specialty})",
                         style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        "🗓️ Appointment: ${DateEpochUtils.formatEpochDayAndTime(visit.consultationEpochMs)}",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.secondary
                     )
                     if (visit.clinicOrHospital.isNotBlank()) {
                         Text(
@@ -742,7 +784,12 @@ private fun AddMedicineDialog(
 ) {
     var name by remember { mutableStateOf("") }
     var dosage by remember { mutableStateOf("500mg") }
-    var firstDoseTime by remember { mutableStateOf("08:00") }
+    var firstDoseHour by remember { mutableIntStateOf(8) }
+    var firstDoseMinute by remember { mutableIntStateOf(0) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    val firstDoseTime = remember(firstDoseHour, firstDoseMinute) {
+        DateEpochUtils.formatTime24h(firstDoseHour, firstDoseMinute)
+    }
     var dosesPerDay by remember { mutableIntStateOf(2) }
     var intervalHours by remember { mutableIntStateOf(12) }
     var mealRelation by remember { mutableStateOf("After Meal") }
@@ -791,9 +838,25 @@ private fun AddMedicineDialog(
                 }
 
                 Text("First Dose Time", style = MaterialTheme.typography.labelLarge)
+                OutlinedButton(
+                    onClick = { showTimePicker = true },
+                    modifier = Modifier.fillMaxWidth().testTag("med_first_dose_time_button")
+                ) {
+                    Icon(Icons.Rounded.Schedule, contentDescription = null)
+                    Spacer(modifier = Modifier.size(6.dp))
+                    Text("⏰ Pick Time: ${DateEpochUtils.formatTime12h(firstDoseHour, firstDoseMinute)} ($firstDoseTime)")
+                }
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    listOf("07:00", "08:00", "09:00", "13:00", "21:00").forEach { t ->
-                        FilterChip(selected = firstDoseTime == t, onClick = { firstDoseTime = t }, label = { Text(t) })
+                    listOf(7 to 0, 8 to 0, 9 to 0, 13 to 0, 21 to 0).forEach { (h, m) ->
+                        val label24 = DateEpochUtils.formatTime24h(h, m)
+                        FilterChip(
+                            selected = firstDoseHour == h && firstDoseMinute == m,
+                            onClick = {
+                                firstDoseHour = h
+                                firstDoseMinute = m
+                            },
+                            label = { Text(label24) }
+                        )
                     }
                 }
 
@@ -835,6 +898,105 @@ private fun AddMedicineDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+
+    if (showTimePicker) {
+        ClockTimePickerDialog(
+            initialHour = firstDoseHour,
+            initialMinute = firstDoseMinute,
+            title = "First Dose Time",
+            onDismiss = { showTimePicker = false },
+            onTimeSelected = { h, m ->
+                firstDoseHour = h
+                firstDoseMinute = m
+                showTimePicker = false
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun LogMedicineIntakeDialog(
+    medicine: MedicineEntity,
+    onDismiss: () -> Unit,
+    onSave: (slotLabel: String, status: String, takenAtEpochMs: Long) -> Unit
+) {
+    val scheduleSlots = remember(medicine.scheduleTime24h, medicine.dosesPerDay, medicine.intervalHours) {
+        computeDoseTimes(medicine.scheduleTime24h, medicine.dosesPerDay, medicine.intervalHours)
+    }
+    var selectedSlotIndex by remember { mutableIntStateOf(0) }
+    var status by remember { mutableStateOf("Taken") }
+    var selectedDay by remember { mutableLongStateOf(DateEpochUtils.todayEpochDay()) }
+    val initialHm = remember { DateEpochUtils.epochMsToHourMinute() }
+    var selectedHour by remember { mutableIntStateOf(initialHm.first) }
+    var selectedMinute by remember { mutableIntStateOf(initialHm.second) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("💊 Log ${medicine.name} Intake") },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text("Intake Date & Time", style = MaterialTheme.typography.labelLarge)
+                DateTimeSelectorRow(
+                    selectedEpochDay = selectedDay,
+                    selectedHour = selectedHour,
+                    selectedMinute = selectedMinute,
+                    onEpochDayChanged = { selectedDay = it },
+                    onTimeChanged = { h, m ->
+                        selectedHour = h
+                        selectedMinute = m
+                    },
+                    dateLabel = "Intake Date",
+                    timeLabel = "Intake Time",
+                    testTagPrefix = "med_intake_dt"
+                )
+
+                Text("Dose Slot", style = MaterialTheme.typography.labelLarge)
+                FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    scheduleSlots.forEachIndexed { idx, slotTime ->
+                        FilterChip(
+                            selected = selectedSlotIndex == idx,
+                            onClick = { selectedSlotIndex = idx },
+                            label = { Text("Dose ${idx + 1} ($slotTime)") }
+                        )
+                    }
+                }
+
+                Text("Status", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    FilterChip(
+                        selected = status == "Taken",
+                        onClick = { status = "Taken" },
+                        label = { Text("✅ Taken") }
+                    )
+                    FilterChip(
+                        selected = status == "Skipped",
+                        onClick = { status = "Skipped" },
+                        label = { Text("⏭️ Skipped") }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            Button(
+                onClick = {
+                    val slotTime = scheduleSlots.getOrNull(selectedSlotIndex) ?: medicine.scheduleTime24h
+                    val slotLabel = "Dose ${selectedSlotIndex + 1}/${medicine.dosesPerDay} ($slotTime)"
+                    val timestamp = DateEpochUtils.combineEpochDayAndTime(selectedDay, selectedHour, selectedMinute)
+                    onSave(slotLabel, status, timestamp)
+                },
+                modifier = Modifier.testTag("save_custom_intake_button")
+            ) {
+                Text("Save Intake")
+            }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("Cancel") }
+        }
+    )
 }
 
 @OptIn(ExperimentalLayoutApi::class)
@@ -842,24 +1004,44 @@ private fun AddMedicineDialog(
 private fun AddConsultationDialog(
     todayEpochDay: Long,
     onDismiss: () -> Unit,
-    onSave: (String, String, String, String, Long?, String) -> Unit
+    onSave: (String, String, String, String, Long, Long?, String) -> Unit
 ) {
     var doctor by remember { mutableStateOf("") }
     var specialty by remember { mutableStateOf("General Wellness") }
     var clinic by remember { mutableStateOf("") }
     var summary by remember { mutableStateOf("") }
+    var visitDay by remember { mutableLongStateOf(todayEpochDay) }
+    val initialHm = remember { DateEpochUtils.epochMsToHourMinute() }
+    var visitHour by remember { mutableIntStateOf(initialHm.first) }
+    var visitMinute by remember { mutableIntStateOf(initialHm.second) }
     var hasFollowUp by remember { mutableStateOf(true) }
     var followUpDay by remember { mutableLongStateOf(todayEpochDay + 7) }
+    var showFollowUpCalendar by remember { mutableStateOf(false) }
     var followUpNotes by remember { mutableStateOf("") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("🩺 Doctor Consultation & Follow-Up") },
+        title = { Text("🩺 Doctor Appointment & Follow-Up") },
         text = {
             Column(
                 modifier = Modifier.verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
+                Text("Appointment Date & Time", style = MaterialTheme.typography.labelLarge)
+                DateTimeSelectorRow(
+                    selectedEpochDay = visitDay,
+                    selectedHour = visitHour,
+                    selectedMinute = visitMinute,
+                    onEpochDayChanged = { visitDay = it },
+                    onTimeChanged = { h, m ->
+                        visitHour = h
+                        visitMinute = m
+                    },
+                    dateLabel = "Visit Date",
+                    timeLabel = "Visit Time",
+                    testTagPrefix = "doctor_visit_dt"
+                )
+
                 OutlinedTextField(
                     value = doctor,
                     onValueChange = { doctor = it },
@@ -915,21 +1097,13 @@ private fun AddConsultationDialog(
                             )
                         }
                     }
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
+                    OutlinedButton(
+                        onClick = { showFollowUpCalendar = true },
+                        modifier = Modifier.fillMaxWidth().testTag("doctor_followup_calendar_button")
                     ) {
-                        Text(
-                            DateEpochUtils.formatEpochDayFull(followUpDay),
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.primary
-                        )
-                        Row {
-                            OutlinedButton(onClick = { if (followUpDay > todayEpochDay) followUpDay -= 1 }) { Text("-1d") }
-                            Spacer(modifier = Modifier.size(4.dp))
-                            OutlinedButton(onClick = { followUpDay += 1 }) { Text("+1d") }
-                        }
+                        Icon(Icons.Rounded.CalendarMonth, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text("📅 Follow-Up: ${DateEpochUtils.formatEpochDayFull(followUpDay)}")
                     }
                     OutlinedTextField(
                         value = followUpNotes,
@@ -943,11 +1117,13 @@ private fun AddConsultationDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    val visitEpochMs = DateEpochUtils.combineEpochDayAndTime(visitDay, visitHour, visitMinute)
                     onSave(
                         doctor.ifBlank { "Family Physician" },
                         specialty,
                         clinic,
                         summary,
+                        visitEpochMs,
                         if (hasFollowUp) followUpDay else null,
                         followUpNotes
                     )
@@ -961,6 +1137,17 @@ private fun AddConsultationDialog(
             TextButton(onClick = onDismiss) { Text("Cancel") }
         }
     )
+
+    if (showFollowUpCalendar) {
+        CalendarDatePickerDialog(
+            initialEpochDay = followUpDay,
+            onDismiss = { showFollowUpCalendar = false },
+            onDateSelected = { pickedDay ->
+                followUpDay = pickedDay
+                showFollowUpCalendar = false
+            }
+        )
+    }
 }
 
 private fun computeDoseTimes(

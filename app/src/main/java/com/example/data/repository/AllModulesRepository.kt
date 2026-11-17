@@ -43,6 +43,9 @@ class AllModulesRepository(private val database: AppDatabase) {
     fun observeTodayMedicineIntakes(profileId: Long): Flow<List<MedicineIntakeEntity>> =
         medicalDao.observeIntakesForDay(profileId, DateEpochUtils.todayDayKey())
 
+    fun observeRecentMedicineIntakes(profileId: Long): Flow<List<MedicineIntakeEntity>> =
+        medicalDao.observeRecentIntakes(profileId)
+
     fun observeConsultations(profileId: Long): Flow<List<DoctorConsultationEntity>> =
         medicalDao.observeConsultations(profileId)
 
@@ -64,7 +67,8 @@ class AllModulesRepository(private val database: AppDatabase) {
         category: String,
         durationMinutes: Int,
         intensity: String,
-        caloriesBurned: Int
+        caloriesBurned: Int,
+        loggedAtEpochMs: Long = System.currentTimeMillis()
     ) {
         fitnessDao.insertExercise(
             ExerciseRecordEntity(
@@ -73,21 +77,27 @@ class AllModulesRepository(private val database: AppDatabase) {
                 category = category,
                 durationMinutes = durationMinutes.coerceIn(1, 360),
                 intensity = intensity,
-                caloriesBurned = caloriesBurned.coerceAtLeast(0)
+                caloriesBurned = caloriesBurned.coerceAtLeast(0),
+                loggedAtEpochMs = loggedAtEpochMs
             )
         )
     }
 
     suspend fun deleteExercise(id: Long) = fitnessDao.deleteExercise(id)
 
-    suspend fun logSleep(profileId: Long, hoursSlept: Float, qualityRating: Int, notes: String) {
-        val wakeMs = System.currentTimeMillis()
-        val bedMs = wakeMs - (hoursSlept.coerceIn(1f, 16f) * 3_600_000L).toLong()
+    suspend fun logSleep(
+        profileId: Long,
+        hoursSlept: Float,
+        qualityRating: Int,
+        notes: String,
+        wakeEpochMs: Long = System.currentTimeMillis()
+    ) {
+        val bedMs = wakeEpochMs - (hoursSlept.coerceIn(1f, 16f) * 3_600_000L).toLong()
         fitnessDao.insertSleep(
             SleepRecordEntity(
                 profileId = profileId,
                 bedtimeEpochMs = bedMs,
-                wakeEpochMs = wakeMs,
+                wakeEpochMs = wakeEpochMs,
                 qualityRating = qualityRating.coerceIn(1, 5),
                 notes = notes.trim()
             )
@@ -117,7 +127,8 @@ class AllModulesRepository(private val database: AppDatabase) {
         calories: Int,
         proteinGrams: Int,
         carbsGrams: Int,
-        fatGrams: Int
+        fatGrams: Int,
+        loggedAtEpochMs: Long = System.currentTimeMillis()
     ) {
         dietDao.insertDietRecord(
             DietRecordEntity(
@@ -127,7 +138,8 @@ class AllModulesRepository(private val database: AppDatabase) {
                 calories = calories.coerceAtLeast(0),
                 proteinGrams = proteinGrams.coerceAtLeast(0),
                 carbsGrams = carbsGrams.coerceAtLeast(0),
-                fatGrams = fatGrams.coerceAtLeast(0)
+                fatGrams = fatGrams.coerceAtLeast(0),
+                loggedAtEpochMs = loggedAtEpochMs
             )
         )
     }
@@ -173,7 +185,8 @@ class AllModulesRepository(private val database: AppDatabase) {
         profileId: Long,
         medicine: MedicineEntity,
         slotLabel: String,
-        status: String = "Taken"
+        status: String = "Taken",
+        takenAtEpochMs: Long = System.currentTimeMillis()
     ) {
         medicalDao.insertMedicineIntake(
             MedicineIntakeEntity(
@@ -183,7 +196,8 @@ class AllModulesRepository(private val database: AppDatabase) {
                 dosageTaken = medicine.dosage,
                 slotLabel = slotLabel,
                 status = status,
-                dayKey = DateEpochUtils.todayDayKey()
+                dayKey = DateEpochUtils.todayDayKey(takenAtEpochMs),
+                takenAtEpochMs = takenAtEpochMs
             )
         )
     }
@@ -197,7 +211,8 @@ class AllModulesRepository(private val database: AppDatabase) {
         clinicOrHospital: String = "",
         summary: String,
         followUpEpochDay: Long? = null,
-        followUpNotes: String = ""
+        followUpNotes: String = "",
+        consultationEpochMs: Long = System.currentTimeMillis()
     ) {
         medicalDao.insertConsultation(
             DoctorConsultationEntity(
@@ -205,7 +220,7 @@ class AllModulesRepository(private val database: AppDatabase) {
                 doctorName = doctorName.trim(),
                 specialty = specialty.trim(),
                 clinicOrHospital = clinicOrHospital.trim(),
-                consultationEpochMs = System.currentTimeMillis(),
+                consultationEpochMs = consultationEpochMs,
                 summary = summary.trim(),
                 followUpEpochDay = followUpEpochDay,
                 followUpNotes = followUpNotes.trim(),
@@ -224,13 +239,15 @@ class AllModulesRepository(private val database: AppDatabase) {
         profileId: Long,
         routineType: String,
         productOrStep: String,
-        notes: String
+        notes: String,
+        completedAtEpochMs: Long = System.currentTimeMillis()
     ) {
         beautyDao.insertBeautyRecord(
             BeautyCareRecordEntity(
                 profileId = profileId,
                 routineType = routineType,
                 productOrStep = productOrStep.trim(),
+                completedAtEpochMs = completedAtEpochMs,
                 notes = notes.trim()
             )
         )

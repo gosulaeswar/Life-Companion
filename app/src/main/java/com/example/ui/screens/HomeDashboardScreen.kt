@@ -438,6 +438,131 @@ fun HomeDashboardScreen(
             }
         }
 
+        // Today's Live Metrics Card (Steps, Hydration, Meds, Heart Rate, Calories, Sleep, Screen)
+        item {
+            val stepGoal = 8000
+            val stepProgress = (totalSteps.toFloat() / stepGoal.toFloat()).coerceIn(0f, 1f)
+            val latestHr = modulesState.vitalMetrics.firstOrNull { it.metricType == "HEART_RATE" }
+            val latestSleepHrs = modulesState.sleepRecords.firstOrNull()?.let { s ->
+                (s.wakeEpochMs - s.bedtimeEpochMs) / 3_600_000f
+            }
+            val latestStepsRecord = modulesState.todaySteps
+            val distanceKm = ((latestStepsRecord?.distanceMeters ?: (totalSteps * 0.74).toInt()) / 1000f)
+
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth()
+                    .testTag("home_live_metrics_card"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = "📊 Today's Live Metrics",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        TextButton(onClick = { onOpenModuleKey("connected_devices") }) {
+                            Text("⌚ Sync Watch")
+                        }
+                    }
+
+                    // Prominent Steps Bar
+                    Surface(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable { onOpenModuleKey("exercise_tracker") }
+                            .testTag("home_steps_metric_tile"),
+                        shape = RoundedCornerShape(16.dp),
+                        color = AmberNotice.copy(alpha = 0.16f)
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "👟 Daily Steps",
+                                    style = MaterialTheme.typography.titleSmall
+                                )
+                                Text(
+                                    text = "$totalSteps / $stepGoal  (${String.format("%.1f", distanceKm)} km)",
+                                    style = MaterialTheme.typography.labelLarge.copy(
+                                        fontFamily = JetBrainsMonoMetricFont
+                                    ),
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            LinearProgressIndicator(
+                                progress = { stepProgress },
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .height(8.dp)
+                                    .clip(CircleShape)
+                            )
+                        }
+                    }
+
+                    // Compact Live Metrics Grid
+                    FlowRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        HomeMiniMetricChip(
+                            emoji = "💧",
+                            label = "Water",
+                            value = "${uiState.hydration.totalTodayMl} ml",
+                            onClick = onOpenWaterTracker
+                        )
+                        HomeMiniMetricChip(
+                            emoji = "❤️",
+                            label = "Heart",
+                            value = latestHr?.let { "${it.valuePrimary.toInt()} bpm" } ?: "Sync HR",
+                            onClick = { onOpenModuleKey("connected_devices") }
+                        )
+                        HomeMiniMetricChip(
+                            emoji = "💊",
+                            label = "Meds",
+                            value = if (expectedDoses > 0) "$takenDoses/$expectedDoses" else "${activeMeds.size} meds",
+                            onClick = { onOpenModuleKey("medical_care") }
+                        )
+                        HomeMiniMetricChip(
+                            emoji = "🥗",
+                            label = "Calories",
+                            value = "$totalCalories kcal",
+                            onClick = { onOpenModuleKey("diet_tracker") }
+                        )
+                        HomeMiniMetricChip(
+                            emoji = "😴",
+                            label = "Sleep",
+                            value = latestSleepHrs?.let { String.format("%.1fh", it) } ?: "Log rest",
+                            onClick = { onOpenModuleKey("exercise_tracker") }
+                        )
+                        HomeMiniMetricChip(
+                            emoji = "📵",
+                            label = "Screen",
+                            value = "${modulesState.todayWellbeing?.screenTimeMinutes ?: 0}m",
+                            onClick = { onOpenModuleKey("digital_wellbeing") }
+                        )
+                    }
+                }
+            }
+        }
+
         // Playful Mood / Vibe Check-In Card
         item {
             Card(
@@ -1078,6 +1203,43 @@ private fun ColorfulCategoryRow(
                 isActivated = true,
                 isPhaseOneBuiltIn = true
             )
+        }
+    }
+}
+
+@Composable
+private fun HomeMiniMetricChip(
+    emoji: String,
+    label: String,
+    value: String,
+    onClick: () -> Unit
+) {
+    Surface(
+        modifier = Modifier
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick),
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f)
+    ) {
+        Row(
+            modifier = Modifier.padding(horizontal = 10.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            Text(text = emoji, fontSize = 16.sp)
+            Column {
+                Text(
+                    text = label,
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+                Text(
+                    text = value,
+                    style = MaterialTheme.typography.labelLarge.copy(
+                        fontFamily = JetBrainsMonoMetricFont
+                    )
+                )
+            }
         }
     }
 }
