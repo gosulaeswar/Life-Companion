@@ -196,4 +196,139 @@ class Phase10PersonalAiKeyTest {
 
         store.clearPersonalKey()
     }
+
+    @Test
+    fun personalAiKeyStore_acceptsAndMasksNewAqPrefixKeys() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val store = PersonalAiKeyStore(context, createTestVaultManager())
+        store.clearPersonalKey()
+
+        val aqKey = "AQ.Ab8RN6ExampleGoogleAIStudioKey12345JyfQ"
+        val saved = store.savePersonalKey(aqKey).getOrThrow()
+        assertTrue(saved.hasPersonalKey)
+        assertEquals("AQ.A••••••JyfQ", saved.maskedPreview)
+        assertEquals(aqKey, store.readPersonalKeyOrNull())
+
+        store.clearPersonalKey()
+    }
+
+    @Test
+    fun directGeminiClient_retries503WithBackoffAndFallsBackToFlashLite() = runBlocking {
+        val calls = mutableListOf<String>()
+        val delays = mutableListOf<Long>()
+        val okEnvelope = JSONObject().put(
+            "candidates",
+            JSONArray().put(
+                JSONObject().put(
+                    "content",
+                    JSONObject().put(
+                        "parts",
+                        JSONArray().put(JSONObject().put("text", "AI Ready"))
+                    )
+                )
+            )
+        ).toString()
+
+        val client = DirectGeminiRestClient(
+            delayFn = { ms -> delays += ms },
+            httpExecutor = { url, _, _, _ ->
+                calls += url
+                if (url.contains(DirectGeminiRestClient.DEFAULT_MODEL)) {
+                    DirectGeminiHttpResponse(
+                        503,
+                        """{"error":{"message":"This model is currently experiencing high demand."}}"""
+                    )
+                } else {
+                    DirectGeminiHttpResponse(200, okEnvelope)
+                }
+            }
+        )
+
+        val pingResult = client.ping("AQ.Ab8RN6TestKey1234567890JyfQ").getOrThrow()
+        assertEquals(DirectGeminiRestClient.FALLBACK_MODEL, pingResult.modelUsed)
+        assertEquals("AI Ready", pingResult.sampleText)
+        // 2 attempts on DEFAULT_MODEL (initial + 1 backoff retry), then 1 winning call on FALLBACK_MODEL
+        assertEquals(3, calls.size)
+        assertTrue(calls[0].contains(DirectGeminiRestClient.DEFAULT_MODEL))
+        assertTrue(calls[1].contains(DirectGeminiRestClient.DEFAULT_MODEL))
+        assertTrue(calls[2].contains(DirectGeminiRestClient.FALLBACK_MODEL))
+        assertEquals(1, delays.size)
+        assertTrue(delays.first() > 0L)
+    }
+
+    @Test
+    fun directGeminiClient_discoversLiveGemini3FlashModelWhenStaticModels503AndRedactsErrors() = runBlocking {
+        val secretKey = "AQ.Ab8RN6SuperSecretKey99999JyfQ"
+        val postUrls = mutableListOf<String>()
+        val getUrls = mutableListOf<String>()
+
+        val modelsListPayload = JSONObject().put(
+            "models",
+            JSONArray()
+                .put(
+                    JSONObject()
+                        .put("name", "models/gemini-3-tts-preview")
+                        .put("supportedGenerationMethods", JSONArray().put("generateContent"))
+                )
+                .put(
+                    JSONObject()
+                        .put("name", "models/gemini-3-flash-preview")
+                        .put("supportedGenerationMethods", JSONArray().put("generateContent"))
+                )
+        ).toString()
+
+        val okEnvelope = JSONObject().put(
+            "candidates",
+            JSONArray().put(
+                JSONObject().put(
+                    "content",
+                    JSONObject().put(
+                        "parts",
+                        JSONArray().put(JSONObject().put("text", "Discovered OK"))
+                    )
+                )
+            )
+        ).toString()
+
+        val client = DirectGeminiRestClient(
+            httpGetExecutor = { url, key, _ ->
+                getUrls += url
+                assertEquals(secretKey, key)
+                DirectGeminiHttpResponse(200, modelsListPayload)
+            },
+            delayFn = { _ -> },
+            httpExecutor = { url, _, _, _ ->
+                postUrls += url
+                if (url.contains("gemini-3-flash-preview")) {
+                    DirectGeminiHttpResponse(200, okEnvelope)
+                } else {
+                    DirectGeminiHttpResponse(
+                        429,
+                        """{"error":{"message":"Quota exceeded for model"}}"""
+                    )
+                }
+            }
+        )
+
+        val result = client.generateContent(secretKey, "Hello").getOrThrow()
+        assertEquals("Discovered OK", result)
+        assertEquals(1, getUrls.size)
+        assertEquals(DirectGeminiRestClient.BASE_URL, getUrls.first())
+        assertTrue(postUrls.last().contains("gemini-3-flash-preview"))
+
+        // Verify 5xx diagnostics surface sanitized server details and redact any accidental key echo
+        val mapped503 = DirectGeminiRestClient.mapHttpError(
+            statusCode = 503,
+            responseBody = """{"error":{"message":"High demand for key $secretKey on backend"}}""",
+            modelName = DirectGeminiRestClient.FALLBACK_MODEL,
+            attemptedModels = listOf(DirectGeminiRestClient.DEFAULT_MODEL, DirectGeminiRestClient.FALLBACK_MODEL),
+            apiKeyToRedact = secretKey
+        )
+        assertTrue(mapped503.contains("HTTP 503"))
+        assertTrue(mapped503.contains("High demand"))
+        assertTrue(mapped503.contains(DirectGeminiRestClient.DEFAULT_MODEL))
+        assertTrue(mapped503.contains(DirectGeminiRestClient.FALLBACK_MODEL))
+        assertTrue(mapped503.contains("[redacted-key]"))
+        assertFalse(mapped503.contains(secretKey))
+    }
 }

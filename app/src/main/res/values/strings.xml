@@ -17,7 +17,7 @@
     <string name="welcome_pledge_privacy_sub">Your records stay encrypted on your phone. Sign in only when you want cloud sync or shared family care.</string>
 
     <string name="nav_home">Home</string>
-    <string name="nav_water">Hydration</string>
+    <string name="nav_water">Water</string>
     <string name="nav_period">Cycle</string>
     <string name="nav_modules">Modules</string>
     <string name="nav_settings">Privacy</string>

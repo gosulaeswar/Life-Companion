@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
@@ -537,7 +538,14 @@ private fun MainShell(
                                             contentDescription = stringResource(id = tab.labelRes)
                                         )
                                     },
-                                    label = { Text(stringResource(id = tab.labelRes)) },
+                                    label = {
+                                        Text(
+                                            text = stringResource(id = tab.labelRes),
+                                            maxLines = 1,
+                                            softWrap = false,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                    },
                                     colors = NavigationBarItemDefaults.colors(
                                         selectedIconColor = MaterialTheme.colorScheme.primary,
                                         selectedTextColor = MaterialTheme.colorScheme.primary,
@@ -576,7 +584,14 @@ private fun MainShell(
                                         contentDescription = stringResource(id = tab.labelRes)
                                     )
                                 },
-                                label = { Text(stringResource(id = tab.labelRes)) },
+                                label = {
+                                    Text(
+                                        text = stringResource(id = tab.labelRes),
+                                        maxLines = 1,
+                                        softWrap = false,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                },
                                 colors = NavigationRailItemDefaults.colors(
                                     selectedIconColor = MaterialTheme.colorScheme.primary,
                                     selectedTextColor = MaterialTheme.colorScheme.primary,

@@ -201,7 +201,11 @@ fun PersonalAiKeyCard(
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Column {
+                            Column(
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .padding(end = 8.dp)
+                            ) {
                                 Text(
                                     text = "Saved Personal Key (Encrypted)",
                                     style = MaterialTheme.typography.labelSmall,
@@ -213,6 +217,8 @@ fun PersonalAiKeyCard(
                                         fontFamily = FontFamily.Monospace,
                                         fontWeight = FontWeight.SemiBold
                                     ),
+                                    maxLines = 1,
+                                    softWrap = false,
                                     modifier = Modifier.testTag("personal_ai_key_masked_preview")
                                 )
                             }
@@ -220,7 +226,11 @@ fun PersonalAiKeyCard(
                                 onClick = { editorExpanded = !editorExpanded },
                                 modifier = Modifier.testTag("personal_ai_key_replace_toggle")
                             ) {
-                                Text(if (editorExpanded) "Close" else "Replace")
+                                Text(
+                                    text = if (editorExpanded) "Close" else "Replace",
+                                    maxLines = 1,
+                                    softWrap = false
+                                )
                             }
                         }
 
@@ -292,7 +302,7 @@ fun PersonalAiKeyCard(
                     OutlinedTextField(
                         value = draftKey,
                         onValueChange = { draftKey = it },
-                        label = { Text("Gemini API Key (AIza...)") },
+                        label = { Text("Gemini API Key (AIza... or AQ...)") },
                         placeholder = { Text("Paste key from Google AI Studio") },
                         singleLine = true,
                         visualTransformation = if (showPlainDraft) {
@@ -425,7 +435,11 @@ fun PersonalAiKeyCard(
                             modifier = Modifier.weight(1f)
                         )
                         TextButton(onClick = onDismissFeedback) {
-                            Text("OK")
+                            Text(
+                                text = "OK",
+                                maxLines = 1,
+                                softWrap = false
+                            )
                         }
                     }
                 }
