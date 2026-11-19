@@ -91,6 +91,11 @@ fun configureAppCheck(context: Context, intent: Intent?) {
         }
 
         val hasInjectedToken = metaPrefs.getBoolean(META_HAS_INJECTED_TOKEN, false)
+        if (BuildConfig.DEBUG && debugToken.isNullOrEmpty()) {
+            // Ensure a persistent debug secret exists synchronously before installing DebugAppCheckProviderFactory
+            // so sideloaded GitHub debug APKs can display and copy the exact token in AI Diagnostics.
+            ensureDebugSecretPersisted(appContext)
+        }
         val siteKey = resolveRecaptchaSiteKey(appContext)
         val choice = selectAppCheckProviderChoice(
             isDebugBuild = BuildConfig.DEBUG,
@@ -127,6 +132,63 @@ fun configureAppCheck(context: Context, intent: Intent?) {
     } catch (e: Exception) {
         Log.e(TAG, "Failed to initialize Firebase App Check", e)
     }
+}
+
+private fun ensureDebugSecretPersisted(appContext: Context): String? {
+    if (!BuildConfig.DEBUG) return null
+    return runCatching {
+        if (FirebaseApp.getApps(appContext).isEmpty()) {
+            FirebaseApp.initializeApp(appContext) ?: return null
+        }
+        val persistenceKey = FirebaseApp.getInstance().persistenceKey
+        val prefs = appContext.getSharedPreferences(
+            "$DEBUG_STORE_PREFIX$persistenceKey",
+            Context.MODE_PRIVATE
+        )
+        val existing = prefs.getString(DEBUG_SECRET_KEY, null)?.trim()
+        if (!existing.isNullOrEmpty()) {
+            existing
+        } else {
+            val generated = java.util.UUID.randomUUID().toString()
+            // CRITICAL: synchronous commit() before DebugAppCheckProviderFactory reads it.
+            prefs.edit().putString(DEBUG_SECRET_KEY, generated).commit()
+            generated
+        }
+    }.getOrNull()
+}
+
+fun readOrCreateDebugAppCheckToken(context: Context): String? {
+    if (!BuildConfig.DEBUG) return null
+    return ensureDebugSecretPersisted(context.applicationContext ?: context)
+}
+
+fun saveCustomDebugAppCheckToken(context: Context, rawToken: String): Boolean {
+    if (!BuildConfig.DEBUG) return false
+    val cleaned = rawToken.trim()
+    if (cleaned.length < 8) return false
+    return runCatching {
+        val appContext = context.applicationContext ?: context
+        if (FirebaseApp.getApps(appContext).isEmpty()) {
+            FirebaseApp.initializeApp(appContext) ?: return false
+        }
+        val persistenceKey = FirebaseApp.getInstance().persistenceKey
+        val prefs = appContext.getSharedPreferences(
+            "$DEBUG_STORE_PREFIX$persistenceKey",
+            Context.MODE_PRIVATE
+        )
+        val committed = prefs.edit().putString(DEBUG_SECRET_KEY, cleaned).commit()
+        if (committed) {
+            appContext.getSharedPreferences(META_PREFS_NAME, Context.MODE_PRIVATE)
+                .edit()
+                .putBoolean(META_HAS_INJECTED_TOKEN, true)
+                .commit()
+            installedProviderChoice = AppCheckProviderChoice.DEBUG_PROVIDER
+            FirebaseAppCheck.getInstance().installAppCheckProviderFactory(
+                DebugAppCheckProviderFactory.getInstance()
+            )
+        }
+        committed
+    }.getOrDefault(false)
 }
 
 suspend fun verifyAppCheckToken(
@@ -195,13 +257,17 @@ suspend fun verifyAppCheckToken(
 internal fun buildTimeoutDiagnostic(providerLabel: String, timeoutMs: Long): String {
     val secs = (timeoutMs / 1000L).coerceAtLeast(1L)
     return "App Check ($providerLabel) timed out after ${secs}s before reaching Gemini. " +
-        "On GitHub debug APKs, check mobile/Wi-Fi connectivity to Google Play Services & reCAPTCHA Enterprise, " +
-        "or disable VPN/private DNS and tap Run Diagnostics."
+        "Check mobile/Wi-Fi connectivity or disable VPN/private DNS and tap Run Test."
 }
 
 internal fun buildFailureDiagnostic(providerLabel: String, rawError: String): String {
-    return "App Check ($providerLabel) failed: $rawError. " +
-        "Ensure GOOGLE_SERVICES_JSON matches this app package and reCAPTCHA/App Check is active."
+    return if (BuildConfig.DEBUG) {
+        "App Check ($providerLabel) returned: $rawError. " +
+            "For sideloaded Debug APKs when App Check enforcement is on, open AI Assistant -> Diagnostics, copy your Debug Token, and register it in Firebase Console -> App Check -> Apps -> Manage debug tokens."
+    } else {
+        "App Check ($providerLabel) failed: $rawError. " +
+            "Ensure GOOGLE_SERVICES_JSON matches this app package and reCAPTCHA Enterprise App Check is active."
+    }
 }
 
 internal fun selectAppCheckProviderChoice(
@@ -221,9 +287,10 @@ internal fun selectAppCheckProviderChoice(
     if (hasIntentDebugToken) {
         return AppCheckProviderChoice.DEBUG_WITH_INTENT_TOKEN
     }
-    if (!isEmulator && !hasPersistedInjectedToken && hasRecaptchaSiteKey) {
-        return AppCheckProviderChoice.RECAPTCHA_ENTERPRISE
-    }
+    // Always use DebugAppCheckProviderFactory on Debug builds (both emulators and sideloaded physical devices)
+    // so reCAPTCHA Enterprise Play-attestation 403 rejections never block debug builds.
+    @Suppress("UNUSED_EXPRESSION")
+    hasPersistedInjectedToken || isEmulator
     return AppCheckProviderChoice.DEBUG_PROVIDER
 }
 

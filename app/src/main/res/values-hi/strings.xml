@@ -86,4 +86,19 @@
     <string name="subscription_screen_title">लाइफवीव प्लान व बिलिंग</string>
     <string name="subscription_period_always_free">पीरियड व चक्र देखभाल हमेशा 100% निःशुल्क रहेगी — कभी किसी सब्सक्रिप्शन में बंद नहीं होगी।</string>
     <string name="subscription_restore_cta">Google Play खरीदारी पुनर्स्थापित करें</string>
+    <string name="welcome_why_heading">लोग लाइफवीव क्यों इस्तेमाल करते हैं</string>
+    <string name="welcome_pledge_mood_title">📓 मूड जर्नल, दिनचर्या व फैमिली सर्कल</string>
+    <string name="welcome_pledge_mood_sub">अपने मूड को समझें, बिना दबाव के दैनिक आदतें बनाएं और चाहें तो 5 परिवार सदस्यों के साथ देखभाल साझा करें।</string>
+    <string name="auth_privacy_pill">आपका डेटा, आपकी पसंद</string>
+    <string name="auth_screen_title">लाइफवीव में आपका स्वागत है</string>
+    <string name="auth_screen_subtitle">फैमिली सर्कल व सिंक के लिए साइन इन करें, या पूरी तरह ऑफ़लाइन उपयोग करें।</string>
+    <string name="auth_what_is_title">लाइफवीव किस काम आता है?</string>
+    <string name="auth_what_is_body">लाइफवीव एक सरल ऐप में आपके रोज़मर्रा के स्वास्थ्य का ध्यान रखता है—पानी, दवाइयाँ, प्रिस्क्रिप्शन, नींद, मूड, दिनचर्या और 100% निःशुल्क पीरियड ट्रैकर।</string>
+    <string name="auth_choose_login_title">प्रवेश करने का तरीका चुनें</string>
+    <string name="auth_choose_login_sub">फैमिली सर्कल व डिवाइस सिंक के लिए विश्वसनीय खाता जोड़ें, या केवल इसी फ़ोन पर निजी रूप से जारी रखें।</string>
+    <string name="auth_btn_google">Google (Gmail) से जारी रखें</string>
+    <string name="auth_btn_github">GitHub से जारी रखें</string>
+    <string name="auth_btn_microsoft">Microsoft से जारी रखें</string>
+    <string name="auth_btn_continue_offline">इस डिवाइस पर निजी रूप से जारी रखें</string>
+    <string name="auth_continue_to_home">लाइफवीव पर जारी रखें</string>
 </resources>

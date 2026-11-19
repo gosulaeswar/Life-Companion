@@ -107,6 +107,7 @@ data class UiPreferencesState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val language: SupportedLanguage = SupportedLanguage.ENGLISH,
     val welcomeCompleted: Boolean = false,
+    val authGateCompleted: Boolean = false,
     val permissionsSetupCompleted: Boolean = false,
     val waterTone: CategoryToneSetting = CategoryToneSetting(
         bundledToneId = "water_drop",
@@ -141,7 +142,17 @@ data class UiPreferencesState(
     val billingPricingConfigUrl: String = BuildConfig.BILLING_PRICING_CONFIG_URL,
     val cachedSubscriptionTierId: String = SubscriptionTier.FREE.id,
     val cachedSubscriptionExpiresAtEpochMs: Long = 0L,
-    val cachedSubscriptionGraceEndsAtEpochMs: Long = 0L
+    val cachedSubscriptionGraceEndsAtEpochMs: Long = 0L,
+    val autoRefreshEnabled: Boolean = true,
+    val autoRefreshIntervalMinutes: Int = 30,
+    val lastAutoRefreshEpochMs: Long = 0L,
+    val lastAutoRefreshSummary: String = "",
+    val sleepAutoBedtimePromptEnabled: Boolean = false,
+    val sleepBedtimeHour: Int = 22,
+    val sleepBedtimeMinute: Int = 30,
+    val sleepWakeHour: Int = 7,
+    val sleepWakeMinute: Int = 0,
+    val lastBedtimePromptDayKey: String = ""
 )
 
 class LocalPreferencesManager(private val context: Context) {
@@ -150,6 +161,7 @@ class LocalPreferencesManager(private val context: Context) {
         val THEME_MODE = stringPreferencesKey("theme_mode")
         val LANGUAGE_CODE = stringPreferencesKey("language_code")
         val WELCOME_COMPLETED = booleanPreferencesKey("welcome_completed")
+        val AUTH_GATE_COMPLETED = booleanPreferencesKey("auth_gate_completed")
         val PERMISSIONS_SETUP_COMPLETED = booleanPreferencesKey("permissions_setup_completed")
         val DEFAULT_REMINDERS_SEEDED = booleanPreferencesKey("default_reminders_seeded")
 
@@ -195,6 +207,18 @@ class LocalPreferencesManager(private val context: Context) {
         val CACHED_SUBSCRIPTION_TIER_ID = stringPreferencesKey("cached_subscription_tier_id")
         val CACHED_SUBSCRIPTION_EXPIRES_MS = longPreferencesKey("cached_subscription_expires_ms")
         val CACHED_SUBSCRIPTION_GRACE_MS = longPreferencesKey("cached_subscription_grace_ms")
+
+        val AUTO_REFRESH_ENABLED = booleanPreferencesKey("auto_refresh_enabled")
+        val AUTO_REFRESH_INTERVAL_MIN = intPreferencesKey("auto_refresh_interval_min")
+        val LAST_AUTO_REFRESH_EPOCH_MS = longPreferencesKey("last_auto_refresh_epoch_ms")
+        val LAST_AUTO_REFRESH_SUMMARY = stringPreferencesKey("last_auto_refresh_summary")
+
+        val SLEEP_AUTO_BEDTIME_PROMPT = booleanPreferencesKey("sleep_auto_bedtime_prompt")
+        val SLEEP_BEDTIME_HOUR = intPreferencesKey("sleep_bedtime_hour")
+        val SLEEP_BEDTIME_MINUTE = intPreferencesKey("sleep_bedtime_minute")
+        val SLEEP_WAKE_HOUR = intPreferencesKey("sleep_wake_hour")
+        val SLEEP_WAKE_MINUTE = intPreferencesKey("sleep_wake_minute")
+        val LAST_BEDTIME_PROMPT_DAY_KEY = stringPreferencesKey("last_bedtime_prompt_day_key")
     }
 
     val preferencesFlow: Flow<UiPreferencesState> = context.lifeCompanionPrefsDataStore.data.map { prefs ->
@@ -230,6 +254,7 @@ class LocalPreferencesManager(private val context: Context) {
             language = SupportedLanguage.entries.firstOrNull { it.code == langCode }
                 ?: SupportedLanguage.ENGLISH,
             welcomeCompleted = prefs[Keys.WELCOME_COMPLETED] ?: false,
+            authGateCompleted = prefs[Keys.AUTH_GATE_COMPLETED] ?: false,
             permissionsSetupCompleted = prefs[Keys.PERMISSIONS_SETUP_COMPLETED] ?: false,
             waterTone = readCategory("water", "water_drop", 10, 0),
             periodTone = readCategory("period", "period_chime", 8, 30),
@@ -267,7 +292,17 @@ class LocalPreferencesManager(private val context: Context) {
                 ?: BuildConfig.BILLING_PRICING_CONFIG_URL,
             cachedSubscriptionTierId = prefs[Keys.CACHED_SUBSCRIPTION_TIER_ID] ?: SubscriptionTier.FREE.id,
             cachedSubscriptionExpiresAtEpochMs = prefs[Keys.CACHED_SUBSCRIPTION_EXPIRES_MS] ?: 0L,
-            cachedSubscriptionGraceEndsAtEpochMs = prefs[Keys.CACHED_SUBSCRIPTION_GRACE_MS] ?: 0L
+            cachedSubscriptionGraceEndsAtEpochMs = prefs[Keys.CACHED_SUBSCRIPTION_GRACE_MS] ?: 0L,
+            autoRefreshEnabled = prefs[Keys.AUTO_REFRESH_ENABLED] ?: true,
+            autoRefreshIntervalMinutes = (prefs[Keys.AUTO_REFRESH_INTERVAL_MIN] ?: 30).coerceIn(15, 240),
+            lastAutoRefreshEpochMs = prefs[Keys.LAST_AUTO_REFRESH_EPOCH_MS] ?: 0L,
+            lastAutoRefreshSummary = prefs[Keys.LAST_AUTO_REFRESH_SUMMARY] ?: "",
+            sleepAutoBedtimePromptEnabled = prefs[Keys.SLEEP_AUTO_BEDTIME_PROMPT] ?: false,
+            sleepBedtimeHour = (prefs[Keys.SLEEP_BEDTIME_HOUR] ?: 22).coerceIn(0, 23),
+            sleepBedtimeMinute = (prefs[Keys.SLEEP_BEDTIME_MINUTE] ?: 30).coerceIn(0, 59),
+            sleepWakeHour = (prefs[Keys.SLEEP_WAKE_HOUR] ?: 7).coerceIn(0, 23),
+            sleepWakeMinute = (prefs[Keys.SLEEP_WAKE_MINUTE] ?: 0).coerceIn(0, 59),
+            lastBedtimePromptDayKey = prefs[Keys.LAST_BEDTIME_PROMPT_DAY_KEY] ?: ""
         )
     }
 
@@ -281,6 +316,10 @@ class LocalPreferencesManager(private val context: Context) {
 
     suspend fun setWelcomeCompleted(completed: Boolean) {
         context.lifeCompanionPrefsDataStore.edit { it[Keys.WELCOME_COMPLETED] = completed }
+    }
+
+    suspend fun setAuthGateCompleted(completed: Boolean) {
+        context.lifeCompanionPrefsDataStore.edit { it[Keys.AUTH_GATE_COMPLETED] = completed }
     }
 
     suspend fun setPermissionsSetupCompleted(completed: Boolean) {
@@ -492,6 +531,90 @@ class LocalPreferencesManager(private val context: Context) {
             val pUrl = pricingConfigUrl.trim()
             if (vUrl.isEmpty()) prefs.remove(Keys.BILLING_VERIFICATION_URL) else prefs[Keys.BILLING_VERIFICATION_URL] = vUrl
             if (pUrl.isEmpty()) prefs.remove(Keys.BILLING_PRICING_CONFIG_URL) else prefs[Keys.BILLING_PRICING_CONFIG_URL] = pUrl
+        }
+    }
+
+    suspend fun setAutoRefreshSettings(enabled: Boolean, intervalMinutes: Int) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.AUTO_REFRESH_ENABLED] = enabled
+            prefs[Keys.AUTO_REFRESH_INTERVAL_MIN] = intervalMinutes.coerceIn(15, 240)
+        }
+    }
+
+    suspend fun recordAutoRefreshCompleted(epochMs: Long, summary: String) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.LAST_AUTO_REFRESH_EPOCH_MS] = epochMs
+            prefs[Keys.LAST_AUTO_REFRESH_SUMMARY] = summary.take(220)
+        }
+    }
+
+    suspend fun setSleepAutoSchedule(
+        enabled: Boolean,
+        bedtimeHour: Int,
+        bedtimeMinute: Int,
+        wakeHour: Int,
+        wakeMinute: Int
+    ) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.SLEEP_AUTO_BEDTIME_PROMPT] = enabled
+            prefs[Keys.SLEEP_BEDTIME_HOUR] = bedtimeHour.coerceIn(0, 23)
+            prefs[Keys.SLEEP_BEDTIME_MINUTE] = bedtimeMinute.coerceIn(0, 59)
+            prefs[Keys.SLEEP_WAKE_HOUR] = wakeHour.coerceIn(0, 23)
+            prefs[Keys.SLEEP_WAKE_MINUTE] = wakeMinute.coerceIn(0, 59)
+        }
+    }
+
+    suspend fun recordBedtimePromptShown(dayKey: String) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.LAST_BEDTIME_PROMPT_DAY_KEY] = dayKey
+        }
+    }
+
+    suspend fun applyOnboardingPreferences(
+        themeMode: ThemeMode,
+        waterRemindersEnabled: Boolean,
+        waterReminderIntervalMinutes: Int,
+        wellnessRemindersEnabled: Boolean,
+        cycleRemindersEnabled: Boolean,
+        wellbeingOveruseAlertsEnabled: Boolean,
+        sleepBedtimePromptEnabled: Boolean,
+        autoRefreshEnabled: Boolean,
+        autoRefreshIntervalMinutes: Int
+    ) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.THEME_MODE] = themeMode.name
+
+            prefs[Keys.reminderEnabled("water")] = waterRemindersEnabled
+            prefs[Keys.reminderHour("water")] = 10
+            prefs[Keys.reminderMinute("water")] = 0
+            prefs[Keys.reminderIntervalMin("water")] = waterReminderIntervalMinutes.coerceIn(5, 10_080)
+
+            prefs[Keys.reminderEnabled("wellness")] = wellnessRemindersEnabled
+            prefs[Keys.reminderHour("wellness")] = 20
+            prefs[Keys.reminderMinute("wellness")] = 0
+            prefs[Keys.reminderIntervalMin("wellness")] = 1440
+
+            prefs[Keys.reminderEnabled("period")] = cycleRemindersEnabled
+            prefs[Keys.reminderHour("period")] = 8
+            prefs[Keys.reminderMinute("period")] = 30
+            prefs[Keys.reminderIntervalMin("period")] = 1440
+
+            prefs[Keys.WELLBEING_ALERTS_ENABLED] = wellbeingOveruseAlertsEnabled
+            prefs[Keys.WELLBEING_WARNING_PERCENT] = 80
+
+            prefs[Keys.SLEEP_AUTO_BEDTIME_PROMPT] = sleepBedtimePromptEnabled
+            prefs[Keys.SLEEP_BEDTIME_HOUR] = 22
+            prefs[Keys.SLEEP_BEDTIME_MINUTE] = 30
+            prefs[Keys.SLEEP_WAKE_HOUR] = 7
+            prefs[Keys.SLEEP_WAKE_MINUTE] = 0
+
+            prefs[Keys.AUTO_REFRESH_ENABLED] = autoRefreshEnabled
+            prefs[Keys.AUTO_REFRESH_INTERVAL_MIN] = autoRefreshIntervalMinutes.coerceIn(15, 240)
+
+            prefs[Keys.WELCOME_COMPLETED] = true
+            prefs[Keys.AUTH_GATE_COMPLETED] = true
+            prefs[Keys.PERMISSIONS_SETUP_COMPLETED] = true
+            prefs[Keys.DEFAULT_REMINDERS_SEEDED] = true
         }
     }
 

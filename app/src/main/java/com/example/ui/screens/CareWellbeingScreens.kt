@@ -335,6 +335,27 @@ fun DigitalWellbeingScreen(
             }
         }
 
+        // Automatic App, Digital Wellbeing & All-Modules Refresh Control Card
+        item {
+            com.example.ui.components.AutoRefreshControlCard(
+                autoRefreshEnabled = uiState.autoRefreshEnabled,
+                intervalMinutes = uiState.autoRefreshIntervalMinutes,
+                isRefreshing = uiState.isAutoRefreshingAll,
+                lastRefreshedEpochMs = uiState.lastAutoRefreshEpochMs,
+                lastSummary = uiState.lastAutoRefreshSummary,
+                onToggleAutoRefresh = viewModel::setAutoRefreshEnabled,
+                onSelectIntervalMinutes = viewModel::setAutoRefreshIntervalMinutes,
+                onRefreshAllNow = {
+                    viewModel.triggerAutoRefresh(
+                        force = true,
+                        reason = "wellbeing_manual",
+                        includePastWeek = true
+                    )
+                },
+                compact = false
+            )
+        }
+
         // Overuse Alert Banner Card
         if (overuseAlert != null) {
             item {

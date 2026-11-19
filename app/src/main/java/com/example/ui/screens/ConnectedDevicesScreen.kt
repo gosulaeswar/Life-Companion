@@ -167,6 +167,27 @@ fun ConnectedDevicesScreen(
             }
         }
 
+        // Automatic Fitness Devices & All-Modules Refresh Card
+        item {
+            com.example.ui.components.AutoRefreshControlCard(
+                autoRefreshEnabled = uiState.autoRefreshEnabled,
+                intervalMinutes = uiState.autoRefreshIntervalMinutes,
+                isRefreshing = uiState.isAutoRefreshingAll,
+                lastRefreshedEpochMs = uiState.lastAutoRefreshEpochMs,
+                lastSummary = uiState.lastAutoRefreshSummary,
+                onToggleAutoRefresh = viewModel::setAutoRefreshEnabled,
+                onSelectIntervalMinutes = viewModel::setAutoRefreshIntervalMinutes,
+                onRefreshAllNow = {
+                    viewModel.triggerAutoRefresh(
+                        force = true,
+                        reason = "connected_devices_manual",
+                        includePastWeek = false
+                    )
+                },
+                compact = false
+            )
+        }
+
         // Health Connect Live Integration Card (Fitbit, Google Fit, Samsung Health, Garmin, Oura, Strava)
         item {
             Card(

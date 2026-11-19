@@ -663,6 +663,16 @@ class PrivacyBackupRepository(
                                 put("wakeEpochMs", s.wakeEpochMs)
                                 put("qualityRating", s.qualityRating)
                                 put("notes", s.notes)
+                                put("sleepQualityScore", s.sleepQualityScore)
+                                put("snoreEventsCount", s.snoreEventsCount)
+                                put("snoreDurationMinutes", s.snoreDurationMinutes)
+                                put("peakSnoreDb", s.peakSnoreDb)
+                                put("avgAmbientDb", s.avgAmbientDb)
+                                put("restlessnessIndex", s.restlessnessIndex)
+                                put("awakeInterruptionsCount", s.awakeInterruptionsCount)
+                                put("deepSleepMinutes", s.deepSleepMinutes)
+                                put("lightSleepMinutes", s.lightSleepMinutes)
+                                put("trackingSource", s.trackingSource)
                             }
                         )
                     }
@@ -1441,7 +1451,17 @@ class PrivacyBackupRepository(
                             bedtimeEpochMs = s.optLong("bedtimeEpochMs"),
                             wakeEpochMs = s.optLong("wakeEpochMs"),
                             qualityRating = s.optInt("qualityRating", 3).coerceIn(1, 5),
-                            notes = s.optString("notes", "")
+                            notes = s.optString("notes", ""),
+                            sleepQualityScore = s.optInt("sleepQualityScore", 0).coerceIn(0, 100),
+                            snoreEventsCount = s.optInt("snoreEventsCount", 0).coerceAtLeast(0),
+                            snoreDurationMinutes = s.optInt("snoreDurationMinutes", 0).coerceAtLeast(0),
+                            peakSnoreDb = s.optDouble("peakSnoreDb", 0.0),
+                            avgAmbientDb = s.optDouble("avgAmbientDb", 0.0),
+                            restlessnessIndex = s.optInt("restlessnessIndex", 0).coerceIn(0, 100),
+                            awakeInterruptionsCount = s.optInt("awakeInterruptionsCount", 0).coerceAtLeast(0),
+                            deepSleepMinutes = s.optInt("deepSleepMinutes", 0).coerceAtLeast(0),
+                            lightSleepMinutes = s.optInt("lightSleepMinutes", 0).coerceAtLeast(0),
+                            trackingSource = s.optString("trackingSource", "Manual").ifBlank { "Manual" }
                         )
                     )
                     totalRestored++

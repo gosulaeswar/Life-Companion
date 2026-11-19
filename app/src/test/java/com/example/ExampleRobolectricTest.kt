@@ -37,7 +37,9 @@ import com.example.ai.configureAppCheck
 import com.example.ai.buildFailureDiagnostic
 import com.example.ai.buildTimeoutDiagnostic
 import com.example.ai.currentAppCheckProviderChoice
+import com.example.ai.readOrCreateDebugAppCheckToken
 import com.example.ai.resolveRecaptchaSiteKey
+import com.example.ai.saveCustomDebugAppCheckToken
 import com.example.ai.selectAppCheckProviderChoice
 import com.google.firebase.FirebaseApp
 import com.example.healthsync.AppleAndFileFitnessImporter
@@ -791,13 +793,13 @@ class ExampleRobolectricTest {
     }
 
     @Test
-    fun `app check provider uses recaptcha on physical devices without injected debug token and honors intent extra`() {
+    fun `app check provider uses debug provider on debug builds and recaptcha on release builds`() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val siteKey = resolveRecaptchaSiteKey(context)
         assertTrue(!siteKey.isNullOrBlank())
 
         assertEquals(
-            AppCheckProviderChoice.RECAPTCHA_ENTERPRISE,
+            AppCheckProviderChoice.DEBUG_PROVIDER,
             selectAppCheckProviderChoice(
                 isDebugBuild = true,
                 hasIntentDebugToken = false,
@@ -885,5 +887,22 @@ class ExampleRobolectricTest {
         val failureMsg = buildFailureDiagnostic("Debug Provider", "403 Attestation Failed")
         assertTrue(failureMsg.contains("Debug Provider"))
         assertTrue(failureMsg.contains("403 Attestation Failed"))
+
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val generated = readOrCreateDebugAppCheckToken(context)
+        assertTrue(!generated.isNullOrBlank())
+        val customToken = "11111111-2222-3333-4444-555555555555"
+        assertTrue(saveCustomDebugAppCheckToken(context, customToken))
+        assertEquals(customToken, readOrCreateDebugAppCheckToken(context))
+    }
+
+    @Test
+    fun `authGateCompleted preference toggles cleanly`() = runTest {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val prefs = com.example.security.LocalPreferencesManager(context)
+        prefs.resetAll()
+        assertFalse(prefs.preferencesFlow.first().authGateCompleted)
+        prefs.setAuthGateCompleted(true)
+        assertTrue(prefs.preferencesFlow.first().authGateCompleted)
     }
 }

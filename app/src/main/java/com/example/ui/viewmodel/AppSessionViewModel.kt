@@ -17,7 +17,9 @@ import kotlinx.coroutines.launch
 
 sealed interface AppLaunchDestination {
     data object Loading : AppLaunchDestination
+    data object Onboarding : AppLaunchDestination
     data object Welcome : AppLaunchDestination
+    data object SignIn : AppLaunchDestination
     data object PermissionsSetup : AppLaunchDestination
     data object ProfileSetup : AppLaunchDestination
     data object Dashboard : AppLaunchDestination
@@ -46,10 +48,9 @@ class AppSessionViewModel(
         preferencesManager.preferencesFlow
     ) { profile, prefs ->
         val destination = when {
-            profile != null -> AppLaunchDestination.Dashboard
-            !prefs.welcomeCompleted -> AppLaunchDestination.Welcome
-            !prefs.permissionsSetupCompleted -> AppLaunchDestination.PermissionsSetup
-            else -> AppLaunchDestination.ProfileSetup
+            profile == null -> AppLaunchDestination.Onboarding
+            !prefs.authGateCompleted -> AppLaunchDestination.SignIn
+            else -> AppLaunchDestination.Dashboard
         }
         AppSessionUiState(
             launchDestination = destination,
@@ -65,6 +66,24 @@ class AppSessionViewModel(
     fun completeWelcome() {
         viewModelScope.launch {
             preferencesManager.setWelcomeCompleted(true)
+        }
+    }
+
+    fun reopenWelcome() {
+        viewModelScope.launch {
+            preferencesManager.setWelcomeCompleted(false)
+        }
+    }
+
+    fun completeAuthGate() {
+        viewModelScope.launch {
+            preferencesManager.setAuthGateCompleted(true)
+        }
+    }
+
+    fun reopenAuthGate() {
+        viewModelScope.launch {
+            preferencesManager.setAuthGateCompleted(false)
         }
     }
 

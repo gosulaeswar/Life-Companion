@@ -90,7 +90,7 @@ import kotlinx.coroutines.launch
         SubscriptionEntitlementEntity::class,
         ConfigurablePricingPlanEntity::class
     ],
-    version = 12,
+    version = 13,
     exportSchema = true
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -580,6 +580,55 @@ abstract class AppDatabase : RoomDatabase() {
             }
         }
 
+        val MIGRATION_12_13 = object : Migration(12, 13) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    """
+                    CREATE TABLE IF NOT EXISTS sleep_records (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL,
+                        profileId INTEGER NOT NULL,
+                        bedtimeEpochMs INTEGER NOT NULL,
+                        wakeEpochMs INTEGER NOT NULL,
+                        qualityRating INTEGER NOT NULL,
+                        notes TEXT NOT NULL,
+                        FOREIGN KEY(profileId) REFERENCES user_profiles(id) ON UPDATE NO ACTION ON DELETE CASCADE
+                    )
+                    """.trimIndent()
+                )
+                db.execSQL("CREATE INDEX IF NOT EXISTS index_sleep_records_profileId ON sleep_records(profileId)")
+
+                val existingColumns = mutableSetOf<String>()
+                val cursor = db.query("PRAGMA table_info(sleep_records)")
+                try {
+                    val nameIdx = cursor.getColumnIndex("name")
+                    while (cursor.moveToNext()) {
+                        if (nameIdx >= 0) {
+                            existingColumns += cursor.getString(nameIdx)
+                        }
+                    }
+                } finally {
+                    cursor.close()
+                }
+
+                fun addColIfMissing(colName: String, definition: String) {
+                    if (colName !in existingColumns) {
+                        db.execSQL("ALTER TABLE sleep_records ADD COLUMN $colName $definition")
+                    }
+                }
+
+                addColIfMissing("sleepQualityScore", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("snoreEventsCount", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("snoreDurationMinutes", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("peakSnoreDb", "REAL NOT NULL DEFAULT 0.0")
+                addColIfMissing("avgAmbientDb", "REAL NOT NULL DEFAULT 0.0")
+                addColIfMissing("restlessnessIndex", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("awakeInterruptionsCount", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("deepSleepMinutes", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("lightSleepMinutes", "INTEGER NOT NULL DEFAULT 0")
+                addColIfMissing("trackingSource", "TEXT NOT NULL DEFAULT 'Manual'")
+            }
+        }
+
         val ALL_MIGRATIONS: Array<Migration> = arrayOf(
             MIGRATION_1_2,
             MIGRATION_2_3,
@@ -591,7 +640,8 @@ abstract class AppDatabase : RoomDatabase() {
             MIGRATION_8_9,
             MIGRATION_9_10,
             MIGRATION_10_11,
-            MIGRATION_11_12
+            MIGRATION_11_12,
+            MIGRATION_12_13
         )
 
         @Volatile

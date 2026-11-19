@@ -5,6 +5,12 @@ import android.content.pm.PackageManager
 import android.os.Build
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -42,10 +48,9 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -84,8 +89,10 @@ import com.example.ui.screens.MedicalCareScreen
 import com.example.ui.screens.ModuleSubRoutes
 import com.example.ui.screens.ModulesHubScreen
 import com.example.ui.screens.OnDeviceAiScreen
+import com.example.ui.screens.OnboardingFlowScreen
 import com.example.ui.screens.PeriodTrackerScreen
-import com.example.ui.screens.PermissionsSetupScreen
+import com.example.ui.screens.PermissionsPopupDialog
+import com.example.ui.screens.PreHomeAuthScreen
 import com.example.ui.screens.ProfileSetupScreen
 import com.example.ui.screens.ReportsAnalyticsScreen
 import com.example.ui.screens.RoutineMoodScreen
@@ -138,72 +145,158 @@ fun LifeCompanionApp(container: AppContainer) {
 
     ProvideLocalizedLocale(language = sessionState.preferences.language) {
         LifeCompanionTheme(themeMode = sessionState.preferences.themeMode) {
-            when (sessionState.launchDestination) {
-            AppLaunchDestination.Loading -> {
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .background(MaterialTheme.colorScheme.background),
-                    contentAlignment = Alignment.Center
-                ) {
-                    CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
-                }
-            }
+            AnimatedContent(
+                targetState = sessionState.launchDestination,
+                transitionSpec = {
+                    (fadeIn(animationSpec = tween(340)) + scaleIn(initialScale = 0.985f, animationSpec = tween(340))) togetherWith
+                        fadeOut(animationSpec = tween(220))
+                },
+                label = "app_launch_transition"
+            ) { destination ->
+                when (destination) {
+                    AppLaunchDestination.Loading -> {
+                        Box(
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .background(MaterialTheme.colorScheme.background),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                        }
+                    }
 
-            AppLaunchDestination.Welcome -> {
-                WelcomeScreen(
-                    selectedLanguage = sessionState.preferences.language,
-                    onSelectLanguage = sessionViewModel::setLanguage,
-                    onGetStarted = sessionViewModel::completeWelcome
-                )
-            }
-
-            AppLaunchDestination.PermissionsSetup -> {
-                PermissionsSetupScreen(
-                    alertSoundManager = container.alertSoundManager,
-                    deviceWellbeingManager = container.deviceWellbeingManager,
-                    onContinueToLogin = sessionViewModel::completePermissionsSetup
-                )
-            }
-
-            AppLaunchDestination.ProfileSetup -> {
-                val profileViewModel: ProfileSetupViewModel = viewModel(
-                    factory = SimpleViewModelFactory {
-                        ProfileSetupViewModel(
-                            userProfileRepository = container.userProfileRepository,
-                            moduleRepository = container.moduleRepository,
-                            preferencesManager = container.preferencesManager,
+                    AppLaunchDestination.Onboarding -> {
+                        val profileViewModel: ProfileSetupViewModel = viewModel(
+                            factory = SimpleViewModelFactory {
+                                ProfileSetupViewModel(
+                                    userProfileRepository = container.userProfileRepository,
+                                    moduleRepository = container.moduleRepository,
+                                    preferencesManager = container.preferencesManager,
+                                    alertSoundManager = container.alertSoundManager,
+                                    database = container.database
+                                )
+                            }
+                        )
+                        val formState by profileViewModel.formState.collectAsStateWithLifecycle()
+                        val signedInUser = runCatching { container.googleAuthManager.currentUserSnapshot() }.getOrNull()
+                        OnboardingFlowScreen(
+                            selectedLanguage = sessionState.preferences.language,
+                            selectedThemeMode = sessionState.preferences.themeMode,
+                            signedInUser = signedInUser,
+                            formState = formState,
+                            profileViewModel = profileViewModel,
                             alertSoundManager = container.alertSoundManager,
-                            database = container.database
+                            deviceWellbeingManager = container.deviceWellbeingManager,
+                            onSelectLanguage = sessionViewModel::setLanguage,
+                            onSelectThemeMode = sessionViewModel::setThemeMode,
+                            onSignInWithGoogle = { activityCtx ->
+                                runCatching { container.googleAuthManager.signInWithGoogleInteractive(activityCtx) }
+                                    .getOrElse { Result.failure(IllegalStateException("Firebase Auth is not initialized in this build. You can continue privately offline.")) }
+                            },
+                            onSignInWithGitHub = { activity ->
+                                runCatching { container.googleAuthManager.signInWithGitHub(activity) }
+                                    .getOrElse { Result.failure(IllegalStateException("Firebase Auth is not initialized in this build. You can continue privately offline.")) }
+                            },
+                            onSignInWithMicrosoft = { activity ->
+                                runCatching { container.googleAuthManager.signInWithMicrosoft(activity) }
+                                    .getOrElse { Result.failure(IllegalStateException("Firebase Auth is not initialized in this build. You can continue privately offline.")) }
+                            },
+                            onFetchSignedInDisplayName = {
+                                runCatching { container.googleAuthManager.currentUserSnapshot()?.displayName }.getOrNull()
+                            }
                         )
                     }
-                )
-                val formState by profileViewModel.formState.collectAsStateWithLifecycle()
-                ProfileSetupScreen(
-                    formState = formState,
-                    viewModel = profileViewModel,
-                    canNavigateBack = false,
-                    onBack = {},
-                    onSaved = {}
-                )
-            }
 
-            AppLaunchDestination.Dashboard -> {
-                MainShell(
-                    container = container,
-                    cycleTabVisible = sessionState.activeProfile?.cycleTrackingEnabled ?: true,
-                    waterToneLabel = container.alertSoundManager.describeCurrentTone(
-                        AlertCategory.WATER,
-                        sessionState.preferences.waterTone
-                    ),
-                    periodToneLabel = container.alertSoundManager.describeCurrentTone(
-                        AlertCategory.PERIOD,
-                        sessionState.preferences.periodTone
-                    )
-                )
+                    AppLaunchDestination.Welcome -> {
+                        WelcomeScreen(
+                            selectedLanguage = sessionState.preferences.language,
+                            onSelectLanguage = sessionViewModel::setLanguage,
+                            onGetStarted = sessionViewModel::completeWelcome
+                        )
+                    }
+
+                    AppLaunchDestination.SignIn -> {
+                        val signedInUser = runCatching { container.googleAuthManager.currentUserSnapshot() }.getOrNull()
+                        PreHomeAuthScreen(
+                            signedInUser = signedInUser,
+                            canGoBackToWelcome = sessionState.activeProfile == null,
+                            onBackToWelcome = sessionViewModel::reopenWelcome,
+                            onSignInWithGoogle = { activityCtx ->
+                                runCatching { container.googleAuthManager.signInWithGoogleInteractive(activityCtx) }
+                                    .getOrElse { Result.failure(IllegalStateException("Firebase Auth is not initialized in this build. You can continue privately offline.")) }
+                            },
+                            onSignInWithGitHub = { activity ->
+                                runCatching { container.googleAuthManager.signInWithGitHub(activity) }
+                                    .getOrElse { Result.failure(IllegalStateException("Firebase Auth is not initialized in this build. You can continue privately offline.")) }
+                            },
+                            onSignInWithMicrosoft = { activity ->
+                                runCatching { container.googleAuthManager.signInWithMicrosoft(activity) }
+                                    .getOrElse { Result.failure(IllegalStateException("Firebase Auth is not initialized in this build. You can continue privately offline.")) }
+                            },
+                            onContinueToApp = sessionViewModel::completeAuthGate
+                        )
+                    }
+
+                    AppLaunchDestination.PermissionsSetup,
+                    AppLaunchDestination.ProfileSetup -> {
+                        val profileViewModel: ProfileSetupViewModel = viewModel(
+                            factory = SimpleViewModelFactory {
+                                ProfileSetupViewModel(
+                                    userProfileRepository = container.userProfileRepository,
+                                    moduleRepository = container.moduleRepository,
+                                    preferencesManager = container.preferencesManager,
+                                    alertSoundManager = container.alertSoundManager,
+                                    database = container.database
+                                )
+                            }
+                        )
+                        LaunchedEffect(Unit) {
+                            val signedInName = runCatching {
+                                container.googleAuthManager.currentUserSnapshot()?.displayName
+                            }.getOrNull()
+                            profileViewModel.prefillNameIfBlank(signedInName)
+                        }
+                        val formState by profileViewModel.formState.collectAsStateWithLifecycle()
+                        ProfileSetupScreen(
+                            formState = formState,
+                            viewModel = profileViewModel,
+                            canNavigateBack = false,
+                            onBack = {},
+                            onSaved = {}
+                        )
+                        if (!sessionState.preferences.permissionsSetupCompleted) {
+                            PermissionsPopupDialog(
+                                alertSoundManager = container.alertSoundManager,
+                                deviceWellbeingManager = container.deviceWellbeingManager,
+                                onDismissComplete = sessionViewModel::completePermissionsSetup
+                            )
+                        }
+                    }
+
+                    AppLaunchDestination.Dashboard -> {
+                        MainShell(
+                            container = container,
+                            cycleTabVisible = sessionState.activeProfile?.cycleTrackingEnabled ?: true,
+                            waterToneLabel = container.alertSoundManager.describeCurrentTone(
+                                AlertCategory.WATER,
+                                sessionState.preferences.waterTone
+                            ),
+                            periodToneLabel = container.alertSoundManager.describeCurrentTone(
+                                AlertCategory.PERIOD,
+                                sessionState.preferences.periodTone
+                            )
+                        )
+                        if (!sessionState.preferences.permissionsSetupCompleted) {
+                            PermissionsPopupDialog(
+                                alertSoundManager = container.alertSoundManager,
+                                deviceWellbeingManager = container.deviceWellbeingManager,
+                                onDismissComplete = sessionViewModel::completePermissionsSetup
+                            )
+                        }
+                    }
+                }
             }
         }
-    }
     }
 }
 
@@ -236,7 +329,8 @@ private fun MainShell(
                 preferencesManager = container.preferencesManager,
                 customAlarmRepository = container.customAlarmRepository,
                 healthVaultRepository = container.healthVaultRepository,
-                routineMoodRepository = container.routineMoodRepository
+                routineMoodRepository = container.routineMoodRepository,
+                appAutoRefreshManager = container.appAutoRefreshManager
             )
         }
     )
@@ -285,18 +379,35 @@ private fun MainShell(
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
-    val shellScope = rememberCoroutineScope()
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
-                modulesHubViewModel.refreshWellbeingFromDevice(includePastWeek = false)
-                shellScope.launch {
-                    runCatching { container.subscriptionRepository.checkAndEnforceExpiry() }
-                }
+                modulesHubViewModel.triggerAutoRefresh(
+                    force = false,
+                    reason = "app_resume",
+                    includePastWeek = false
+                )
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    // Active-session periodic foreground auto-refresh while the app remains open
+    LaunchedEffect(
+        modulesHubState.autoRefreshEnabled,
+        modulesHubState.autoRefreshIntervalMinutes
+    ) {
+        if (!modulesHubState.autoRefreshEnabled) return@LaunchedEffect
+        val foregroundIntervalMs = (modulesHubState.autoRefreshIntervalMinutes.coerceIn(15, 240) * 60_000L)
+        while (true) {
+            delay(foregroundIntervalMs)
+            modulesHubViewModel.triggerAutoRefresh(
+                force = false,
+                reason = "foreground_timer",
+                includePastWeek = false
+            )
+        }
     }
 
     val tabs = buildList {
@@ -549,6 +660,15 @@ private fun MainShell(
                             },
                             onOpenSubscription = {
                                 navController.navigate(LifeWeaveDest.Subscription)
+                            },
+                            onToggleAutoRefresh = modulesHubViewModel::setAutoRefreshEnabled,
+                            onSelectAutoRefreshInterval = modulesHubViewModel::setAutoRefreshIntervalMinutes,
+                            onRefreshAllNow = {
+                                modulesHubViewModel.triggerAutoRefresh(
+                                    force = true,
+                                    reason = "home_manual",
+                                    includePastWeek = true
+                                )
                             }
                         )
                     }

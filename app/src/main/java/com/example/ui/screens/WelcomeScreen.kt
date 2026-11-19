@@ -24,6 +24,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowForward
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.FavoriteBorder
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.Shield
@@ -137,12 +138,18 @@ fun WelcomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
 
-                // Three Privacy & Feature Highlights
+                Text(
+                    text = stringResource(id = R.string.welcome_why_heading),
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+
+                // Four Simple Everyday Benefits explaining What & Why
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     PledgeCard(
-                        icon = Icons.Rounded.Shield,
-                        title = stringResource(id = R.string.welcome_pledge_privacy_title),
-                        subtitle = stringResource(id = R.string.welcome_pledge_privacy_sub)
+                        icon = Icons.Rounded.NotificationsActive,
+                        title = stringResource(id = R.string.welcome_pledge_alerts_title),
+                        subtitle = stringResource(id = R.string.welcome_pledge_alerts_sub)
                     )
                     PledgeCard(
                         icon = Icons.Rounded.FavoriteBorder,
@@ -150,9 +157,14 @@ fun WelcomeScreen(
                         subtitle = stringResource(id = R.string.welcome_pledge_cycle_sub)
                     )
                     PledgeCard(
-                        icon = Icons.Rounded.NotificationsActive,
-                        title = stringResource(id = R.string.welcome_pledge_alerts_title),
-                        subtitle = stringResource(id = R.string.welcome_pledge_alerts_sub)
+                        icon = Icons.Rounded.AutoAwesome,
+                        title = stringResource(id = R.string.welcome_pledge_mood_title),
+                        subtitle = stringResource(id = R.string.welcome_pledge_mood_sub)
+                    )
+                    PledgeCard(
+                        icon = Icons.Rounded.Shield,
+                        title = stringResource(id = R.string.welcome_pledge_privacy_title),
+                        subtitle = stringResource(id = R.string.welcome_pledge_privacy_sub)
                     )
                 }
 

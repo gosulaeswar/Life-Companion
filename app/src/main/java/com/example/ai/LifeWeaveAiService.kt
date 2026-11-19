@@ -110,6 +110,35 @@ class LifeWeaveAiService(context: Context? = null) {
         return FirebaseApp.getApps(ctx).isNotEmpty()
     }
 
+    private suspend fun probeAppCheckNonBlocking(): Pair<Boolean, String?> {
+        val ctx = appContext ?: return false to null
+        return when (val check = verifyAppCheckToken(ctx, timeoutMs = 8_000L)) {
+            is AppCheckVerificationResult.Success -> true to null
+            is AppCheckVerificationResult.Timeout -> {
+                Log.w(TAG, "App Check pre-flight timed out; proceeding to Firebase AI call: ${check.diagnosticMessage}")
+                false to check.diagnosticMessage
+            }
+            is AppCheckVerificationResult.Failure -> {
+                Log.w(TAG, "App Check pre-flight returned warning; proceeding to Firebase AI call: ${check.diagnosticMessage}")
+                false to check.diagnosticMessage
+            }
+        }
+    }
+
+    private fun enrichAiFailure(e: Exception, appCheckHint: String?): Exception {
+        val raw = e.localizedMessage?.trim().orEmpty().ifEmpty { e.javaClass.simpleName }
+        return if (!appCheckHint.isNullOrBlank() &&
+            (raw.contains("403", ignoreCase = true) ||
+                raw.contains("app check", ignoreCase = true) ||
+                raw.contains("attestation", ignoreCase = true) ||
+                raw.contains("unauthorized", ignoreCase = true))
+        ) {
+            IllegalStateException("$raw — $appCheckHint", e)
+        } else {
+            e
+        }
+    }
+
     private val assistantSchema = Schema.obj(
         properties = mapOf(
             "assistantReply" to Schema.string(
@@ -321,6 +350,7 @@ class LifeWeaveAiService(context: Context? = null) {
         onPartialPreview: (String) -> Unit = {}
     ): Result<AiAssistantOutcome> {
         var appCheckPassed = false
+        var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
         return try {
             onStageUpdate("Checking Firebase & App Check...")
@@ -334,17 +364,9 @@ class LifeWeaveAiService(context: Context? = null) {
             }
 
             if (appContext != null) {
-                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
-                    is AppCheckVerificationResult.Success -> {
-                        appCheckPassed = true
-                    }
-                    is AppCheckVerificationResult.Timeout -> {
-                        return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    }
-                    is AppCheckVerificationResult.Failure -> {
-                        return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    }
-                }
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             val prompt = buildString {
@@ -409,7 +431,7 @@ class LifeWeaveAiService(context: Context? = null) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Firebase AI assistant stream failed", e)
-            Result.failure(e)
+            Result.failure(enrichAiFailure(e, appCheckHint))
         }
     }
 
@@ -439,6 +461,7 @@ class LifeWeaveAiService(context: Context? = null) {
         onPartialPreview: (String) -> Unit = {}
     ): Result<AiHealthIntelligenceReport> {
         var appCheckPassed = false
+        var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
         return try {
             onStageUpdate("Checking Firebase & App Check...")
@@ -451,11 +474,9 @@ class LifeWeaveAiService(context: Context? = null) {
             }
 
             if (appContext != null) {
-                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
-                    is AppCheckVerificationResult.Success -> appCheckPassed = true
-                    is AppCheckVerificationResult.Timeout -> return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    is AppCheckVerificationResult.Failure -> return Result.failure(IllegalStateException(check.diagnosticMessage))
-                }
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             val prompt = buildString {
@@ -502,7 +523,7 @@ class LifeWeaveAiService(context: Context? = null) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Personal health intelligence synthesis failed", e)
-            Result.failure(e)
+            Result.failure(enrichAiFailure(e, appCheckHint))
         }
     }
 
@@ -514,6 +535,7 @@ class LifeWeaveAiService(context: Context? = null) {
         onPartialPreview: (String) -> Unit = {}
     ): Result<ExtractedPrescriptionResult> {
         var appCheckPassed = false
+        var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
         return try {
             onStageUpdate("Checking Firebase & App Check...")
@@ -527,17 +549,9 @@ class LifeWeaveAiService(context: Context? = null) {
             }
 
             if (appContext != null) {
-                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
-                    is AppCheckVerificationResult.Success -> {
-                        appCheckPassed = true
-                    }
-                    is AppCheckVerificationResult.Timeout -> {
-                        return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    }
-                    is AppCheckVerificationResult.Failure -> {
-                        return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    }
-                }
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             onStageUpdate("Preparing prescription image...")
@@ -588,7 +602,7 @@ class LifeWeaveAiService(context: Context? = null) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Prescription scan failed", e)
-            Result.failure(e)
+            Result.failure(enrichAiFailure(e, appCheckHint))
         }
     }
 
@@ -604,6 +618,7 @@ class LifeWeaveAiService(context: Context? = null) {
         onPartialPreview: (String) -> Unit = {}
     ): Result<AiReportExplanation> {
         var appCheckPassed = false
+        var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
         return try {
             onStageUpdate("Checking Firebase & App Check...")
@@ -616,11 +631,9 @@ class LifeWeaveAiService(context: Context? = null) {
             }
 
             if (appContext != null) {
-                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
-                    is AppCheckVerificationResult.Success -> appCheckPassed = true
-                    is AppCheckVerificationResult.Timeout -> return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    is AppCheckVerificationResult.Failure -> return Result.failure(IllegalStateException(check.diagnosticMessage))
-                }
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             val imageBitmap: Bitmap? = if (fileBytes != null && mimeType.startsWith("image/", ignoreCase = true)) {
@@ -642,13 +655,27 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("3. Always state clearly in 'disclaimer' that this is informational only and NOT a substitute for a qualified medical professional.")
             }
 
+            val maxInlinePdfBytes = 19 * 1024 * 1024
+            val canAttachPdfInline = fileBytes != null &&
+                mimeType.equals("application/pdf", ignoreCase = true) &&
+                fileBytes.size <= maxInlinePdfBytes
+            if (fileBytes != null && mimeType.equals("application/pdf", ignoreCase = true) && !canAttachPdfInline) {
+                Log.w(TAG, "PDF size (${fileBytes.size} bytes) exceeds 19MB inline limit; analyzing metadata and notes.")
+            }
+
             val inputContent = content {
                 if (imageBitmap != null) {
                     image(imageBitmap)
-                } else if (fileBytes != null && mimeType.equals("application/pdf", ignoreCase = true)) {
-                    inlineData(fileBytes, "application/pdf")
+                } else if (canAttachPdfInline) {
+                    inlineData(fileBytes!!, "application/pdf")
                 }
-                text(promptText)
+                text(
+                    if (!canAttachPdfInline && fileBytes != null && mimeType.equals("application/pdf", ignoreCase = true)) {
+                        "$promptText\nNote: The attached PDF exceeds the 19 MB direct upload limit, so summarize conservatively from the provided title, category, provider, and notes only, and mention that uploading a smaller PDF or photo enables full page analysis."
+                    } else {
+                        promptText
+                    }
+                )
             }
 
             onStageUpdate("Analyzing $category in ${languageOption.label}...")
@@ -682,7 +709,7 @@ class LifeWeaveAiService(context: Context? = null) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Document explanation failed", e)
-            Result.failure(e)
+            Result.failure(enrichAiFailure(e, appCheckHint))
         }
     }
 
@@ -701,6 +728,7 @@ class LifeWeaveAiService(context: Context? = null) {
         onPartialPreview: (String) -> Unit = {}
     ): Result<com.example.domain.IndianMealPlanResult> {
         var appCheckPassed = false
+        var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
         return try {
             onStageUpdate("Checking Firebase & App Check...")
@@ -711,11 +739,9 @@ class LifeWeaveAiService(context: Context? = null) {
             }
 
             if (appContext != null) {
-                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
-                    is AppCheckVerificationResult.Success -> appCheckPassed = true
-                    is AppCheckVerificationResult.Timeout -> return Result.failure(IllegalStateException(check.diagnosticMessage))
-                    is AppCheckVerificationResult.Failure -> return Result.failure(IllegalStateException(check.diagnosticMessage))
-                }
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             val allergenClause = if (avoidAllergens.isEmpty()) {
@@ -780,7 +806,7 @@ class LifeWeaveAiService(context: Context? = null) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Indian nutrition planner failed", e)
-            Result.failure(e)
+            Result.failure(enrichAiFailure(e, appCheckHint))
         }
     }
 
@@ -802,73 +828,65 @@ class LifeWeaveAiService(context: Context? = null) {
             "Ready (project: ${app.options.projectId ?: "unknown"})"
         }.getOrElse { "Not initialized" }
 
-        val checkResult = verifyAppCheckToken(ctx, timeoutMs = 15_000L)
-        return when (checkResult) {
-            is AppCheckVerificationResult.Timeout -> {
-                AiDiagnosticReport(
-                    isHealthy = false,
-                    firebaseStatus = firebaseStatus,
-                    appCheckStatus = "Timed out after ${checkResult.timeoutMs / 1000}s (${checkResult.providerLabel})",
-                    geminiStatus = "Blocked by App Check",
-                    summary = "App Check attestation stalled before reaching Gemini.",
-                    recommendation = checkResult.diagnosticMessage
-                )
-            }
-            is AppCheckVerificationResult.Failure -> {
-                AiDiagnosticReport(
-                    isHealthy = false,
-                    firebaseStatus = firebaseStatus,
-                    appCheckStatus = "Failed (${checkResult.providerLabel}): ${checkResult.errorMessage}",
-                    geminiStatus = "Blocked by App Check",
-                    summary = "App Check rejected or could not fetch a token.",
-                    recommendation = checkResult.diagnosticMessage
-                )
-            }
-            is AppCheckVerificationResult.Success -> {
-                val appCheckDesc =
-                    "OK (${checkResult.providerLabel}, ${checkResult.latencyMs}ms, ttl ${checkResult.expiresInSeconds}s)"
-                val geminiStart = System.currentTimeMillis()
-                try {
-                    val replyBuilder = StringBuilder()
-                    withTimeout(20_000L) {
-                        diagnosticPingModel.generateContentStream("Reply with two words: AI Ready").collect { chunk ->
-                            replyBuilder.append(chunk.text.orEmpty())
-                        }
-                    }
-                    val geminiMs = (System.currentTimeMillis() - geminiStart).coerceAtLeast(1L)
-                    val sample = replyBuilder.toString().trim().ifEmpty { "Empty response" }
-                    AiDiagnosticReport(
-                        isHealthy = true,
-                        firebaseStatus = firebaseStatus,
-                        appCheckStatus = appCheckDesc,
-                        geminiStatus = "Connected (${geminiMs}ms): $sample",
-                        summary = "App Check and Gemini streaming are working on this device.",
-                        recommendation = "You can now use Voice, Quick Chips, and Prescription Scanner."
-                    )
-                } catch (e: TimeoutCancellationException) {
-                    AiDiagnosticReport(
-                        isHealthy = false,
-                        firebaseStatus = firebaseStatus,
-                        appCheckStatus = appCheckDesc,
-                        geminiStatus = "Stream timed out after 20s",
-                        summary = "App Check succeeded, but Gemini streaming did not respond within 20s.",
-                        recommendation = "Check mobile/Wi-Fi internet speed, disable VPN/private DNS, and retry."
-                    )
-                } catch (e: CancellationException) {
-                    throw e
-                } catch (e: Exception) {
-                    Log.e(TAG, "Diagnostic Gemini ping failed", e)
-                    val err = e.localizedMessage?.trim().orEmpty().ifEmpty { e.javaClass.simpleName }
-                    AiDiagnosticReport(
-                        isHealthy = false,
-                        firebaseStatus = firebaseStatus,
-                        appCheckStatus = appCheckDesc,
-                        geminiStatus = "Error: $err",
-                        summary = "App Check succeeded, but Gemini returned an error.",
-                        recommendation = "Verify Firebase AI Logic is enabled for this project and retry."
-                    )
+        val checkResult = verifyAppCheckToken(ctx, timeoutMs = 10_000L)
+        val appCheckDesc = when (checkResult) {
+            is AppCheckVerificationResult.Success ->
+                "OK (${checkResult.providerLabel}, ${checkResult.latencyMs}ms, ttl ${checkResult.expiresInSeconds}s)"
+            is AppCheckVerificationResult.Timeout ->
+                "Timed out (${checkResult.providerLabel})"
+            is AppCheckVerificationResult.Failure ->
+                "Not attested (${checkResult.providerLabel}): ${checkResult.errorMessage}"
+        }
+        val appCheckHint = when (checkResult) {
+            is AppCheckVerificationResult.Success -> null
+            is AppCheckVerificationResult.Timeout -> checkResult.diagnosticMessage
+            is AppCheckVerificationResult.Failure -> checkResult.diagnosticMessage
+        }
+
+        val geminiStart = System.currentTimeMillis()
+        return try {
+            val replyBuilder = StringBuilder()
+            withTimeout(20_000L) {
+                diagnosticPingModel.generateContentStream("Reply with two words: AI Ready").collect { chunk ->
+                    replyBuilder.append(chunk.text.orEmpty())
                 }
             }
+            val geminiMs = (System.currentTimeMillis() - geminiStart).coerceAtLeast(1L)
+            val sample = replyBuilder.toString().trim().ifEmpty { "Empty response" }
+            AiDiagnosticReport(
+                isHealthy = true,
+                firebaseStatus = firebaseStatus,
+                appCheckStatus = appCheckDesc,
+                geminiStatus = "Connected (${geminiMs}ms): $sample",
+                summary = "Gemini streaming is working on this device.",
+                recommendation = if (appCheckHint == null) {
+                    "You can now use Voice, Report Explainer, and Prescription Scanner."
+                } else {
+                    "Cloud AI succeeded! Optional: register your Debug Token below if you later enable strict App Check enforcement."
+                }
+            )
+        } catch (e: TimeoutCancellationException) {
+            AiDiagnosticReport(
+                isHealthy = false,
+                firebaseStatus = firebaseStatus,
+                appCheckStatus = appCheckDesc,
+                geminiStatus = "Stream timed out after 20s",
+                summary = "Gemini streaming did not respond within 20s.",
+                recommendation = appCheckHint ?: "Check mobile/Wi-Fi internet speed, disable VPN/private DNS, and retry."
+            )
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Diagnostic Gemini ping failed", e)
+            val err = e.localizedMessage?.trim().orEmpty().ifEmpty { e.javaClass.simpleName }
+            AiDiagnosticReport(
+                isHealthy = false,
+                firebaseStatus = firebaseStatus,
+                appCheckStatus = appCheckDesc,
+                geminiStatus = "Error: $err",
+                summary = "Gemini could not connect on this build.",
+                recommendation = appCheckHint ?: "Verify Firebase AI Logic is enabled for this project and retry."
+            )
         }
     }
 

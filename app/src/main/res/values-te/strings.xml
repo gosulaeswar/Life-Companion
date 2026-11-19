@@ -86,4 +86,19 @@
     <string name="subscription_screen_title">లైఫ్‌వీవ్ ప్లాన్‌లు &amp; బిల్లింగ్</string>
     <string name="subscription_period_always_free">పీరియడ్ &amp; సైకిల్ కేర్ ఎప్పటికీ 100% ఉచితం — ఏ సబ్‌స్క్రిప్షన్‌లోనూ లాక్ చేయబడదు.</string>
     <string name="subscription_restore_cta">Google Play కొనుగోళ్లను పునరుద్ధరించండి</string>
+    <string name="welcome_why_heading">లైఫ్‌వీవ్ ఎందుకు ఉపయోగిస్తారు</string>
+    <string name="welcome_pledge_mood_title">📓 మూడ్ జర్నల్, దినచర్యలు &amp; ఫ్యామిలీ సర్కిల్</string>
+    <string name="welcome_pledge_mood_sub">మీ మూడ్ నమోదు చేయండి, ఒత్తిడి లేని అలవాట్లు పెంచుకోండి, మరియు అవసరమైతే 5 మంది కుటుంబ సభ్యులతో సంరక్షణ పంచుకోండి.</string>
+    <string name="auth_privacy_pill">మీ డేటా, మీ ఇష్టం</string>
+    <string name="auth_screen_title">లైఫ్‌వీవ్‌కు స్వాగతం</string>
+    <string name="auth_screen_subtitle">ఫ్యామిలీ సర్కిల్ &amp; సింక్ కోసం సైన్ ఇన్ చేయండి, లేదా పూర్తిగా ఆఫ్‌లైన్‌లో ఉపయోగించండి.</string>
+    <string name="auth_what_is_title">లైఫ్‌వీవ్ దేనికి ఉపయోగపడుతుంది?</string>
+    <string name="auth_what_is_body">రోజువారీ నీరు, మందులు, ప్రిస్క్రిప్షన్లు, నిద్ర, మూడ్, దినచర్యలు మరియు ఉచిత పీరియడ్ ట్రాకర్‌ను ఒకే సులభమైన యాప్‌లో నిర్వహించడానికి సహాయపడుతుంది.</string>
+    <string name="auth_choose_login_title">ప్రవేశించే విధానాన్ని ఎంచుకోండి</string>
+    <string name="auth_choose_login_sub">ఫ్యామిలీ సర్కిల్ &amp; సింక్ కోసం విశ్వసనీయ ఖాతాను కనెక్ట్ చేయండి, లేదా ఈ ఫోన్‌లో మాత్రమే ప్రైవేట్‌గా కొనసాగండి.</string>
+    <string name="auth_btn_google">Google (Gmail) తో కొనసాగండి</string>
+    <string name="auth_btn_github">GitHub తో కొనసాగండి</string>
+    <string name="auth_btn_microsoft">Microsoft తో కొనసాగండి</string>
+    <string name="auth_btn_continue_offline">ఈ పరికరంలో ప్రైవేట్‌గా కొనసాగండి</string>
+    <string name="auth_continue_to_home">లైఫ్‌వీవ్‌కు కొనసాగండి</string>
 </resources>

@@ -106,14 +106,61 @@ class AllModulesRepository(private val database: AppDatabase) {
         notes: String,
         wakeEpochMs: Long = System.currentTimeMillis()
     ) {
-        val bedMs = wakeEpochMs - (hoursSlept.coerceIn(1f, 16f) * 3_600_000L).toLong()
+        val safeHours = hoursSlept.coerceIn(1f, 16f)
+        val safeRating = qualityRating.coerceIn(1, 5)
+        val bedMs = wakeEpochMs - (safeHours * 3_600_000L).toLong()
+        val totalMinutes = (safeHours * 60f).toInt().coerceAtLeast(1)
+        val estDeep = (totalMinutes * 0.22f).toInt()
+        val estLight = (totalMinutes - estDeep).coerceAtLeast(0)
         fitnessDao.insertSleep(
             SleepRecordEntity(
                 profileId = profileId,
                 bedtimeEpochMs = bedMs,
                 wakeEpochMs = wakeEpochMs,
+                qualityRating = safeRating,
+                notes = notes.trim(),
+                sleepQualityScore = (safeRating * 20).coerceIn(20, 100),
+                deepSleepMinutes = estDeep,
+                lightSleepMinutes = estLight,
+                trackingSource = "Manual"
+            )
+        )
+    }
+
+    suspend fun logAutomatedSleepSession(
+        profileId: Long,
+        bedtimeEpochMs: Long,
+        wakeEpochMs: Long,
+        qualityRating: Int,
+        sleepQualityScore: Int,
+        snoreEventsCount: Int,
+        snoreDurationMinutes: Int,
+        peakSnoreDb: Double,
+        avgAmbientDb: Double,
+        restlessnessIndex: Int,
+        awakeInterruptionsCount: Int,
+        deepSleepMinutes: Int,
+        lightSleepMinutes: Int,
+        notes: String
+    ): Long {
+        val safeEnd = wakeEpochMs.coerceAtLeast(bedtimeEpochMs + 60_000L)
+        return fitnessDao.insertSleep(
+            SleepRecordEntity(
+                profileId = profileId,
+                bedtimeEpochMs = bedtimeEpochMs,
+                wakeEpochMs = safeEnd,
                 qualityRating = qualityRating.coerceIn(1, 5),
-                notes = notes.trim()
+                notes = notes.trim(),
+                sleepQualityScore = sleepQualityScore.coerceIn(5, 100),
+                snoreEventsCount = snoreEventsCount.coerceAtLeast(0),
+                snoreDurationMinutes = snoreDurationMinutes.coerceAtLeast(0),
+                peakSnoreDb = peakSnoreDb.coerceIn(0.0, 110.0),
+                avgAmbientDb = avgAmbientDb.coerceIn(0.0, 100.0),
+                restlessnessIndex = restlessnessIndex.coerceIn(0, 100),
+                awakeInterruptionsCount = awakeInterruptionsCount.coerceAtLeast(0),
+                deepSleepMinutes = deepSleepMinutes.coerceAtLeast(0),
+                lightSleepMinutes = lightSleepMinutes.coerceAtLeast(0),
+                trackingSource = "Auto Sensor"
             )
         )
     }

@@ -81,6 +81,11 @@ import com.example.security.AiDataAuthorization
 import com.example.security.CategoryToneSetting
 import com.example.security.HealthConnectImportAuthorization
 import com.example.security.LocalPreferencesManager
+import com.example.sleep.SleepMonitorLiveState
+import com.example.sleep.SleepMonitorStateStore
+import com.example.sleep.SleepMonitoringService
+import com.example.sync.AppAutoRefreshManager
+import com.example.sync.AppAutoRefreshState
 import com.example.wellbeing.AppUsageMetric
 import com.example.wellbeing.DeviceWellbeingManager
 import com.example.wellbeing.OveruseSeverity
@@ -183,7 +188,18 @@ data class ModulesHubUiState(
     val moodAnalytics: MoodJournalAnalytics = MoodJournalAnalytics(0, 0, null, null, null, emptyMap(), null, emptyList(), emptyList()),
     val wellnessChallenges: List<WellnessChallengeEntity> = emptyList(),
     val achievementBadges: List<AchievementBadgeEntity> = emptyList(),
-    val latestMoodEntry: MoodJournalEntryEntity? = null
+    val latestMoodEntry: MoodJournalEntryEntity? = null,
+    val autoRefreshEnabled: Boolean = true,
+    val autoRefreshIntervalMinutes: Int = 30,
+    val isAutoRefreshingAll: Boolean = false,
+    val lastAutoRefreshEpochMs: Long = 0L,
+    val lastAutoRefreshSummary: String = "",
+    val sleepMonitorLiveState: SleepMonitorLiveState = SleepMonitorLiveState(),
+    val sleepAutoBedtimePromptEnabled: Boolean = false,
+    val sleepBedtimeHour: Int = 22,
+    val sleepBedtimeMinute: Int = 30,
+    val sleepWakeHour: Int = 7,
+    val sleepWakeMinute: Int = 0
 )
 
 private data class AiAndSyncOverlayState(
@@ -235,7 +251,8 @@ class ModulesHubViewModel(
     private val preferencesManager: LocalPreferencesManager,
     private val customAlarmRepository: CustomAlarmRepository,
     private val healthVaultRepository: HealthVaultRepository? = null,
-    private val routineMoodRepository: RoutineMoodRepository? = null
+    private val routineMoodRepository: RoutineMoodRepository? = null,
+    private val appAutoRefreshManager: AppAutoRefreshManager? = null
 ) : ViewModel() {
 
     private val aiMessages = MutableStateFlow<List<LocalAiMessage>>(emptyList())
@@ -273,6 +290,7 @@ class ModulesHubViewModel(
             if (prefs.wellbeingOveruseAlertsEnabled) {
                 alertSoundManager.scheduleWellbeingMonitor()
             }
+            appAutoRefreshManager?.syncWorkScheduleFromPreferences()
         }
     }
 
@@ -654,8 +672,21 @@ class ModulesHubViewModel(
                     )
                 }
 
-                combine(dataSummaryFlow, aiFlow) { base, overlay ->
+                val autoRefreshAndSleepFlow = combine(
+                    preferencesManager.preferencesFlow,
+                    appAutoRefreshManager?.state ?: flowOf(AppAutoRefreshState()),
+                    SleepMonitorStateStore.state
+                ) { prefs, refreshState, sleepLive ->
+                    Triple(prefs, refreshState, sleepLive)
+                }
+
+                combine(dataSummaryFlow, aiFlow, autoRefreshAndSleepFlow) { base, overlay, syncSleep ->
                     val isSnoozed = System.currentTimeMillis() < overlay.snoozedUntilMs
+                    val prefs = syncSleep.first
+                    val refreshState = syncSleep.second
+                    val sleepLive = syncSleep.third
+                    val effectiveRefreshEpoch = maxOf(refreshState.lastRefreshedEpochMs, prefs.lastAutoRefreshEpochMs)
+                    val effectiveRefreshSummary = refreshState.lastSummary.ifBlank { prefs.lastAutoRefreshSummary }
                     base.copy(
                         aiChatMessages = overlay.chat,
                         selectedVoiceLanguageTag = overlay.languageTag,
@@ -684,7 +715,18 @@ class ModulesHubViewModel(
                         selectedIntelligenceTimeframe = overlay.selectedTimeframe,
                         generatedAiHealthReport = overlay.generatedHealthReport,
                         isGeneratingMealPlan = overlay.isGeneratingMealPlan,
-                        mealPlanStatusMessage = overlay.mealPlanStatusMessage
+                        mealPlanStatusMessage = overlay.mealPlanStatusMessage,
+                        autoRefreshEnabled = prefs.autoRefreshEnabled,
+                        autoRefreshIntervalMinutes = prefs.autoRefreshIntervalMinutes,
+                        isAutoRefreshingAll = refreshState.isRefreshing || overlay.isSyncingWellbeing || overlay.isSyncingFitness,
+                        lastAutoRefreshEpochMs = effectiveRefreshEpoch,
+                        lastAutoRefreshSummary = effectiveRefreshSummary,
+                        sleepMonitorLiveState = sleepLive,
+                        sleepAutoBedtimePromptEnabled = prefs.sleepAutoBedtimePromptEnabled,
+                        sleepBedtimeHour = prefs.sleepBedtimeHour,
+                        sleepBedtimeMinute = prefs.sleepBedtimeMinute,
+                        sleepWakeHour = prefs.sleepWakeHour,
+                        sleepWakeMinute = prefs.sleepWakeMinute
                     )
                 }
             }
@@ -1782,6 +1824,96 @@ class ModulesHubViewModel(
         val current = uiState.value.aiPreference ?: AiPreferenceEntity(profileId = pid)
         viewModelScope.launch {
             allModulesRepo.updateAiPreference(current.copy(preferredTone = tone, onDeviceAgentEnabled = true))
+        }
+    }
+
+    // --- Automatic All-Modules Refresh & Sleep/Snoring Monitor Controls ---
+
+    fun triggerAutoRefresh(
+        force: Boolean = true,
+        reason: String = "manual",
+        includePastWeek: Boolean = false
+    ) {
+        hasUsageAccess.value = deviceWellbeingManager.hasUsageAccessPermission()
+        hasNotificationPerm.value = alertSoundManager.hasNotificationPermission()
+        hcAvailability.value = healthConnectManager.checkAvailability()
+        viewModelScope.launch {
+            grantedHealthPerms.value = healthConnectManager.getGrantedPermissions()
+            val manager = appAutoRefreshManager
+            if (manager != null) {
+                manager.refreshAllModules(
+                    reason = reason,
+                    force = force,
+                    includePastWeekWellbeing = includePastWeek
+                )
+            } else {
+                refreshWellbeingFromDevice(includePastWeek = includePastWeek, userTriggered = force)
+            }
+        }
+    }
+
+    fun setAutoRefreshEnabled(enabled: Boolean) {
+        val currentInterval = uiState.value.autoRefreshIntervalMinutes
+        viewModelScope.launch {
+            val manager = appAutoRefreshManager
+            if (manager != null) {
+                manager.updateAutoRefreshConfig(enabled, currentInterval)
+            } else {
+                preferencesManager.setAutoRefreshSettings(enabled, currentInterval)
+            }
+        }
+    }
+
+    fun setAutoRefreshIntervalMinutes(intervalMinutes: Int) {
+        val currentEnabled = uiState.value.autoRefreshEnabled
+        viewModelScope.launch {
+            val manager = appAutoRefreshManager
+            if (manager != null) {
+                manager.updateAutoRefreshConfig(currentEnabled, intervalMinutes)
+            } else {
+                preferencesManager.setAutoRefreshSettings(currentEnabled, intervalMinutes)
+            }
+        }
+    }
+
+    fun startSleepAndSnoringMonitor(context: Context) {
+        val snapshot = uiState.value
+        val pid = snapshot.profile?.id ?: 0L
+        SleepMonitoringService.startMonitoring(
+            context = context,
+            profileId = pid,
+            wakeHour = snapshot.sleepWakeHour,
+            wakeMinute = snapshot.sleepWakeMinute
+        )
+    }
+
+    fun stopAndSaveSleepMonitor(context: Context) {
+        SleepMonitoringService.stopAndSave(context)
+    }
+
+    fun dismissSleepMonitorBanner() {
+        SleepMonitorStateStore.clearBanners()
+    }
+
+    fun updateSleepBedtimeSchedule(
+        enabled: Boolean,
+        bedtimeHour: Int,
+        bedtimeMinute: Int,
+        wakeHour: Int,
+        wakeMinute: Int
+    ) {
+        viewModelScope.launch {
+            preferencesManager.setSleepAutoSchedule(
+                enabled = enabled,
+                bedtimeHour = bedtimeHour,
+                bedtimeMinute = bedtimeMinute,
+                wakeHour = wakeHour,
+                wakeMinute = wakeMinute
+            )
+            // Ensure background WorkManager schedule is active if bedtime prompt is enabled
+            if (enabled) {
+                appAutoRefreshManager?.syncWorkScheduleFromPreferences()
+            }
         }
     }
 

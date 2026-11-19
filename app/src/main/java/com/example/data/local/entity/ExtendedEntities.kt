@@ -138,7 +138,17 @@ data class SleepRecordEntity(
     val bedtimeEpochMs: Long,
     val wakeEpochMs: Long,
     val qualityRating: Int = 3,
-    val notes: String = ""
+    val notes: String = "",
+    val sleepQualityScore: Int = 0,
+    val snoreEventsCount: Int = 0,
+    val snoreDurationMinutes: Int = 0,
+    val peakSnoreDb: Double = 0.0,
+    val avgAmbientDb: Double = 0.0,
+    val restlessnessIndex: Int = 0,
+    val awakeInterruptionsCount: Int = 0,
+    val deepSleepMinutes: Int = 0,
+    val lightSleepMinutes: Int = 0,
+    val trackingSource: String = "Manual"
 )
 
 @Entity(

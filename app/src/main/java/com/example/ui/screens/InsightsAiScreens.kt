@@ -35,6 +35,7 @@ import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -59,8 +60,15 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
+import android.widget.Toast
 import androidx.core.content.ContextCompat
+import com.example.BuildConfig
 import com.example.ai.SupportedVoiceLanguages
+import com.example.ai.readOrCreateDebugAppCheckToken
+import com.example.ai.saveCustomDebugAppCheckToken
 import com.example.domain.IntelligenceTimeframe
 import com.example.ui.components.MoodTrendChartCard
 import com.example.ui.components.RoutineAdherenceRingCard
@@ -581,6 +589,92 @@ fun OnDeviceAiScreen(
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (diag.isHealthy) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                                 )
+                            }
+                        }
+                    }
+
+                    if (BuildConfig.DEBUG) {
+                        var currentDebugToken by remember(context) {
+                            mutableStateOf(readOrCreateDebugAppCheckToken(context).orEmpty())
+                        }
+                        var showCustomTokenInput by remember { mutableStateOf(false) }
+                        var customTokenDraft by remember { mutableStateOf("") }
+                        if (currentDebugToken.isNotBlank()) {
+                            Surface(
+                                shape = RoundedCornerShape(12.dp),
+                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
+                            ) {
+                                Column(
+                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
+                                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Debug App Check Token (sideloaded APK)",
+                                                style = MaterialTheme.typography.labelSmall,
+                                                color = MaterialTheme.colorScheme.primary
+                                            )
+                                            Text(
+                                                text = currentDebugToken,
+                                                style = MaterialTheme.typography.bodySmall,
+                                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                                            )
+                                        }
+                                        TextButton(
+                                            onClick = {
+                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
+                                                cm?.setPrimaryClip(ClipData.newPlainText("App Check Debug Token", currentDebugToken))
+                                                Toast.makeText(context, "Debug token copied", Toast.LENGTH_SHORT).show()
+                                            },
+                                            modifier = Modifier.testTag("ai_copy_debug_token_button")
+                                        ) {
+                                            Text("Copy")
+                                        }
+                                    }
+
+                                    TextButton(
+                                        onClick = { showCustomTokenInput = !showCustomTokenInput },
+                                        modifier = Modifier.testTag("ai_toggle_paste_debug_token_button")
+                                    ) {
+                                        Text(
+                                            if (showCustomTokenInput) "Hide custom token input"
+                                            else "Paste an already-registered Firebase debug token"
+                                        )
+                                    }
+
+                                    if (showCustomTokenInput) {
+                                        OutlinedTextField(
+                                            value = customTokenDraft,
+                                            onValueChange = { customTokenDraft = it },
+                                            label = { Text("Registered Debug Token (UUID)") },
+                                            singleLine = true,
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .testTag("ai_custom_debug_token_input")
+                                        )
+                                        FilledTonalButton(
+                                            onClick = {
+                                                val saved = saveCustomDebugAppCheckToken(context, customTokenDraft)
+                                                if (saved) {
+                                                    currentDebugToken = customTokenDraft.trim()
+                                                    customTokenDraft = ""
+                                                    showCustomTokenInput = false
+                                                    Toast.makeText(context, "Debug token saved — tap Run Test", Toast.LENGTH_SHORT).show()
+                                                } else {
+                                                    Toast.makeText(context, "Enter a valid debug token (8+ chars)", Toast.LENGTH_SHORT).show()
+                                                }
+                                            },
+                                            modifier = Modifier.testTag("ai_save_debug_token_button")
+                                        ) {
+                                            Text("Save & Apply Token")
+                                        }
+                                    }
+                                }
                             }
                         }
                     }

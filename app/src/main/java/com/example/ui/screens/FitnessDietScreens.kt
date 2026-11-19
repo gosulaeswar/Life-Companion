@@ -46,12 +46,15 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.example.domain.DateEpochUtils
 import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.QuickAmountChip
+import com.example.ui.components.SleepQualitySnoringMonitorCard
+import com.example.ui.components.SleepRecordDetailCard
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.ModulesHubUiState
 import com.example.ui.viewmodel.ModulesHubViewModel
@@ -64,6 +67,7 @@ fun FitnessYogaScreen(
     onBack: () -> Unit,
     onOpenConnectedDevices: () -> Unit = {}
 ) {
+    val context = LocalContext.current
     var showWorkoutDialog by remember { mutableStateOf(false) }
     var showSleepDialog by remember { mutableStateOf(false) }
 
@@ -210,7 +214,23 @@ fun FitnessYogaScreen(
             }
         }
 
-        // Sleep Card
+        // Automatic Overnight Sleep Quality & Snoring Monitor Card
+        item {
+            SleepQualitySnoringMonitorCard(
+                liveState = uiState.sleepMonitorLiveState,
+                bedtimePromptEnabled = uiState.sleepAutoBedtimePromptEnabled,
+                bedtimeHour = uiState.sleepBedtimeHour,
+                bedtimeMinute = uiState.sleepBedtimeMinute,
+                wakeHour = uiState.sleepWakeHour,
+                wakeMinute = uiState.sleepWakeMinute,
+                onStartMonitor = { viewModel.startSleepAndSnoringMonitor(context) },
+                onStopAndSaveMonitor = { viewModel.stopAndSaveSleepMonitor(context) },
+                onDismissBanner = viewModel::dismissSleepMonitorBanner,
+                onUpdateBedtimeSchedule = viewModel::updateSleepBedtimeSchedule
+            )
+        }
+
+        // Sleep Metrics & History Card
         item {
             Card(
                 modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
@@ -219,40 +239,35 @@ fun FitnessYogaScreen(
             ) {
                 Column(
                     modifier = Modifier.padding(18.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
                     Row(
                         modifier = Modifier.fillMaxWidth(),
                         horizontalArrangement = Arrangement.SpaceBetween,
                         verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("😴 Sleep Rest Log", style = MaterialTheme.typography.titleMedium)
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("😴 Sleep Metrics & Snoring Log", style = MaterialTheme.typography.titleMedium)
+                            Text(
+                                "Auto-logged overnight telemetry & manual rest entries",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                         Button(onClick = { showSleepDialog = true }) { Text("Log Sleep") }
                     }
                     if (uiState.sleepRecords.isEmpty()) {
                         Text(
-                            "Log your rest hours & morning energy rating.",
+                            "Start the Auto Sleep & Snoring Monitor above or log your rest hours manually.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
                     } else {
-                        uiState.sleepRecords.take(3).forEach { s ->
-                            val hrs = (s.wakeEpochMs - s.bedtimeEpochMs) / 3_600_000f
-                            val stars = "⭐".repeat(s.qualityRating)
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(
-                                    String.format("🌙 %.1f hrs • %s (%s) %s", hrs, stars, DateEpochUtils.formatEpochDayAndTime(s.wakeEpochMs), s.notes),
-                                    style = MaterialTheme.typography.bodyMedium,
-                                    modifier = Modifier.weight(1f)
-                                )
-                                IconButton(onClick = { viewModel.deleteSleep(s.id) }) {
-                                    Icon(Icons.Rounded.DeleteOutline, contentDescription = "Delete sleep")
-                                }
-                            }
+                        uiState.sleepRecords.take(5).forEach { s ->
+                            SleepRecordDetailCard(
+                                record = s,
+                                onDelete = { viewModel.deleteSleep(s.id) }
+                            )
                         }
                     }
                 }

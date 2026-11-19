@@ -27,6 +27,9 @@ class BootCompletedReceiver : BroadcastReceiver() {
                         preferencesManager = LocalPreferencesManager(context)
                     )
                 }
+                runCatching {
+                    com.example.sync.AppAutoRefreshManager.syncPeriodicWorkFromPreferences(context)
+                }
             } finally {
                 pendingResult?.finish()
             }

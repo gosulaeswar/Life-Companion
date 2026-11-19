@@ -86,4 +86,19 @@
     <string name="subscription_screen_title">लाईफवीव्ह प्लॅन्स व बिलिंग</string>
     <string name="subscription_period_always_free">पाळी व चक्र काळजी कायम १००% मोफत राहील — कधीही कोणत्याही सबस्क्रिप्शनमध्ये बंद केली जाणार नाही.</string>
     <string name="subscription_restore_cta">Google Play खरेदी पुनर्संचयित करा</string>
+    <string name="welcome_why_heading">लोक लाईफवीव्ह का वापरतात</string>
+    <string name="welcome_pledge_mood_title">📓 मूड जर्नल, दिनचर्या व फॅमिली सर्कल</string>
+    <string name="welcome_pledge_mood_sub">दररोजचा मूड नोंदवा, तणावमुक्त सवयी लावा आणि हवे असल्यास ५ कुटुंबातील सदस्यांसोबत काळजी शेअर करा.</string>
+    <string name="auth_privacy_pill">तुमचा डेटा, तुमची निवड</string>
+    <string name="auth_screen_title">लाईफवीव्हमध्ये स्वागत आहे</string>
+    <string name="auth_screen_subtitle">फॅमिली केअर व सिंकसाठी साइन इन करा, किंवा पूर्णपणे ऑफलाइन वापरा.</string>
+    <string name="auth_what_is_title">लाईफवीव्ह कशासाठी वापरतात?</string>
+    <string name="auth_what_is_body">दररोजचे पाणी, औषधे, प्रिस्क्रिप्शन, झोप, मूड, दिनचर्या आणि मोफत पाळी ट्रॅकर एका साध्या अ‍ॅपमध्ये सांभाळण्यास मदत करते.</string>
+    <string name="auth_choose_login_title">प्रवेश करण्याची पद्धत निवडा</string>
+    <string name="auth_choose_login_sub">फॅमिली सर्कल व सिंकसाठी विश्वासार्ह खाते जोडा, किंवा फक्त या फोनवर खाजगीरित्या पुढे जा.</string>
+    <string name="auth_btn_google">Google (Gmail) ने पुढे जा</string>
+    <string name="auth_btn_github">GitHub ने पुढे जा</string>
+    <string name="auth_btn_microsoft">Microsoft ने पुढे जा</string>
+    <string name="auth_btn_continue_offline">या डिव्हाइसवर खाजगीरित्या पुढे जा</string>
+    <string name="auth_continue_to_home">लाईफवीव्हमध्ये जा</string>
 </resources>

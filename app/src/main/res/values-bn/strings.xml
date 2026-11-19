@@ -86,4 +86,19 @@
     <string name="subscription_screen_title">লাইফউইভ প্ল্যান ও বিলিং</string>
     <string name="subscription_period_always_free">পিরিয়ড ও চক্র যত্ন চিরকাল ১০০% বিনামূল্যে — কখনো কোনো সাবস্ক্রিপশনে সীমাবদ্ধ হবে না।</string>
     <string name="subscription_restore_cta">Google Play কেনাকাটা পুনরুদ্ধার করুন</string>
+    <string name="welcome_why_heading">কেন লাইফউইভ ব্যবহার করবেন</string>
+    <string name="welcome_pledge_mood_title">📓 মুড জার্নাল, রুটিন ও ফ্যামিলি সার্কেল</string>
+    <string name="welcome_pledge_mood_sub">প্রতিদিনের মুড লিখুন, চাপমুক্ত অভ্যাস গড়ে তুলুন এবং চাইলে ৫ জন পরিবারের সদস্যের সাথে যত্ন শেয়ার করুন।</string>
+    <string name="auth_privacy_pill">আপনার ডেটা, আপনার সিদ্ধান্ত</string>
+    <string name="auth_screen_title">লাইফউইভে স্বাগতম</string>
+    <string name="auth_screen_subtitle">ফ্যামিলি কেয়ার ও সিঙ্কের জন্য সাইন ইন করুন, অথবা সম্পূর্ণ অফলাইনে ব্যবহার করুন।</string>
+    <string name="auth_what_is_title">লাইফউইভ কী কাজে লাগে?</string>
+    <string name="auth_what_is_body">প্রতিদিনের জল, ওষুধ, প্রেসক্রিপশন, ঘুম, মুড, দৈনন্দিন রুটিন এবং বিনামূল্যে পিরিয়ড ট্র্যাকার এক সহজ অ্যাপে পরিচালনা করতে সাহায্য করে।</string>
+    <string name="auth_choose_login_title">কীভাবে প্রবেশ করতে চান বেছে নিন</string>
+    <string name="auth_choose_login_sub">ফ্যামিলি সার্কেল ও সিঙ্কের জন্য বিশ্বস্ত অ্যাকাউন্ট সংযুক্ত করুন, অথবা শুধুমাত্র এই ফোনে ব্যক্তিগতভাবে চালিয়ে যান।</string>
+    <string name="auth_btn_google">Google (Gmail) দিয়ে চালিয়ে যান</string>
+    <string name="auth_btn_github">GitHub দিয়ে চালিয়ে যান</string>
+    <string name="auth_btn_microsoft">Microsoft দিয়ে চালিয়ে যান</string>
+    <string name="auth_btn_continue_offline">এই ডিভাইসে ব্যক্তিগতভাবে চালিয়ে যান</string>
+    <string name="auth_continue_to_home">লাইফউইভে যান</string>
 </resources>

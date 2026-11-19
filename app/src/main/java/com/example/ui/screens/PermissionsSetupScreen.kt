@@ -34,6 +34,7 @@ import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.NotificationsActive
 import androidx.compose.material.icons.rounded.PhoneAndroid
 import androidx.compose.material.icons.rounded.QueryStats
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
@@ -43,10 +44,12 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
@@ -66,6 +69,277 @@ import com.example.R
 import com.example.notifications.AlertSoundManager
 import com.example.ui.components.PrivacyVaultBadge
 import com.example.wellbeing.DeviceWellbeingManager
+
+@Composable
+fun PermissionsPopupDialog(
+    alertSoundManager: AlertSoundManager,
+    deviceWellbeingManager: DeviceWellbeingManager,
+    onDismissComplete: () -> Unit
+) {
+    val context = LocalContext.current
+    var refreshTick by remember { mutableIntStateOf(0) }
+    var showMoreSystemOptions by remember { mutableStateOf(false) }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                refreshTick++
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    val multiRuntimeLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestMultiplePermissions()
+    ) {
+        refreshTick++
+    }
+
+    val singleRuntimeLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) {
+        refreshTick++
+    }
+
+    val hasNotifications = remember(refreshTick) { alertSoundManager.hasNotificationPermission() }
+    val hasMicrophone = remember(refreshTick) { alertSoundManager.hasMicrophonePermission() }
+    val hasExactAlarms = remember(refreshTick) { alertSoundManager.canScheduleExactAlarms() }
+    val hasFullScreen = remember(refreshTick) { alertSoundManager.canUseFullScreenIntent() }
+    val hasOverlayPopup = remember(refreshTick) { alertSoundManager.canDrawOverlays() }
+    val hasUnrestrictedBattery = remember(refreshTick) { alertSoundManager.isIgnoringBatteryOptimizations() }
+    val hasUsageAccess = remember(refreshTick) { deviceWellbeingManager.hasUsageAccessPermission() }
+
+    AlertDialog(
+        onDismissRequest = onDismissComplete,
+        modifier = Modifier.testTag("permissions_popup_dialog"),
+        shape = RoundedCornerShape(24.dp),
+        title = {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Rounded.NotificationsActive,
+                    contentDescription = null,
+                    tint = MaterialTheme.colorScheme.primary
+                )
+                Text(
+                    text = "Quick App Permissions",
+                    style = MaterialTheme.typography.titleLarge
+                )
+            }
+        },
+        text = {
+            Column(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                Text(
+                    text = "Allow notifications so water and medicine reminders reach you on time. All other permissions are optional and can be enabled anytime.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+
+                CompactPermissionPopupRow(
+                    icon = Icons.Rounded.NotificationsActive,
+                    title = "Notifications",
+                    subtitle = "Water, medicine & cycle reminders",
+                    isGranted = hasNotifications,
+                    testTag = "popup_perm_notifications",
+                    onAllow = {
+                        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                            singleRuntimeLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            refreshTick++
+                        }
+                    }
+                )
+
+                CompactPermissionPopupRow(
+                    icon = Icons.Rounded.Mic,
+                    title = "Microphone (Optional)",
+                    subtitle = "Hands-free voice health logging",
+                    isGranted = hasMicrophone,
+                    testTag = "popup_perm_mic",
+                    onAllow = {
+                        singleRuntimeLauncher.launch(Manifest.permission.RECORD_AUDIO)
+                    }
+                )
+
+                TextButton(
+                    onClick = { showMoreSystemOptions = !showMoreSystemOptions },
+                    modifier = Modifier.testTag("permissions_popup_more_toggle")
+                ) {
+                    Text(
+                        if (showMoreSystemOptions) "Hide alarm & screen-time options"
+                        else "More optional permissions (Alarms, Battery, Screen Time)"
+                    )
+                }
+
+                if (showMoreSystemOptions) {
+                    CompactPermissionPopupRow(
+                        icon = Icons.Rounded.Alarm,
+                        title = "Exact Alarms",
+                        subtitle = "Fire medicine reminders at the exact minute",
+                        isGranted = hasExactAlarms,
+                        testTag = "popup_perm_exact_alarms",
+                        onAllow = {
+                            runCatching { context.startActivity(alertSoundManager.createExactAlarmSettingsIntent()) }
+                        }
+                    )
+                    CompactPermissionPopupRow(
+                        icon = Icons.Rounded.PhoneAndroid,
+                        title = "Screen-Off Alert Popups",
+                        subtitle = "Show alarm card when screen is locked",
+                        isGranted = hasFullScreen,
+                        testTag = "popup_perm_fullscreen",
+                        onAllow = {
+                            runCatching { context.startActivity(alertSoundManager.createFullScreenIntentSettingsIntent()) }
+                        }
+                    )
+                    CompactPermissionPopupRow(
+                        icon = Icons.Rounded.Layers,
+                        title = "Floating Alarm Popup",
+                        subtitle = "Show reminder popup over other apps",
+                        isGranted = hasOverlayPopup,
+                        testTag = "popup_perm_overlay",
+                        onAllow = {
+                            runCatching { context.startActivity(alertSoundManager.createOverlayPermissionIntent()) }
+                        }
+                    )
+                    CompactPermissionPopupRow(
+                        icon = Icons.Rounded.BatteryChargingFull,
+                        title = "Unrestricted Battery",
+                        subtitle = "Keep background reminders reliable",
+                        isGranted = hasUnrestrictedBattery,
+                        testTag = "popup_perm_battery",
+                        onAllow = {
+                            runCatching { context.startActivity(alertSoundManager.createBatteryOptimizationIntent()) }
+                        }
+                    )
+                    CompactPermissionPopupRow(
+                        icon = Icons.Rounded.QueryStats,
+                        title = "Screen Time Usage Access",
+                        subtitle = "Track daily phone screen time locally",
+                        isGranted = hasUsageAccess,
+                        testTag = "popup_perm_usage",
+                        onAllow = {
+                            val opened = runCatching {
+                                context.startActivity(deviceWellbeingManager.createUsageAccessSettingsIntent(true))
+                                true
+                            }.getOrDefault(false)
+                            if (!opened) {
+                                runCatching {
+                                    context.startActivity(deviceWellbeingManager.createUsageAccessSettingsIntent(false))
+                                }
+                            }
+                        }
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (!hasNotifications || !hasMicrophone) {
+                Button(
+                    onClick = {
+                        val perms = buildList {
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU && !hasNotifications) {
+                                add(Manifest.permission.POST_NOTIFICATIONS)
+                            }
+                            if (!hasMicrophone) {
+                                add(Manifest.permission.RECORD_AUDIO)
+                            }
+                        }.toTypedArray()
+                        if (perms.isNotEmpty()) {
+                            multiRuntimeLauncher.launch(perms)
+                        } else {
+                            onDismissComplete()
+                        }
+                    },
+                    modifier = Modifier.testTag("permissions_popup_allow_button")
+                ) {
+                    Text("Allow")
+                }
+            } else {
+                Button(
+                    onClick = onDismissComplete,
+                    modifier = Modifier.testTag("permissions_popup_done_button")
+                ) {
+                    Text("Done")
+                }
+            }
+        },
+        dismissButton = {
+            TextButton(
+                onClick = onDismissComplete,
+                modifier = Modifier.testTag("permissions_popup_later_button")
+            ) {
+                Text(if (!hasNotifications || !hasMicrophone) "Not Now" else "Close")
+            }
+        }
+    )
+}
+
+@Composable
+private fun CompactPermissionPopupRow(
+    icon: ImageVector,
+    title: String,
+    subtitle: String,
+    isGranted: Boolean,
+    testTag: String,
+    onAllow: () -> Unit
+) {
+    Surface(
+        shape = RoundedCornerShape(14.dp),
+        color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 12.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = icon,
+                contentDescription = title,
+                tint = if (isGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.size(20.dp)
+            )
+            Column(modifier = Modifier.weight(1f)) {
+                Text(
+                    text = title,
+                    style = MaterialTheme.typography.labelLarge,
+                    color = MaterialTheme.colorScheme.onSurface
+                )
+                Text(
+                    text = subtitle,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            if (isGranted) {
+                Icon(
+                    imageVector = Icons.Rounded.CheckCircle,
+                    contentDescription = "Allowed",
+                    tint = MaterialTheme.colorScheme.primary,
+                    modifier = Modifier.size(22.dp)
+                )
+            } else {
+                TextButton(
+                    onClick = onAllow,
+                    modifier = Modifier.testTag(testTag)
+                ) {
+                    Text("Allow")
+                }
+            }
+        }
+    }
+}
 
 @Composable
 fun PermissionsSetupScreen(

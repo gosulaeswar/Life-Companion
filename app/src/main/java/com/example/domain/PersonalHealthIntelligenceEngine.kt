@@ -307,7 +307,18 @@ object PersonalHealthIntelligenceEngine {
             if (latestSleep != null) {
                 val hrs = sleepDurationHours(latestSleep)
                 val dayLbl = if (DateEpochUtils.todayDayKey(latestSleep.wakeEpochMs) == todayKey) "last night" else DateEpochUtils.todayDayKey(latestSleep.wakeEpochMs)
-                dailyBullets += String.format(Locale.US, "😴 Sleep ($dayLbl): %.1f hrs recorded (quality %d/5).", hrs, latestSleep.qualityRating)
+                val telemetryNote = if (latestSleep.trackingSource != "Manual" || latestSleep.sleepQualityScore > 0 || latestSleep.snoreEventsCount > 0) {
+                    " • Score ${latestSleep.sleepQualityScore}/100, snoring ${latestSleep.snoreDurationMinutes}m (${latestSleep.snoreEventsCount} events), deep ${latestSleep.deepSleepMinutes}m"
+                } else {
+                    ""
+                }
+                dailyBullets += String.format(
+                    Locale.US,
+                    "😴 Sleep ($dayLbl): %.1f hrs recorded (quality %d/5%s).",
+                    hrs,
+                    latestSleep.qualityRating,
+                    telemetryNote
+                )
             } else {
                 dailyBullets += "😴 Sleep: No sleep duration logged yet."
             }
@@ -315,17 +326,27 @@ object PersonalHealthIntelligenceEngine {
             weekSleepAvgHrs = averageSleepHours(weekSleep)
             prevWeekSleepAvgHrs = averageSleepHours(prevWeekSleep)
             val bedtimeSpreadMins = computeBedtimeSpreadMinutes(weekSleep)
+            val weekMonitoredSleep = weekSleep.filter { it.trackingSource != "Manual" || it.sleepQualityScore > 0 || it.snoreEventsCount > 0 }
+            val weekTotalSnoreMins = weekMonitoredSleep.sumOf { it.snoreDurationMinutes }
+            val weekTotalSnoreEvents = weekMonitoredSleep.sumOf { it.snoreEventsCount }
+            val weekAvgQualityScore = if (weekMonitoredSleep.isNotEmpty()) {
+                weekMonitoredSleep.map { it.sleepQualityScore }.average().toInt()
+            } else null
 
             if (weekSleepAvgHrs != null) {
                 val spreadNote = bedtimeSpreadMins?.let {
                     if (it <= 45) " • steady bedtime (~${it}m spread)" else " • bedtime varied by ${it}m"
                 } ?: " • log 2+ nights to measure bedtime consistency"
+                val snoreNote = if (weekAvgQualityScore != null) {
+                    " • avg sleep score $weekAvgQualityScore/100, snoring ${weekTotalSnoreMins}m ($weekTotalSnoreEvents events)"
+                } else ""
                 weeklyBullets += String.format(
                     Locale.US,
-                    "😴 Sleep: Avg %.1f hrs across %d logged night(s)%s.",
+                    "😴 Sleep: Avg %.1f hrs across %d logged night(s)%s%s.",
                     weekSleepAvgHrs,
                     weekSleep.size,
-                    spreadNote
+                    spreadNote,
+                    snoreNote
                 )
             } else {
                 weeklyBullets += "😴 Sleep: No nights logged in the last 7 days."
@@ -799,15 +820,17 @@ object PersonalHealthIntelligenceEngine {
                     "🗓️ Suggested plan based on your records: $planText"
                 }
             }
-            "sleep" in q || "bed" in q -> {
+            "sleep" in q || "bed" in q || "snor" in q -> {
                 if (!snapshot.authorization.includeSleep) {
                     "🔒 Sleep records are currently excluded by your AI privacy settings."
                 } else {
                     val sleepTrend = snapshot.trends.firstOrNull { it.id == "sleep" }
-                    val line = snapshot.weeklySummaryBullets.firstOrNull { it.startsWith("😴") }
+                    val dailyLine = snapshot.dailyBriefingBullets.firstOrNull { it.startsWith("😴") }
+                    val weeklyLine = snapshot.weeklySummaryBullets.firstOrNull { it.startsWith("😴") }
+                        ?: dailyLine
                         ?: "No sleep records logged yet."
                     val trendDetail = sleepTrend?.let { " (${it.deltaBadge}; ${it.provenanceNote})" }.orEmpty()
-                    "😴 Recorded sleep data: $line$trendDetail"
+                    "😴 Recorded sleep & snoring data: $weeklyLine$trendDetail"
                 }
             }
             "miss" in q || "gap" in q || "incomplete" in q -> {

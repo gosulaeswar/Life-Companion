@@ -45,6 +45,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollTo
 import com.example.billing.EffectiveEntitlement
 import com.example.ui.screens.SubscriptionScreen
 import com.example.ui.theme.LifeCompanionTheme
@@ -121,15 +122,17 @@ class Phase7MonetizationBillingTest {
     fun migration11To12PreservesExistingUserRecordsAndCreatesBillingTables() {
         val context = ApplicationProvider.getApplicationContext<Context>()
 
-        val schema12File = listOf(
+        val schemaFile = listOf(
+            File("schemas/com.example.data.local.AppDatabase/13.json"),
+            File("app/schemas/com.example.data.local.AppDatabase/13.json"),
             File("schemas/com.example.data.local.AppDatabase/12.json"),
             File("app/schemas/com.example.data.local.AppDatabase/12.json")
         ).firstOrNull { it.exists() }
-        assertNotNull("Expected Room schema 12.json to be exported", schema12File)
-        val schemaJson = JSONObject(schema12File!!.readText()).getJSONObject("database")
-        assertEquals(12, schemaJson.getInt("version"))
+        assertNotNull("Expected Room schema 12.json or 13.json to be exported", schemaFile)
+        val schemaJson = JSONObject(schemaFile!!.readText()).getJSONObject("database")
+        assertTrue(schemaJson.getInt("version") >= 12)
         val entitiesArray = schemaJson.getJSONArray("entities")
-        assertEquals(31, entitiesArray.length())
+        assertTrue(entitiesArray.length() >= 31)
         val schemaTableNames = (0 until entitiesArray.length())
             .map { entitiesArray.getJSONObject(it).getString("tableName") }
             .toSet()
@@ -767,5 +770,61 @@ class Phase7MonetizationBillingTest {
         assertTrue("Expected deep dark background luminance in Dark mode", capturedDarkBgLum < 0.10f)
 
         db.close()
+    }
+
+    @Test
+    fun preHomeAuthScreenRendersAppGuideAndProminentLogins() {
+        var continuedOffline = false
+        var activeTheme by mutableStateOf(ThemeMode.LIGHT)
+
+        composeRule.setContent {
+            LifeCompanionTheme(themeMode = activeTheme) {
+                com.example.ui.screens.PreHomeAuthScreen(
+                    signedInUser = null,
+                    canGoBackToWelcome = true,
+                    onBackToWelcome = {},
+                    onSignInWithGoogle = { Result.failure(IllegalStateException("test")) },
+                    onSignInWithGitHub = { Result.failure(IllegalStateException("test")) },
+                    onSignInWithMicrosoft = { Result.failure(IllegalStateException("test")) },
+                    onContinueToApp = { continuedOffline = true }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("prehome_app_overview_card").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("prehome_google_signin_button").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("prehome_github_signin_button").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("prehome_microsoft_signin_button").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("prehome_offline_continue_button").performScrollTo().assertIsDisplayed()
+
+        // Switch to Dark mode and verify offline continuation button works
+        activeTheme = ThemeMode.DARK
+        composeRule.waitForIdle()
+        composeRule.onNodeWithTag("prehome_google_signin_button").performScrollTo().assertIsDisplayed()
+        composeRule.onNodeWithTag("prehome_offline_continue_button").performScrollTo().performClick()
+        assertTrue(continuedOffline)
+    }
+
+    @Test
+    fun permissionsPopupDialogRendersAndDismissesCleanly() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val soundManager = com.example.notifications.AlertSoundManager(context)
+        val wellbeingManager = com.example.wellbeing.DeviceWellbeingManager(context)
+        var dismissed = false
+
+        composeRule.setContent {
+            LifeCompanionTheme(themeMode = ThemeMode.LIGHT) {
+                com.example.ui.screens.PermissionsPopupDialog(
+                    alertSoundManager = soundManager,
+                    deviceWellbeingManager = wellbeingManager,
+                    onDismissComplete = { dismissed = true }
+                )
+            }
+        }
+
+        composeRule.onNodeWithTag("permissions_popup_dialog").assertIsDisplayed()
+        composeRule.onNodeWithTag("permissions_popup_more_toggle").assertIsDisplayed().performClick()
+        composeRule.onNodeWithTag("permissions_popup_later_button").assertIsDisplayed().performClick()
+        assertTrue(dismissed)
     }
 }

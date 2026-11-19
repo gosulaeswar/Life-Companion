@@ -86,4 +86,19 @@
     <string name="subscription_screen_title">லைஃப்வீவ் திட்டங்கள் &amp; கட்டணம்</string>
     <string name="subscription_period_always_free">மாதவிடாய் சுழற்சி பராமரிப்பு எப்போதும் 100% இலவசம் — எந்த சந்தாவிலும் பூட்டப்படாது.</string>
     <string name="subscription_restore_cta">Google Play கொள்முதல்களை மீட்டமை</string>
+    <string name="welcome_why_heading">லைஃப்வீவ் ஏன் பயன்படுத்தப்படுகிறது</string>
+    <string name="welcome_pledge_mood_title">📓 மனநிலை நாட்குறிப்பு, வழக்கங்கள் &amp; குடும்ப வட்டம்</string>
+    <string name="welcome_pledge_mood_sub">மனநிலையைப் பதிவு செய்யுங்கள், அழுத்தமில்லா தினசரி பழக்கங்களை உருவாக்குங்கள், விருப்பப்பட்டால் 5 குடும்ப உறுப்பினர்களுடன் பராமரிப்பைப் பகிருங்கள்.</string>
+    <string name="auth_privacy_pill">உங்கள் தரவு, உங்கள் விருப்பம்</string>
+    <string name="auth_screen_title">லைஃப்வீவிற்கு வரவேற்கிறோம்</string>
+    <string name="auth_screen_subtitle">குடும்பப் பராமரிப்பு மற்றும் ஒத்திசைவுக்கு உள்நுழையவும், அல்லது முழுமையாக ஆஃப்லைனில் பயன்படுத்தவும்.</string>
+    <string name="auth_what_is_title">லைஃப்வீவ் எதற்காகப் பயன்படுகிறது?</string>
+    <string name="auth_what_is_body">தண்ணீர், மருந்துகள், மருத்துவ அறிக்கைகள், தூக்கம், மனநிலை, தினசரி பழக்கங்கள் மற்றும் இலவச மாதவிடாய் கண்காணிப்பை ஒரே எளிய செயலியில் நிர்வகிக்க உதவுகிறது.</string>
+    <string name="auth_choose_login_title">உள்நுழையும் முறையைத் தேர்ந்தெடுக்கவும்</string>
+    <string name="auth_choose_login_sub">குடும்ப வட்டம் மற்றும் ஒத்திசைவுக்கு நம்பகமான கணக்கை இணைக்கவும், அல்லது இந்தச் சாதனத்தில் மட்டும் தனிப்பட்ட முறையில் தொடரவும்.</string>
+    <string name="auth_btn_google">Google (Gmail) மூலம் தொடரவும்</string>
+    <string name="auth_btn_github">GitHub மூலம் தொடரவும்</string>
+    <string name="auth_btn_microsoft">Microsoft மூலம் தொடரவும்</string>
+    <string name="auth_btn_continue_offline">இந்தச் சாதனத்தில் தனிப்பட்ட முறையில் தொடரவும்</string>
+    <string name="auth_continue_to_home">லைஃப்வீவிற்குச் செல்லவும்</string>
 </resources>

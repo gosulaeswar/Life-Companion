@@ -89,13 +89,20 @@ class FitnessSyncRepository(private val database: AppDatabase) {
                         abs(it.wakeEpochMs - sleep.wakeEpochMs) < 120_000L
                 }
                 if (!alreadyPresent) {
+                    val durationMin = ((sleep.wakeEpochMs - sleep.bedtimeEpochMs) / 60_000L).toInt().coerceAtLeast(1)
+                    val estDeep = (durationMin * 0.24).toInt().coerceAtLeast(0)
+                    val estLight = (durationMin - estDeep).coerceAtLeast(0)
                     fitnessDao.insertSleep(
                         SleepRecordEntity(
                             profileId = profileId,
                             bedtimeEpochMs = sleep.bedtimeEpochMs,
                             wakeEpochMs = sleep.wakeEpochMs,
                             qualityRating = sleep.qualityRating,
-                            notes = sleep.notes
+                            notes = sleep.notes,
+                            sleepQualityScore = (sleep.qualityRating * 20).coerceIn(20, 100),
+                            deepSleepMinutes = estDeep,
+                            lightSleepMinutes = estLight,
+                            trackingSource = "Health Connect"
                         )
                     )
                     importedCount++

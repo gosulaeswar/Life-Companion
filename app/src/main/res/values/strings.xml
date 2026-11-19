@@ -1,17 +1,20 @@
 <resources>
     <string name="app_name">LifeWeave</string>
     <string name="tagline_privacy">Your life, your device. 100% local.</string>
-    <string name="welcome_title">Calm daily care,\nkept strictly yours.</string>
-    <string name="welcome_subtitle">Track hydration, cycle rhythms, and personal wellness in an on-device vault with zero cloud accounts or remote tracking.</string>
-    <string name="cta_get_started">Begin Local Setup</string>
-    <string name="welcome_badge_on_device">100% On-Device</string>
+    <string name="welcome_title">Meet LifeWeave:\nyour everyday health companion.</string>
+    <string name="welcome_subtitle">LifeWeave brings your daily water, medicines, medical reports, cycle care, sleep, mood, and optional family sharing together in one calm, private app.</string>
+    <string name="cta_get_started">Continue to Sign In</string>
+    <string name="welcome_badge_on_device">Private-First</string>
     <string name="welcome_language_title">🗣️ Choose Language</string>
-    <string name="welcome_pledge_privacy_title">🛡️ Strictly On-Device Storage</string>
-    <string name="welcome_pledge_privacy_sub">All profiles, hydration logs, workouts, and cycle records stay privately on your phone with zero cloud upload.</string>
-    <string name="welcome_pledge_cycle_title">🌸 Inclusive &amp; Always Free Cycle Care</string>
-    <string name="welcome_pledge_cycle_sub">Personalized for every identity—toggle cycle tracking anytime, free forever.</string>
-    <string name="welcome_pledge_alerts_title">🔔 Distinct Custom Alert Sounds</string>
-    <string name="welcome_pledge_alerts_sub">Dedicated water droplet, botanical period chime, custom alarms, or any local audio file from your phone.</string>
+    <string name="welcome_why_heading">Why people use LifeWeave</string>
+    <string name="welcome_pledge_alerts_title">💧 Daily Habits, Water &amp; Medicine Reminders</string>
+    <string name="welcome_pledge_alerts_sub">Never forget a glass of water, a daily vitamin, or a doctor follow-up with gentle custom alert tones.</string>
+    <string name="welcome_pledge_cycle_title">🌸 Health Vault &amp; 100% Free Period Care</string>
+    <string name="welcome_pledge_cycle_sub">Store prescriptions and lab reports safely, get plain-language explanations, and track periods free forever.</string>
+    <string name="welcome_pledge_mood_title">📓 Mood Journal, Routines &amp; Family Circle</string>
+    <string name="welcome_pledge_mood_sub">Reflect on your mood, build no-pressure daily routines, and optionally coordinate care with up to 5 family members.</string>
+    <string name="welcome_pledge_privacy_title">🛡️ Private &amp; Under Your Control</string>
+    <string name="welcome_pledge_privacy_sub">Your records stay encrypted on your phone. Sign in only when you want cloud sync or shared family care.</string>
 
     <string name="nav_home">Home</string>
     <string name="nav_water">Hydration</string>
@@ -86,4 +89,16 @@
     <string name="subscription_screen_title">LifeWeave Plans &amp; Billing</string>
     <string name="subscription_period_always_free">Cycle &amp; Period Care stays 100% Free Forever — never gated behind any subscription.</string>
     <string name="subscription_restore_cta">Restore Google Play Purchases</string>
+    <string name="auth_privacy_pill">Your Data, Your Choice</string>
+    <string name="auth_screen_title">Welcome to LifeWeave</string>
+    <string name="auth_screen_subtitle">Sign in to sync family care &amp; backups, or use completely offline.</string>
+    <string name="auth_what_is_title">What is LifeWeave used for?</string>
+    <string name="auth_what_is_body">LifeWeave helps you take care of your everyday health in one simple place—track water, medicines, prescriptions, sleep, mood, daily routines, and a free Period Tracker, with optional family sharing.</string>
+    <string name="auth_choose_login_title">Choose how you want to enter</string>
+    <string name="auth_choose_login_sub">Connect a trusted account for Family Circle &amp; cross-device continuity, or continue privately on this device only.</string>
+    <string name="auth_btn_google">Continue with Google (Gmail)</string>
+    <string name="auth_btn_github">Continue with GitHub</string>
+    <string name="auth_btn_microsoft">Continue with Microsoft</string>
+    <string name="auth_btn_continue_offline">Continue Privately on This Device</string>
+    <string name="auth_continue_to_home">Continue to LifeWeave</string>
 </resources>

@@ -34,6 +34,7 @@ import com.example.security.LocalDefaultEntitlementPolicy
 import com.example.security.LocalPreferencesManager
 import com.example.security.OfflineLicenseVerifier
 import com.example.security.SubscriptionTier
+import com.example.sync.AppAutoRefreshManager
 import com.example.wellbeing.DeviceWellbeingManager
 import com.google.firebase.auth.FirebaseAuth
 import com.google.firebase.firestore.FirebaseFirestore
@@ -108,6 +109,21 @@ class AppContainer(context: Context) {
             familyCircleRepositoryProvider = { runCatching { familyCircleRepository }.getOrNull() },
             allowLocalDebugLoopbackUrls = BuildConfig.DEBUG,
             allowRuntimeEndpointOverrides = BuildConfig.DEBUG
+        )
+    }
+
+    val appAutoRefreshManager: AppAutoRefreshManager by lazy {
+        AppAutoRefreshManager(
+            appContext = appContext,
+            database = database,
+            preferencesManager = preferencesManager,
+            deviceWellbeingManager = deviceWellbeingManager,
+            healthConnectManager = healthConnectManager,
+            fitnessSyncRepository = fitnessSyncRepository,
+            allModulesRepository = allModulesRepository,
+            alertSoundManager = alertSoundManager,
+            routineMoodRepository = routineMoodRepository,
+            subscriptionRepositoryProvider = { runCatching { subscriptionRepository }.getOrNull() }
         )
     }
 }

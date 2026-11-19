@@ -143,7 +143,10 @@ fun HomeDashboardScreen(
     onOpenFamilyCircle: () -> Unit = {},
     onQuickMoodTap: (MoodPresetOption) -> Unit = {},
     currentPlanLabel: String = "Free",
-    onOpenSubscription: () -> Unit = {}
+    onOpenSubscription: () -> Unit = {},
+    onToggleAutoRefresh: (Boolean) -> Unit = {},
+    onSelectAutoRefreshInterval: (Int) -> Unit = {},
+    onRefreshAllNow: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val profile = uiState.profile
@@ -399,6 +402,63 @@ fun HomeDashboardScreen(
                                 )
                             }
                         }
+                    }
+                }
+            }
+        }
+
+        // Compact Live Auto-Refresh Control Bar (Digital Wellbeing + Fitness Devices + All Modules)
+        item {
+            com.example.ui.components.AutoRefreshControlCard(
+                autoRefreshEnabled = modulesState.autoRefreshEnabled,
+                intervalMinutes = modulesState.autoRefreshIntervalMinutes,
+                isRefreshing = modulesState.isAutoRefreshingAll,
+                lastRefreshedEpochMs = modulesState.lastAutoRefreshEpochMs,
+                lastSummary = modulesState.lastAutoRefreshSummary,
+                onToggleAutoRefresh = onToggleAutoRefresh,
+                onSelectIntervalMinutes = onSelectAutoRefreshInterval,
+                onRefreshAllNow = onRefreshAllNow,
+                compact = true
+            )
+        }
+
+        // Live Sleep & Snoring Monitor quick banner when overnight tracking is running
+        if (modulesState.sleepMonitorLiveState.isMonitoring) {
+            item {
+                val live = modulesState.sleepMonitorLiveState
+                Surface(
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(20.dp))
+                        .clickable { onOpenModuleKey("exercise_tracker") }
+                        .testTag("home_live_sleep_monitor_banner"),
+                    shape = RoundedCornerShape(20.dp),
+                    color = AiStudioMidnight,
+                    border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.55f))
+                ) {
+                    Row(
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "😴 Sleep & Snoring Monitor LIVE",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = Color(0xFF9DF7DF)
+                            )
+                            Text(
+                                text = "${live.estimatedStage.emoji} ${live.estimatedStage.label} • Quality ${live.liveQualityScore}/100 • ${live.snoreEventsCount} snore(s) • ${live.currentDb.toInt()} dB",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.White
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
+                            contentDescription = "Open sleep monitor",
+                            tint = Color(0xFF9DF7DF)
+                        )
                     }
                 }
             }
