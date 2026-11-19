@@ -24,6 +24,8 @@ import androidx.compose.material.icons.rounded.DeleteForever
 import androidx.compose.material.icons.rounded.Download
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Key
+import androidx.compose.material.icons.rounded.Lock
+import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Security
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -72,6 +74,8 @@ fun SettingsPrivacyScreen(
     uiState: SettingsPrivacyUiState,
     viewModel: SettingsPrivacyViewModel,
     onEditProfile: () -> Unit,
+    onOpenFamilyCircle: () -> Unit = {},
+    onOpenSubscription: () -> Unit = {},
     onAllDataWiped: () -> Unit
 ) {
     val context = LocalContext.current
@@ -100,6 +104,22 @@ fun SettingsPrivacyScreen(
     ) { uri ->
         if (uri != null) {
             viewModel.exportLocalJson(context, uri)
+        }
+    }
+
+    val exportEncryptedLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.CreateDocument("application/octet-stream")
+    ) { uri ->
+        if (uri != null) {
+            viewModel.exportEncryptedVault(context, uri)
+        }
+    }
+
+    val restoreBackupLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.OpenDocument()
+    ) { uri ->
+        if (uri != null) {
+            viewModel.prepareRestoreFromUri(context, uri)
         }
     }
 
@@ -218,7 +238,7 @@ fun SettingsPrivacyScreen(
                         style = MaterialTheme.typography.titleSmall
                     )
                     Text(
-                        text = "Allow these permissions so water & medicine notes pop up on screen even when locked or using other apps:",
+                        text = "Allow these permissions so water & medicine alerts can appear prominently when supported by your device OEM (standard high-priority notifications remain active as fallback):",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
@@ -457,6 +477,64 @@ fun SettingsPrivacyScreen(
                         Spacer(modifier = Modifier.size(6.dp))
                         Text("Edit Local Profile (${uiState.profile?.fullName ?: "User"})")
                     }
+
+                    OutlinedButton(
+                        onClick = onOpenFamilyCircle,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_open_family_circle_button")
+                    ) {
+                        Text("👨\u200D👩\u200D👧 Manage Family Circle & Multi-Profile (Up to 5)")
+                    }
+                }
+            }
+        }
+
+        // Google Play Billing Subscription & Entitlement Card
+        item {
+            val entitlement = uiState.effectiveEntitlement
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        text = "💎 LifeWeave Plans & Google Play Billing",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = "${entitlement.tier.displayName} • ${entitlement.lifecycleStatus.label} (Max ${entitlement.maxAllowedProfiles} profiles). Period Tracker is always ₹0 Free Forever.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = onOpenSubscription,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("settings_manage_plans_button")
+                        ) {
+                            Text("Manage Plans")
+                        }
+                        OutlinedButton(
+                            onClick = viewModel::restoreGooglePlayPurchases,
+                            enabled = !uiState.isRestoringOrExporting,
+                            modifier = Modifier
+                                .weight(1f)
+                                .testTag("settings_restore_play_purchases_button")
+                        ) {
+                            Text("Restore Purchases")
+                        }
+                    }
                 }
             }
         }
@@ -502,7 +580,7 @@ fun SettingsPrivacyScreen(
                                 style = MaterialTheme.typography.labelLarge
                             )
                             Text(
-                                text = "Personal wellness data stays strictly on this device. Private backup keys are isolated from module activation keys, with encrypted personal backup support ready.",
+                                text = "Portable JSON exports all 17 wellness tables for moving between devices. Encrypted LCENC1 archives use hardware Keystore AES-256-GCM bound to this device.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -513,6 +591,7 @@ fun SettingsPrivacyScreen(
                         onClick = {
                             exportJsonLauncher.launch("lifeweave_local_backup.json")
                         },
+                        enabled = !uiState.isRestoringOrExporting,
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("settings_export_json_button")
@@ -520,6 +599,34 @@ fun SettingsPrivacyScreen(
                         Icon(imageVector = Icons.Rounded.Download, contentDescription = null)
                         Spacer(modifier = Modifier.size(6.dp))
                         Text(stringResource(id = R.string.privacy_export_json))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            exportEncryptedLauncher.launch("lifeweave_encrypted_vault.lwvault")
+                        },
+                        enabled = !uiState.isRestoringOrExporting && uiState.vaultStatus.keystoreAvailable,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_export_encrypted_button")
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Lock, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(stringResource(id = R.string.privacy_export_encrypted))
+                    }
+
+                    OutlinedButton(
+                        onClick = {
+                            restoreBackupLauncher.launch(arrayOf("application/json", "application/octet-stream", "*/*"))
+                        },
+                        enabled = !uiState.isRestoringOrExporting,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .testTag("settings_restore_backup_button")
+                    ) {
+                        Icon(imageVector = Icons.Rounded.Restore, contentDescription = null)
+                        Spacer(modifier = Modifier.size(6.dp))
+                        Text(stringResource(id = R.string.privacy_restore_backup))
                     }
 
                     OutlinedButton(
@@ -669,6 +776,45 @@ fun SettingsPrivacyScreen(
             dismissButton = {
                 TextButton(onClick = { showDeleteConfirmDialog = false }) {
                     Text("Keep Data")
+                }
+            }
+        )
+    }
+
+    uiState.pendingRestorePreview?.let { preview ->
+        AlertDialog(
+            onDismissRequest = viewModel::dismissRestorePreview,
+            title = {
+                Text(if (preview.isEncrypted) "🔐 Restore Encrypted Vault?" else "📥 Restore JSON Backup?")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(
+                        text = "Profile: ${preview.profileName} • ${preview.totalRecords} records",
+                        style = MaterialTheme.typography.titleSmall
+                    )
+                    Text(
+                        text = preview.breakdownText,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Text(
+                        text = "Schema: ${preview.schemaVersion}. Confirming will atomically replace current local records; if anything fails, existing data stays untouched.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = viewModel::confirmRestoreBackup,
+                    modifier = Modifier.testTag("confirm_restore_backup_button")
+                ) {
+                    Text("Restore Vault")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = viewModel::dismissRestorePreview) {
+                    Text("Cancel")
                 }
             }
         )

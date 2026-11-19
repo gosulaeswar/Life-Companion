@@ -17,7 +17,6 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -34,7 +33,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -85,8 +83,11 @@ import androidx.core.content.ContextCompat
 import com.example.R
 import com.example.ai.SupportedVoiceLanguages
 import com.example.domain.DateEpochUtils
+import com.example.domain.IntelligenceTimeframe
+import com.example.domain.MoodPresetOption
 import com.example.ui.components.BentoMetricTile
 import com.example.ui.components.CircularProgressRing
+import com.example.ui.components.HomeRoutineMoodCard
 import com.example.ui.components.ModuleStatusPill
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.theme.AiStudioMidnight
@@ -135,11 +136,17 @@ fun HomeDashboardScreen(
     onSnoozeWellbeingAlert: () -> Unit = {},
     onStartFocusBreak: () -> Unit = {},
     onOpenUsageAccessSettings: () -> Unit = {},
-    onRequestNotificationPermission: () -> Unit = {}
+    onRequestNotificationPermission: () -> Unit = {},
+    onSelectIntelligenceTimeframe: (IntelligenceTimeframe) -> Unit = {},
+    onSynthesizeIntelligence: (IntelligenceTimeframe) -> Unit = {},
+    onSpeakIntelligence: () -> Unit = {},
+    onOpenFamilyCircle: () -> Unit = {},
+    onQuickMoodTap: (MoodPresetOption) -> Unit = {},
+    currentPlanLabel: String = "Free",
+    onOpenSubscription: () -> Unit = {}
 ) {
     val context = LocalContext.current
     val profile = uiState.profile
-    var dailyVibe by rememberSaveable { mutableStateOf("🌿 Balanced") }
     val todayEpochDay = remember { DateEpochUtils.todayEpochDay() }
     val selectedLang = SupportedVoiceLanguages.byTag(modulesState.selectedVoiceLanguageTag)
     val micPermissionLauncher = rememberLauncherForActivityResult(
@@ -157,20 +164,48 @@ fun HomeDashboardScreen(
         else -> "🌙"
     }
 
-    val activeMeds = modulesState.medicines.filter { it.isActive }
-    val expectedDoses = activeMeds.sumOf { it.dosesPerDay.coerceAtLeast(1) }
-    val takenDoses = modulesState.todayMedicineIntakes.count { it.status == "Taken" }
-    val nextFollowUp = modulesState.consultations
-        .filter { it.followUpEpochDay != null && !it.isFollowUpCompleted }
-        .minByOrNull { it.followUpEpochDay ?: Long.MAX_VALUE }
+    val activeMeds = remember(modulesState.medicines) {
+        modulesState.medicines.filter { it.isActive }
+    }
+    val expectedDoses = remember(activeMeds) {
+        activeMeds.sumOf { it.dosesPerDay.coerceAtLeast(1) }
+    }
+    val takenDoses = remember(modulesState.todayMedicineIntakes) {
+        modulesState.todayMedicineIntakes.count { it.status == "Taken" }
+    }
+    val nextFollowUp = remember(modulesState.consultations) {
+        modulesState.consultations
+            .filter { it.followUpEpochDay != null && !it.isFollowUpCompleted }
+            .minByOrNull { it.followUpEpochDay ?: Long.MAX_VALUE }
+    }
     val totalSteps = modulesState.todaySteps?.stepCount ?: 0
-    val activeMinutes = modulesState.exercises.sumOf { it.durationMinutes }
-    val totalCalories = modulesState.dietRecords.sumOf { it.calories }
-    val checkInWins = (if (uiState.hydration.totalTodayMl > 0) 1 else 0) +
-        takenDoses +
-        modulesState.exercises.size +
-        modulesState.dietRecords.size +
+    val activeMinutes = remember(modulesState.exercises) {
+        modulesState.exercises.sumOf { it.durationMinutes }
+    }
+    val totalCalories = remember(modulesState.dietRecords) {
+        modulesState.dietRecords.sumOf { it.calories }
+    }
+    val checkInWins = remember(
+        uiState.hydration.totalTodayMl,
+        takenDoses,
+        modulesState.exercises.size,
+        modulesState.dietRecords.size,
         modulesState.beautyRecords.size
+    ) {
+        (if (uiState.hydration.totalTodayMl > 0) 1 else 0) +
+            takenDoses +
+            modulesState.exercises.size +
+            modulesState.dietRecords.size +
+            modulesState.beautyRecords.size
+    }
+    val latestHr = remember(modulesState.vitalMetrics) {
+        modulesState.vitalMetrics.firstOrNull { it.metricType == "HEART_RATE" }
+    }
+    val latestSleepHrs = remember(modulesState.sleepRecords) {
+        modulesState.sleepRecords.firstOrNull()?.let { s ->
+            (s.wakeEpochMs - s.bedtimeEpochMs) / 3_600_000f
+        }
+    }
 
     LazyColumn(
         modifier = Modifier
@@ -327,10 +362,59 @@ fun HomeDashboardScreen(
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
                                 )
                             }
+                            Surface(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onOpenFamilyCircle)
+                                    .testTag("home_family_circle_chip"),
+                                color = Color.White.copy(alpha = 0.16f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f)),
+                                shape = CircleShape
+                            ) {
+                                Text(
+                                    text = "👨\u200D👩\u200D👧 Family Circle",
+                                    style = MaterialTheme.typography.labelMedium,
+                                    color = Color.White,
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
+                            Surface(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable(onClick = onOpenSubscription)
+                                    .testTag("home_subscription_chip"),
+                                color = Color(0xFF2CE5B5).copy(alpha = 0.22f),
+                                border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.50f)),
+                                shape = CircleShape
+                            ) {
+                                Text(
+                                    text = "💎 $currentPlanLabel",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = Color(0xFF9DF7DF),
+                                    maxLines = 1,
+                                    softWrap = false,
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
+                                )
+                            }
                         }
                     }
                 }
             }
+        }
+
+        // Personal Health Intelligence Hero Card (Top of Home Dashboard)
+        item {
+            HomeHealthIntelligenceCard(
+                uiState = modulesState,
+                onSelectTimeframe = onSelectIntelligenceTimeframe,
+                onSynthesizeAi = onSynthesizeIntelligence,
+                onSpeakBriefing = onSpeakIntelligence,
+                onStopSpeaking = onStopVoicePlayback,
+                onRunDiagnostics = onRunAiDiagnostics,
+                onOpenFullIntelligence = { onOpenModuleKey("reports_analytics") }
+            )
         }
 
         // Luminous Aurora AI Voice Studio Card
@@ -509,6 +593,7 @@ fun HomeDashboardScreen(
                             listOf(
                                 "💧 Log 200ml water" to "I just drank 200 ml water",
                                 "☕ Had coffee" to "I just had a cup of coffee",
+                                "📊 Weekly check" to "How was my health routine this week?",
                                 "✨ Wellness tip" to "Give me a quick wellness tip based on my logs today"
                             ).forEach { (chipLabel, promptText) ->
                                 Surface(
@@ -637,6 +722,30 @@ fun HomeDashboardScreen(
                                         maxLines = 4,
                                         overflow = TextOverflow.Ellipsis
                                     )
+                                    latestAiReply.fallbackSummary?.takeIf { it.isNotBlank() }?.let { localSummary ->
+                                        Surface(
+                                            shape = RoundedCornerShape(12.dp),
+                                            color = MaterialTheme.colorScheme.surface.copy(alpha = 0.92f)
+                                        ) {
+                                            Column(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .padding(10.dp),
+                                                verticalArrangement = Arrangement.spacedBy(3.dp)
+                                            ) {
+                                                Text(
+                                                    text = "📊 Grounded Local Summary",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.Bold),
+                                                    color = MaterialTheme.colorScheme.primary
+                                                )
+                                                Text(
+                                                    text = localSummary,
+                                                    style = MaterialTheme.typography.bodySmall,
+                                                    color = MaterialTheme.colorScheme.onSurface
+                                                )
+                                            }
+                                        }
+                                    }
                                     if (latestAiReply.isError) {
                                         FlowRow(
                                             horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -739,10 +848,16 @@ fun HomeDashboardScreen(
                             }
                         }
 
-                        Row(
+                        Text(
+                            text = "Uses your recorded logs when prompted • Wellness guidance only, not medical diagnosis.",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = Color.White.copy(alpha = 0.68f)
+                        )
+
+                        FlowRow(
                             modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
                         ) {
                             Surface(
                                 modifier = Modifier
@@ -755,6 +870,22 @@ fun HomeDashboardScreen(
                                     text = "📄 Scan Rx / Languages →",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
                                     color = Color(0xFF9DF7DF),
+                                    modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
+                                )
+                            }
+                            Surface(
+                                modifier = Modifier
+                                    .clip(CircleShape)
+                                    .clickable { onOpenModuleKey("reports_analytics") }
+                                    .testTag("home_open_health_intelligence_button"),
+                                shape = CircleShape,
+                                color = Color.White.copy(alpha = 0.14f),
+                                border = BorderStroke(1.dp, Color.White.copy(alpha = 0.25f))
+                            ) {
+                                Text(
+                                    text = "🧠 Briefings & Trends →",
+                                    style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
+                                    color = Color.White,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                                 )
                             }
@@ -779,10 +910,6 @@ fun HomeDashboardScreen(
         item {
             val stepGoal = 8000
             val stepProgress = (totalSteps.toFloat() / stepGoal.toFloat()).coerceIn(0f, 1f)
-            val latestHr = modulesState.vitalMetrics.firstOrNull { it.metricType == "HEART_RATE" }
-            val latestSleepHrs = modulesState.sleepRecords.firstOrNull()?.let { s ->
-                (s.wakeEpochMs - s.bedtimeEpochMs) / 3_600_000f
-            }
             val latestStepsRecord = modulesState.todaySteps
             val distanceKm = ((latestStepsRecord?.distanceMeters ?: (totalSteps * 0.74).toInt()) / 1000f)
 
@@ -1258,49 +1385,21 @@ fun HomeDashboardScreen(
             }
         }
 
-        // Daily Vibe Check-In Card
+        // Phase 6: Rhythm, Quick Mood Journal & Milestones Card
         item {
-            Card(
-                modifier = Modifier
-                    .widthIn(max = 600.dp)
-                    .fillMaxWidth(),
-                shape = RoundedCornerShape(22.dp),
-                elevation = CardDefaults.cardElevation(defaultElevation = 1.dp),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(
-                    modifier = Modifier.padding(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
-                ) {
-                    Text(
-                        text = "🎭 Daily Vibe Check-In",
-                        style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
-                    )
-                    FlowRow(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        listOf(
-                            "🌿 Balanced",
-                            "⚡ Energized",
-                            "😌 Calm",
-                            "😴 Sleepy",
-                            "💆 Self-Care"
-                        ).forEach { vibe ->
-                            FilterChip(
-                                selected = dailyVibe == vibe,
-                                onClick = { dailyVibe = vibe },
-                                label = { Text(vibe) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = MaterialTheme.colorScheme.primaryContainer,
-                                    selectedLabelColor = MaterialTheme.colorScheme.onPrimaryContainer
-                                )
-                            )
-                        }
-                    }
-                }
-            }
+            HomeRoutineMoodCard(
+                adherence = modulesState.routineAdherence,
+                moodAnalytics = modulesState.moodAnalytics,
+                latestMood = modulesState.latestMoodEntry,
+                activeChallengesCount = modulesState.wellnessChallenges.count { it.status == "ACTIVE" },
+                earnedBadgesCount = modulesState.achievementBadges.count { it.earnedAtEpochMs != null },
+                totalBadgesCount = modulesState.achievementBadges.size,
+                onQuickMoodTap = onQuickMoodTap,
+                onOpenRoutines = { onOpenModuleKey("daily_routines") },
+                onOpenMoodJournal = { onOpenModuleKey("mood_journal") },
+                onOpenChallenges = { onOpenModuleKey("wellness_challenges") },
+                modifier = Modifier.widthIn(max = 600.dp)
+            )
         }
 
         // Colorful 2x2 Spotlight Grid (Water, Meds, Doctors, Fitness)
@@ -1657,6 +1756,14 @@ fun HomeDashboardScreen(
                     accentColor = MaterialTheme.colorScheme.tertiary
                 ),
                 HomeCategoryVisual(
+                    key = "health_vault",
+                    emoji = "🗂️",
+                    title = "Health Records Vault",
+                    subtitle = "Encrypted Rx, labs, allergies & Doctor PDF",
+                    badgeBg = MaterialTheme.colorScheme.secondaryContainer,
+                    accentColor = MaterialTheme.colorScheme.secondary
+                ),
+                HomeCategoryVisual(
                     key = "exercise_tracker",
                     emoji = "🏃",
                     title = "Fitness & Steps",
@@ -1719,9 +1826,9 @@ fun HomeDashboardScreen(
                 ),
                 HomeCategoryVisual(
                     key = "reports_analytics",
-                    emoji = "📊",
-                    title = "Reports & Analytics",
-                    subtitle = "Weekly streaks, doses & wellness trends",
+                    emoji = "🧠",
+                    title = "Health Intelligence & Reports",
+                    subtitle = "${modulesState.healthIntelligence.loggedModuleCount} active module(s) • Daily briefings & trends",
                     badgeBg = MaterialTheme.colorScheme.secondaryContainer,
                     accentColor = MaterialTheme.colorScheme.secondary
                 ),
@@ -1745,6 +1852,30 @@ fun HomeDashboardScreen(
                     subtitle = "Speak in any language, scan prescriptions, log coffee/water",
                     badgeBg = MaterialTheme.colorScheme.primaryContainer,
                     accentColor = MaterialTheme.colorScheme.primary
+                ),
+                HomeCategoryVisual(
+                    key = "daily_routines",
+                    emoji = "🌅",
+                    title = "Smart Daily Routines",
+                    subtitle = if (modulesState.routineAdherence.activeRoutinesCount > 0) {
+                        "${modulesState.routineAdherence.completedTodayCount}/${modulesState.routineAdherence.activeRoutinesCount} completed today • ${modulesState.routineAdherence.weeklyConsistencyPercent}% 7d"
+                    } else {
+                        "Customizable habits, optional checklists & gentle reminders"
+                    },
+                    badgeBg = MaterialTheme.colorScheme.primaryContainer,
+                    accentColor = MaterialTheme.colorScheme.primary
+                ),
+                HomeCategoryVisual(
+                    key = "mood_journal",
+                    emoji = "📓",
+                    title = "Mood Journal, Challenges & Badges",
+                    subtitle = if (modulesState.moodEntries.isNotEmpty() || modulesState.achievementBadges.any { it.earnedAtEpochMs != null }) {
+                        "${modulesState.moodAnalytics.totalEntriesLast7Days} mood logs (7d) • ${modulesState.achievementBadges.count { it.earnedAtEpochMs != null }} badges earned"
+                    } else {
+                        "Reflective logs, optional challenges & guilt-free milestones"
+                    },
+                    badgeBg = VioletFocus.copy(alpha = 0.20f),
+                    accentColor = VioletFocus
                 )
             )
 

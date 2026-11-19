@@ -7,6 +7,20 @@ enum class HealthConnectAvailability {
     REQUIRES_ANDROID_8
 }
 
+enum class HealthConnectDataCategory(
+    val label: String,
+    val emoji: String,
+    val description: String
+) {
+    STEPS_AND_ACTIVITY("Steps, Distance & Calories", "👟", "Daily step count, distance, active/total calories"),
+    WORKOUTS("Workouts & Yoga", "🏋️", "Exercise sessions, duration & estimated burn"),
+    SLEEP("Sleep Sessions", "😴", "Bedtime, wake time & rest quality"),
+    HEART_RATE("Heart Rate", "❤️", "Heart rate samples from connected watches"),
+    HYDRATION("Hydration Logs", "💧", "Water volume logged by connected apps"),
+    NUTRITION("Nutrition & Meals", "🥗", "Calories, protein, carbs & fats from diet apps"),
+    WEIGHT("Body Weight", "⚖️", "Latest body mass measurements")
+}
+
 data class FitnessEcosystemBrand(
     val id: String,
     val name: String,
@@ -88,6 +102,17 @@ data class ImportedWater(
     val sourceId: String
 )
 
+data class ImportedNutrition(
+    val mealType: String, // "Breakfast", "Lunch", "Dinner", "Snack"
+    val foodSummary: String,
+    val calories: Int,
+    val proteinGrams: Int,
+    val carbsGrams: Int,
+    val fatGrams: Int,
+    val loggedAtEpochMs: Long,
+    val sourceId: String
+)
+
 data class ImportedVitalMetric(
     val metricType: String, // "HEART_RATE", "DISTANCE", "ACTIVE_CALORIES", "WEIGHT"
     val valuePrimary: Double,
@@ -111,10 +136,12 @@ data class HealthSyncPayload(
     val workouts: List<ImportedWorkout> = emptyList(),
     val sleepSessions: List<ImportedSleep> = emptyList(),
     val waterEntries: List<ImportedWater> = emptyList(),
+    val nutritionEntries: List<ImportedNutrition> = emptyList(),
     val vitalMetrics: List<ImportedVitalMetric> = emptyList(),
     val latestWeightKg: Float? = null,
     val sources: List<ImportedSourceStat> = emptyList()
 ) {
     val totalRecordsCount: Int
-        get() = dailySteps.size + workouts.size + sleepSessions.size + waterEntries.size + vitalMetrics.size
+        get() = dailySteps.size + workouts.size + sleepSessions.size +
+            waterEntries.size + nutritionEntries.size + vitalMetrics.size
 }

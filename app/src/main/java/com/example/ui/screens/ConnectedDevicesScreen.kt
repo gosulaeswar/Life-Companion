@@ -26,6 +26,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Refresh
+import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.UploadFile
 import androidx.compose.material3.Button
 import androidx.compose.material3.Card
@@ -36,6 +37,7 @@ import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Surface
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -46,14 +48,19 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.health.connect.client.PermissionController
+import com.example.R
 import com.example.domain.DateEpochUtils
+import com.example.domain.IndianNutritionEngine
 import com.example.healthsync.FitnessSourceCatalog
 import com.example.healthsync.HealthConnectAvailability
+import com.example.healthsync.HealthConnectDataCategory
 import com.example.healthsync.HealthConnectManager
+import com.example.healthsync.HealthPermissionsRationaleActivity
 import com.example.ui.theme.FertileLeafGreen
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.ModulesHubUiState
@@ -87,6 +94,8 @@ fun ConnectedDevicesScreen(
         }
     }
 
+    val enabledCategories = uiState.healthConnectImportAuth.enabledCategories()
+    val enabledPermissions = HealthConnectManager.permissionsForCategories(enabledCategories)
     val hasAnyHcPermission = uiState.grantedHealthPermissions
         .intersect(HealthConnectManager.REQUIRED_READ_PERMISSIONS)
         .isNotEmpty()
@@ -97,6 +106,7 @@ fun ConnectedDevicesScreen(
     val latestBurnedKcal = uiState.vitalMetrics.firstOrNull { it.metricType == "ACTIVE_CALORIES" }?.valuePrimary?.toInt()
         ?: uiState.exercises.sumOf { it.caloriesBurned }
     val latestWeightKg = uiState.profile?.weightKg
+    val syncedMealsCount = uiState.dietRecords.count { IndianNutritionEngine.isHealthConnectSyncedRecord(it) }
 
     LazyColumn(
         modifier = Modifier
@@ -244,7 +254,8 @@ fun ConnectedDevicesScreen(
                                 if (!hasAnyHcPermission) {
                                     Button(
                                         onClick = {
-                                            permissionLauncher.launch(HealthConnectManager.REQUIRED_READ_PERMISSIONS)
+                                            val perms = enabledPermissions.ifEmpty { HealthConnectManager.REQUIRED_READ_PERMISSIONS }
+                                            permissionLauncher.launch(perms)
                                         },
                                         modifier = Modifier
                                             .weight(1f)
@@ -261,11 +272,12 @@ fun ConnectedDevicesScreen(
                                             .testTag("health_connect_sync_button")
                                     ) {
                                         Icon(Icons.Rounded.Refresh, contentDescription = null)
-                                        Text(" Sync Now")
+                                        Text(" Sync Enabled")
                                     }
                                     OutlinedButton(
                                         onClick = {
-                                            permissionLauncher.launch(HealthConnectManager.REQUIRED_READ_PERMISSIONS)
+                                            val perms = enabledPermissions.ifEmpty { HealthConnectManager.REQUIRED_READ_PERMISSIONS }
+                                            permissionLauncher.launch(perms)
                                         },
                                         modifier = Modifier.testTag("health_connect_permissions_button")
                                     ) {
@@ -300,15 +312,131 @@ fun ConnectedDevicesScreen(
                         }
                     }
 
-                    if (uiState.healthConnectAvailability == HealthConnectAvailability.AVAILABLE) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        if (uiState.healthConnectAvailability == HealthConnectAvailability.AVAILABLE) {
+                            TextButton(
+                                onClick = {
+                                    runCatching {
+                                        context.startActivity(healthConnectManager.buildSettingsIntent())
+                                    }
+                                }
+                            ) {
+                                Text("Health Connect Settings ⚙️")
+                            }
+                        }
                         TextButton(
                             onClick = {
-                                runCatching {
-                                    context.startActivity(healthConnectManager.buildSettingsIntent())
-                                }
-                            }
+                                context.startActivity(
+                                    Intent(context, HealthPermissionsRationaleActivity::class.java)
+                                )
+                            },
+                            modifier = Modifier.testTag("hc_view_rationale_button")
                         ) {
-                            Text("Open Android Health Connect Settings ⚙️")
+                            Icon(Icons.Rounded.Shield, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Text(" Privacy Rationale")
+                        }
+                    }
+                }
+            }
+        }
+
+        // Explicit Per-Category Health Connect Authorization & Permission Status
+        item {
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(18.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Text(
+                        "🔐 ${stringResource(R.string.hc_permissions_categories_title)}",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                    Text(
+                        text = stringResource(R.string.hc_manual_preserved_note),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    HealthConnectDataCategory.entries.forEach { category ->
+                        val isEnabled = uiState.healthConnectImportAuth.isCategoryEnabled(category)
+                        val isOsGranted = HealthConnectManager.isCategoryOsGranted(
+                            category = category,
+                            grantedPermissions = uiState.grantedHealthPermissions
+                        )
+                        Surface(
+                            shape = RoundedCornerShape(14.dp),
+                            color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.42f),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(horizontal = 12.dp, vertical = 8.dp),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text("${category.emoji} ${category.label}", style = MaterialTheme.typography.titleSmall)
+                                    Text(
+                                        category.description,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                    Text(
+                                        text = if (isOsGranted) "✅ OS Permission Granted" else "🔒 Requires Health Connect Grant",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = if (isOsGranted) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                }
+                                Switch(
+                                    checked = isEnabled,
+                                    onCheckedChange = { checked ->
+                                        viewModel.setHealthConnectCategoryEnabled(category, checked)
+                                    },
+                                    modifier = Modifier.testTag("hc_category_toggle_${category.name}")
+                                )
+                            }
+                        }
+                    }
+
+                    if (uiState.healthConnectAvailability == HealthConnectAvailability.AVAILABLE) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    if (enabledPermissions.isNotEmpty()) {
+                                        permissionLauncher.launch(enabledPermissions)
+                                    }
+                                },
+                                enabled = enabledPermissions.isNotEmpty(),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("hc_request_selected_permissions_button")
+                            ) {
+                                Text("Grant Enabled (${enabledCategories.size})")
+                            }
+                            OutlinedButton(
+                                onClick = {
+                                    permissionLauncher.launch(HealthConnectManager.REQUIRED_READ_PERMISSIONS)
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("hc_request_all_permissions_button")
+                            ) {
+                                Text("Grant All (${HealthConnectDataCategory.entries.size})")
+                            }
                         }
                     }
                 }
@@ -450,6 +578,23 @@ fun ConnectedDevicesScreen(
                         emoji = "⚖️",
                         label = "Body Weight",
                         value = latestWeightKg?.let { String.format("%.1f kg", it) } ?: "--",
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    SyncedMetricChip(
+                        emoji = "🥗",
+                        label = "Synced Meals",
+                        value = "$syncedMealsCount logged",
+                        modifier = Modifier.weight(1f)
+                    )
+                    SyncedMetricChip(
+                        emoji = "💧",
+                        label = "Today Water",
+                        value = "${uiState.hydration.totalTodayMl} ml",
                         modifier = Modifier.weight(1f)
                     )
                 }

@@ -42,8 +42,10 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -57,12 +59,14 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.example.R
 import com.example.di.AppContainer
 import com.example.di.SimpleViewModelFactory
@@ -72,7 +76,9 @@ import com.example.ui.screens.BeautyCareScreen
 import com.example.ui.screens.ConnectedDevicesScreen
 import com.example.ui.screens.DietNutritionScreen
 import com.example.ui.screens.DigitalWellbeingScreen
+import com.example.ui.screens.FamilyCircleRoute
 import com.example.ui.screens.FitnessYogaScreen
+import com.example.ui.screens.HealthVaultScreen
 import com.example.ui.screens.HomeDashboardScreen
 import com.example.ui.screens.MedicalCareScreen
 import com.example.ui.screens.ModuleSubRoutes
@@ -82,17 +88,22 @@ import com.example.ui.screens.PeriodTrackerScreen
 import com.example.ui.screens.PermissionsSetupScreen
 import com.example.ui.screens.ProfileSetupScreen
 import com.example.ui.screens.ReportsAnalyticsScreen
+import com.example.ui.screens.RoutineMoodScreen
 import com.example.ui.screens.SettingsPrivacyScreen
+import com.example.ui.screens.SubscriptionScreen
 import com.example.ui.screens.WaterTrackerScreen
 import com.example.ui.screens.WelcomeScreen
 import com.example.ui.theme.LifeCompanionTheme
 import com.example.ui.viewmodel.AppLaunchDestination
 import com.example.ui.viewmodel.AppSessionViewModel
+import com.example.ui.viewmodel.HealthVaultViewModel
 import com.example.ui.viewmodel.HomeViewModel
 import com.example.ui.viewmodel.ModulesHubViewModel
 import com.example.ui.viewmodel.PeriodViewModel
 import com.example.ui.viewmodel.ProfileSetupViewModel
+import com.example.ui.viewmodel.RoutineMoodViewModel
 import com.example.ui.viewmodel.SettingsPrivacyViewModel
+import com.example.ui.viewmodel.SubscriptionViewModel
 import com.example.ui.viewmodel.WaterViewModel
 
 object LifeWeaveRoutes {
@@ -105,7 +116,7 @@ object LifeWeaveRoutes {
 }
 
 private data class NavTabItem(
-    val route: String,
+    val dest: LifeWeaveDest,
     val labelRes: Int,
     val selectedIcon: ImageVector,
     val unselectedIcon: ImageVector,
@@ -223,11 +234,31 @@ private fun MainShell(
                 deviceWellbeingManager = container.deviceWellbeingManager,
                 alertSoundManager = container.alertSoundManager,
                 preferencesManager = container.preferencesManager,
-                customAlarmRepository = container.customAlarmRepository
+                customAlarmRepository = container.customAlarmRepository,
+                healthVaultRepository = container.healthVaultRepository,
+                routineMoodRepository = container.routineMoodRepository
             )
         }
     )
     val modulesHubState by modulesHubViewModel.uiState.collectAsStateWithLifecycle()
+
+    val healthVaultViewModel: HealthVaultViewModel = viewModel(
+        factory = SimpleViewModelFactory {
+            HealthVaultViewModel(
+                userProfileRepository = container.userProfileRepository,
+                healthVaultRepository = container.healthVaultRepository,
+                allModulesRepository = container.allModulesRepository,
+                encryptedDocumentVault = container.encryptedDocumentVault,
+                aiService = container.lifeWeaveAiService,
+                alertSoundManager = container.alertSoundManager,
+                preferencesManager = container.preferencesManager
+            )
+        }
+    )
+    val healthVaultState by healthVaultViewModel.uiState.collectAsStateWithLifecycle()
+
+    val effectiveEntitlement by container.subscriptionRepository.observeEffectiveEntitlement()
+        .collectAsStateWithLifecycle(initialValue = com.example.billing.EffectiveEntitlement())
 
     val shellContext = LocalContext.current
     var askedNotifOnce by rememberSaveable { mutableStateOf(false) }
@@ -254,10 +285,14 @@ private fun MainShell(
     }
 
     val lifecycleOwner = LocalLifecycleOwner.current
+    val shellScope = rememberCoroutineScope()
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) {
                 modulesHubViewModel.refreshWellbeingFromDevice(includePastWeek = false)
+                shellScope.launch {
+                    runCatching { container.subscriptionRepository.checkAndEnforceExpiry() }
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -267,7 +302,7 @@ private fun MainShell(
     val tabs = buildList {
         add(
             NavTabItem(
-                route = LifeWeaveRoutes.ROUTE_HOME,
+                dest = LifeWeaveDest.Home,
                 labelRes = R.string.nav_home,
                 selectedIcon = Icons.Rounded.Home,
                 unselectedIcon = Icons.Outlined.Home,
@@ -276,7 +311,7 @@ private fun MainShell(
         )
         add(
             NavTabItem(
-                route = LifeWeaveRoutes.ROUTE_WATER,
+                dest = LifeWeaveDest.Water,
                 labelRes = R.string.nav_water,
                 selectedIcon = Icons.Rounded.WaterDrop,
                 unselectedIcon = Icons.Outlined.WaterDrop,
@@ -286,7 +321,7 @@ private fun MainShell(
         if (cycleTabVisible) {
             add(
                 NavTabItem(
-                    route = LifeWeaveRoutes.ROUTE_PERIOD,
+                    dest = LifeWeaveDest.Period,
                     labelRes = R.string.nav_period,
                     selectedIcon = Icons.Rounded.Favorite,
                     unselectedIcon = Icons.Outlined.FavoriteBorder,
@@ -296,7 +331,7 @@ private fun MainShell(
         }
         add(
             NavTabItem(
-                route = LifeWeaveRoutes.ROUTE_MODULES,
+                dest = LifeWeaveDest.Modules,
                 labelRes = R.string.nav_modules,
                 selectedIcon = Icons.Rounded.GridView,
                 unselectedIcon = Icons.Outlined.GridView,
@@ -305,7 +340,7 @@ private fun MainShell(
         )
         add(
             NavTabItem(
-                route = LifeWeaveRoutes.ROUTE_SETTINGS,
+                dest = LifeWeaveDest.Settings,
                 labelRes = R.string.nav_settings,
                 selectedIcon = Icons.Rounded.Shield,
                 unselectedIcon = Icons.Outlined.Shield,
@@ -314,8 +349,8 @@ private fun MainShell(
         )
     }
 
-    fun navigateToTab(route: String) {
-        navController.navigate(route) {
+    fun navigateToTab(dest: LifeWeaveDest) {
+        navController.navigate(dest) {
             popUpTo(navController.graph.findStartDestination().id) {
                 saveState = true
             }
@@ -326,18 +361,24 @@ private fun MainShell(
 
     fun navigateByModuleKey(moduleKey: String) {
         when (moduleKey) {
-            "water_tracker" -> navigateToTab(LifeWeaveRoutes.ROUTE_WATER)
-            "period_tracker" -> navigateToTab(LifeWeaveRoutes.ROUTE_PERIOD)
-            "daily_reminders" -> navigateToTab(LifeWeaveRoutes.ROUTE_SETTINGS)
-            "exercise_tracker", "yoga_tracker" -> navController.navigate(ModuleSubRoutes.ROUTE_FITNESS_YOGA)
-            "diet_tracker" -> navController.navigate(ModuleSubRoutes.ROUTE_DIET)
-            "medical_care" -> navController.navigate(ModuleSubRoutes.ROUTE_MEDICAL)
-            "beauty_care" -> navController.navigate(ModuleSubRoutes.ROUTE_BEAUTY)
-            "digital_wellbeing" -> navController.navigate(ModuleSubRoutes.ROUTE_WELLBEING)
-            "reports_analytics" -> navController.navigate(ModuleSubRoutes.ROUTE_REPORTS)
-            "on_device_ai" -> navController.navigate(ModuleSubRoutes.ROUTE_ON_DEVICE_AI)
-            "connected_devices" -> navController.navigate(ModuleSubRoutes.ROUTE_CONNECTED_DEVICES)
-            else -> navigateToTab(LifeWeaveRoutes.ROUTE_MODULES)
+            "water_tracker" -> navigateToTab(LifeWeaveDest.Water)
+            "period_tracker" -> navigateToTab(LifeWeaveDest.Period)
+            "daily_reminders" -> navigateToTab(LifeWeaveDest.Settings)
+            "exercise_tracker", "yoga_tracker" -> navController.navigate(LifeWeaveDest.FitnessYoga)
+            "diet_tracker" -> navController.navigate(LifeWeaveDest.Diet)
+            "medical_care" -> navController.navigate(LifeWeaveDest.Medical)
+            "health_vault" -> navController.navigate(LifeWeaveDest.HealthVault)
+            "beauty_care" -> navController.navigate(LifeWeaveDest.Beauty)
+            "digital_wellbeing" -> navController.navigate(LifeWeaveDest.Wellbeing)
+            "reports_analytics" -> navController.navigate(LifeWeaveDest.Reports)
+            "on_device_ai" -> navController.navigate(LifeWeaveDest.OnDeviceAi)
+            "connected_devices" -> navController.navigate(LifeWeaveDest.ConnectedDevices)
+            "family_circle" -> navController.navigate(LifeWeaveDest.FamilyCircle)
+            "subscription_plans" -> navController.navigate(LifeWeaveDest.Subscription)
+            "daily_routines" -> navController.navigate(LifeWeaveDest.RoutinesMood(0))
+            "mood_journal" -> navController.navigate(LifeWeaveDest.RoutinesMood(1))
+            "wellness_challenges" -> navController.navigate(LifeWeaveDest.RoutinesMood(2))
+            else -> navigateToTab(LifeWeaveDest.Modules)
         }
     }
 
@@ -350,7 +391,7 @@ private fun MainShell(
     }
 
     val isTopLevelRoute = tabs.any { tab ->
-        currentDestination?.hierarchy?.any { it.route == tab.route } == true
+        currentDestination?.hierarchy?.any { it.hasRoute(tab.dest::class) } == true
     }
 
     BoxWithConstraints(
@@ -373,11 +414,11 @@ private fun MainShell(
                         ) {
                             tabs.forEach { tab ->
                                 val selected = currentDestination?.hierarchy?.any {
-                                    it.route == tab.route
+                                    it.hasRoute(tab.dest::class)
                                 } == true
                                 NavigationBarItem(
                                     selected = selected,
-                                    onClick = { navigateToTab(tab.route) },
+                                    onClick = { navigateToTab(tab.dest) },
                                     icon = {
                                         Icon(
                                             imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
@@ -412,11 +453,11 @@ private fun MainShell(
                     ) {
                         tabs.forEach { tab ->
                             val selected = currentDestination?.hierarchy?.any {
-                                it.route == tab.route
+                                it.hasRoute(tab.dest::class)
                             } == true
                             NavigationRailItem(
                                 selected = selected,
-                                onClick = { navigateToTab(tab.route) },
+                                onClick = { navigateToTab(tab.dest) },
                                 icon = {
                                     Icon(
                                         imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
@@ -437,10 +478,10 @@ private fun MainShell(
 
                 NavHost(
                     navController = navController,
-                    startDestination = LifeWeaveRoutes.ROUTE_HOME,
+                    startDestination = LifeWeaveDest.Home,
                     modifier = Modifier.weight(1f)
                 ) {
-                    composable(LifeWeaveRoutes.ROUTE_HOME) {
+                    composable<LifeWeaveDest.Home> {
                         val homeViewModel: HomeViewModel = viewModel(
                             factory = SimpleViewModelFactory {
                                 HomeViewModel(
@@ -456,17 +497,17 @@ private fun MainShell(
                             uiState = homeState,
                             modulesState = modulesHubState,
                             onQuickAddWater = homeViewModel::quickLogWater,
-                            onOpenWaterTracker = { navigateToTab(LifeWeaveRoutes.ROUTE_WATER) },
-                            onOpenPeriodTracker = { navigateToTab(LifeWeaveRoutes.ROUTE_PERIOD) },
+                            onOpenWaterTracker = { navigateToTab(LifeWeaveDest.Water) },
+                            onOpenPeriodTracker = { navigateToTab(LifeWeaveDest.Period) },
                             onEnableCycleTracking = {
                                 homeViewModel.enableCycleTracking()
-                                navigateToTab(LifeWeaveRoutes.ROUTE_PERIOD)
+                                navigateToTab(LifeWeaveDest.Period)
                             },
                             onOpenProfileEdit = {
-                                navController.navigate(LifeWeaveRoutes.ROUTE_PROFILE_EDIT)
+                                navController.navigate(LifeWeaveDest.ProfileEdit)
                             },
-                            onOpenSettingsPrivacy = { navigateToTab(LifeWeaveRoutes.ROUTE_SETTINGS) },
-                            onOpenModulesHub = { navigateToTab(LifeWeaveRoutes.ROUTE_MODULES) },
+                            onOpenSettingsPrivacy = { navigateToTab(LifeWeaveDest.Settings) },
+                            onOpenModulesHub = { navigateToTab(LifeWeaveDest.Modules) },
                             onOpenModuleKey = { key -> navigateByModuleKey(key) },
                             onStartVoiceCapture = modulesHubViewModel::startVoiceCapture,
                             onStopVoiceCapture = modulesHubViewModel::stopVoiceCapture,
@@ -492,11 +533,27 @@ private fun MainShell(
                                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                                     notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
                                 }
+                            },
+                            onSelectIntelligenceTimeframe = modulesHubViewModel::selectIntelligenceTimeframe,
+                            onSynthesizeIntelligence = modulesHubViewModel::generateAiHealthIntelligence,
+                            onSpeakIntelligence = modulesHubViewModel::speakIntelligenceSummary,
+                            onOpenFamilyCircle = {
+                                navController.navigate(LifeWeaveDest.FamilyCircle)
+                            },
+                            onQuickMoodTap = modulesHubViewModel::logQuickHomeMood,
+                            currentPlanLabel = when (effectiveEntitlement.tier) {
+                                com.example.security.SubscriptionTier.FREE -> "Free"
+                                com.example.security.SubscriptionTier.PLUS -> "Plus"
+                                com.example.security.SubscriptionTier.FAMILY -> "Family"
+                                com.example.security.SubscriptionTier.LIFETIME -> "Lifetime"
+                            },
+                            onOpenSubscription = {
+                                navController.navigate(LifeWeaveDest.Subscription)
                             }
                         )
                     }
 
-                    composable(LifeWeaveRoutes.ROUTE_WATER) {
+                    composable<LifeWeaveDest.Water> {
                         val waterViewModel: WaterViewModel = viewModel(
                             factory = SimpleViewModelFactory {
                                 WaterViewModel(
@@ -510,11 +567,11 @@ private fun MainShell(
                             uiState = waterState,
                             activeToneLabel = waterToneLabel,
                             viewModel = waterViewModel,
-                            onOpenAlertSettings = { navigateToTab(LifeWeaveRoutes.ROUTE_SETTINGS) }
+                            onOpenAlertSettings = { navigateToTab(LifeWeaveDest.Settings) }
                         )
                     }
 
-                    composable(LifeWeaveRoutes.ROUTE_PERIOD) {
+                    composable<LifeWeaveDest.Period> {
                         val periodViewModel: PeriodViewModel = viewModel(
                             factory = SimpleViewModelFactory {
                                 PeriodViewModel(
@@ -528,48 +585,65 @@ private fun MainShell(
                             uiState = periodState,
                             activeToneLabel = periodToneLabel,
                             viewModel = periodViewModel,
-                            onOpenAlertSettings = { navigateToTab(LifeWeaveRoutes.ROUTE_SETTINGS) }
+                            onOpenAlertSettings = { navigateToTab(LifeWeaveDest.Settings) }
                         )
                     }
 
-                    composable(LifeWeaveRoutes.ROUTE_MODULES) {
+                    composable<LifeWeaveDest.Modules> {
                         ModulesHubScreen(
                             uiState = modulesHubState,
-                            onOpenWater = { navigateToTab(LifeWeaveRoutes.ROUTE_WATER) },
-                            onOpenPeriod = { navigateToTab(LifeWeaveRoutes.ROUTE_PERIOD) },
-                            onOpenReminders = { navigateToTab(LifeWeaveRoutes.ROUTE_SETTINGS) },
-                            onNavigateModule = { subRoute -> navController.navigate(subRoute) }
+                            onOpenWater = { navigateToTab(LifeWeaveDest.Water) },
+                            onOpenPeriod = { navigateToTab(LifeWeaveDest.Period) },
+                            onOpenReminders = { navigateToTab(LifeWeaveDest.Settings) },
+                            onNavigateModule = { subRoute ->
+                                navController.navigate(LifeWeaveDest.fromSubRouteString(subRoute))
+                            }
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_FITNESS_YOGA) {
+                    composable<LifeWeaveDest.FitnessYoga> {
                         FitnessYogaScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
                             onBack = { navController.popBackStack() },
                             onOpenConnectedDevices = {
-                                navController.navigate(ModuleSubRoutes.ROUTE_CONNECTED_DEVICES)
+                                navController.navigate(LifeWeaveDest.ConnectedDevices)
                             }
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_DIET) {
+                    composable<LifeWeaveDest.Diet> {
                         DietNutritionScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
-                            onBack = { navController.popBackStack() }
+                            onBack = { navController.popBackStack() },
+                            onOpenConnectedDevices = {
+                                navController.navigate(LifeWeaveDest.ConnectedDevices)
+                            }
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_MEDICAL) {
+                    composable<LifeWeaveDest.Medical> {
                         MedicalCareScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
-                            onBack = { navController.popBackStack() }
+                            onBack = { navController.popBackStack() },
+                            vaultState = healthVaultState,
+                            onOpenHealthVault = { navController.navigate(LifeWeaveDest.HealthVault) },
+                            onRestockMedicine = healthVaultViewModel::logMedicinePurchaseAndRefill
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_BEAUTY) {
+                    composable<LifeWeaveDest.HealthVault> {
+                        HealthVaultScreen(
+                            uiState = healthVaultState,
+                            viewModel = healthVaultViewModel,
+                            onBack = { navController.popBackStack() },
+                            onOpenMedicines = { navController.navigate(LifeWeaveDest.Medical) }
+                        )
+                    }
+
+                    composable<LifeWeaveDest.Beauty> {
                         BeautyCareScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
@@ -577,7 +651,7 @@ private fun MainShell(
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_WELLBEING) {
+                    composable<LifeWeaveDest.Wellbeing> {
                         DigitalWellbeingScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
@@ -585,14 +659,22 @@ private fun MainShell(
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_REPORTS) {
+                    composable<LifeWeaveDest.Reports> {
                         ReportsAnalyticsScreen(
                             uiState = modulesHubState,
-                            onBack = { navController.popBackStack() }
+                            onBack = { navController.popBackStack() },
+                            onSelectTimeframe = modulesHubViewModel::selectIntelligenceTimeframe,
+                            onGenerateAiInsights = modulesHubViewModel::generateAiHealthIntelligence,
+                            onClearAiReport = modulesHubViewModel::clearAiHealthIntelligenceReport,
+                            onSpeakSummary = modulesHubViewModel::speakIntelligenceSummary,
+                            onStopSpeaking = modulesHubViewModel::stopVoicePlayback,
+                            onToggleAiModuleSharing = modulesHubViewModel::setAiModuleSharing,
+                            onOpenModuleKey = ::navigateByModuleKey,
+                            onRunDiagnostics = modulesHubViewModel::runAiDiagnostics
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_ON_DEVICE_AI) {
+                    composable<LifeWeaveDest.OnDeviceAi> {
                         OnDeviceAiScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
@@ -601,7 +683,7 @@ private fun MainShell(
                         )
                     }
 
-                    composable(ModuleSubRoutes.ROUTE_CONNECTED_DEVICES) {
+                    composable<LifeWeaveDest.ConnectedDevices> {
                         ConnectedDevicesScreen(
                             uiState = modulesHubState,
                             viewModel = modulesHubViewModel,
@@ -610,7 +692,7 @@ private fun MainShell(
                         )
                     }
 
-                    composable(LifeWeaveRoutes.ROUTE_SETTINGS) {
+                    composable<LifeWeaveDest.Settings> {
                         val settingsViewModel: SettingsPrivacyViewModel = viewModel(
                             factory = SimpleViewModelFactory {
                                 SettingsPrivacyViewModel(
@@ -621,7 +703,8 @@ private fun MainShell(
                                     privacyBackupRepository = container.privacyBackupRepository,
                                     alertSoundManager = container.alertSoundManager,
                                     vaultManager = container.vaultManager,
-                                    licenseVerifier = container.licenseVerifier
+                                    licenseVerifier = container.licenseVerifier,
+                                    subscriptionRepository = container.subscriptionRepository
                                 )
                             }
                         )
@@ -630,7 +713,13 @@ private fun MainShell(
                             uiState = settingsState,
                             viewModel = settingsViewModel,
                             onEditProfile = {
-                                navController.navigate(LifeWeaveRoutes.ROUTE_PROFILE_EDIT)
+                                navController.navigate(LifeWeaveDest.ProfileEdit)
+                            },
+                            onOpenFamilyCircle = {
+                                navController.navigate(LifeWeaveDest.FamilyCircle)
+                            },
+                            onOpenSubscription = {
+                                navController.navigate(LifeWeaveDest.Subscription)
                             },
                             onAllDataWiped = {
                                 // SessionViewModel reacts to DB & DataStore clear and routes back to Welcome
@@ -638,7 +727,56 @@ private fun MainShell(
                         )
                     }
 
-                    composable(LifeWeaveRoutes.ROUTE_PROFILE_EDIT) {
+                    composable<LifeWeaveDest.FamilyCircle> {
+                        FamilyCircleRoute(
+                            container = container,
+                            onBack = { navController.popBackStack() },
+                            onOpenSubscriptions = {
+                                navController.navigate(LifeWeaveDest.Subscription)
+                            }
+                        )
+                    }
+
+                    composable<LifeWeaveDest.Subscription> {
+                        val subscriptionViewModel: SubscriptionViewModel = viewModel(
+                            factory = SimpleViewModelFactory {
+                                SubscriptionViewModel(
+                                    subscriptionRepository = container.subscriptionRepository,
+                                    preferencesManager = container.preferencesManager
+                                )
+                            }
+                        )
+                        val subscriptionState by subscriptionViewModel.uiState.collectAsStateWithLifecycle()
+                        SubscriptionScreen(
+                            uiState = subscriptionState,
+                            viewModel = subscriptionViewModel,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable<LifeWeaveDest.RoutinesMood> { backStack ->
+                        val dest = backStack.toRoute<LifeWeaveDest.RoutinesMood>()
+                        val routineMoodViewModel: RoutineMoodViewModel = viewModel(
+                            factory = SimpleViewModelFactory {
+                                RoutineMoodViewModel(
+                                    userProfileRepository = container.userProfileRepository,
+                                    routineMoodRepository = container.routineMoodRepository,
+                                    waterRepository = container.waterRepository,
+                                    allModulesRepository = container.allModulesRepository,
+                                    customAlarmRepository = container.customAlarmRepository
+                                )
+                            }
+                        )
+                        val routineMoodState by routineMoodViewModel.uiState.collectAsStateWithLifecycle()
+                        RoutineMoodScreen(
+                            uiState = routineMoodState,
+                            viewModel = routineMoodViewModel,
+                            initialTabIndex = dest.initialTab,
+                            onBack = { navController.popBackStack() }
+                        )
+                    }
+
+                    composable<LifeWeaveDest.ProfileEdit> {
                         val profileViewModel: ProfileSetupViewModel = viewModel(
                             factory = SimpleViewModelFactory {
                                 ProfileSetupViewModel(

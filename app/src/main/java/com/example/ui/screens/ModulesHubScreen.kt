@@ -62,6 +62,12 @@ object ModuleSubRoutes {
     const val ROUTE_REPORTS = "module_reports"
     const val ROUTE_ON_DEVICE_AI = "module_ai"
     const val ROUTE_CONNECTED_DEVICES = "module_connected_devices"
+    const val ROUTE_HEALTH_VAULT = "module_health_vault"
+    const val ROUTE_FAMILY_CIRCLE = "module_family_circle"
+    const val ROUTE_SUBSCRIPTION = "module_subscription"
+    const val ROUTE_ROUTINES_MOOD = "module_routines_mood"
+    const val ROUTE_MOOD_JOURNAL = "module_mood_journal"
+    const val ROUTE_CHALLENGES = "module_challenges"
 }
 
 @Composable
@@ -115,6 +121,16 @@ fun ModulesHubScreen(
             route = ModuleSubRoutes.ROUTE_MEDICAL
         ),
         ModuleTileSpec(
+            key = "health_vault",
+            emoji = "🗂️",
+            title = "Health Records Vault",
+            liveSummary = "Encrypted Rx, labs, allergies & Doctor PDF",
+            badgeText = "Free",
+            isFree = true,
+            tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.8f),
+            route = ModuleSubRoutes.ROUTE_HEALTH_VAULT
+        ),
+        ModuleTileSpec(
             key = "exercise_tracker",
             emoji = "🏃",
             title = "Fitness, Yoga & Sleep",
@@ -146,9 +162,9 @@ fun ModulesHubScreen(
         ),
         ModuleTileSpec(
             key = "reports_analytics",
-            emoji = "📊",
-            title = "Reports & Insights",
-            liveSummary = "${uiState.hydration.streakDays}d water streak • Trends",
+            emoji = "🧠",
+            title = "Health Intelligence & Reports",
+            liveSummary = "${uiState.healthIntelligence.loggedModuleCount} active module(s) • Daily & weekly briefings",
             badgeText = "Free",
             isFree = true,
             tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.75f),
@@ -197,6 +213,54 @@ fun ModulesHubScreen(
             isFree = true,
             tint = MaterialTheme.colorScheme.primaryContainer,
             route = ModuleSubRoutes.ROUTE_ON_DEVICE_AI
+        ),
+        ModuleTileSpec(
+            key = "daily_routines",
+            emoji = "🌅",
+            title = "Smart Daily Routines",
+            liveSummary = if (uiState.routineAdherence.activeRoutinesCount > 0) {
+                "${uiState.routineAdherence.completedTodayCount}/${uiState.routineAdherence.activeRoutinesCount} done today • ${uiState.routineAdherence.weeklyConsistencyPercent}% 7d"
+            } else {
+                "Gentle checklists, optional smart ideas & reminders"
+            },
+            badgeText = "Free",
+            isFree = true,
+            tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.85f),
+            route = ModuleSubRoutes.ROUTE_ROUTINES_MOOD
+        ),
+        ModuleTileSpec(
+            key = "mood_journal",
+            emoji = "📓",
+            title = "Mood Journal & Badges",
+            liveSummary = if (uiState.moodEntries.isNotEmpty() || uiState.achievementBadges.any { it.earnedAtEpochMs != null }) {
+                "${uiState.moodAnalytics.totalEntriesLast7Days} logs (7d) • ${uiState.achievementBadges.count { it.earnedAtEpochMs != null }} badges earned"
+            } else {
+                "Reflective logs, trends & optional challenges"
+            },
+            badgeText = "Free",
+            isFree = true,
+            tint = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.85f),
+            route = ModuleSubRoutes.ROUTE_MOOD_JOURNAL
+        ),
+        ModuleTileSpec(
+            key = "family_circle",
+            emoji = "👨\u200D👩\u200D👧",
+            title = "Family Circle",
+            liveSummary = "Up to 5 profiles, caregiver alerts & consent sharing",
+            badgeText = "Family Plan",
+            isFree = true,
+            tint = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.8f),
+            route = ModuleSubRoutes.ROUTE_FAMILY_CIRCLE
+        ),
+        ModuleTileSpec(
+            key = "subscription_plans",
+            emoji = "💎",
+            title = "LifeWeave Plans",
+            liveSummary = "Free, Plus & Family • Period Tracker Always Free",
+            badgeText = "Play Billing",
+            isFree = true,
+            tint = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.78f),
+            route = ModuleSubRoutes.ROUTE_SUBSCRIPTION
         )
     )
 

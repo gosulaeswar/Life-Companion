@@ -4,8 +4,11 @@ import android.content.Context
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.intPreferencesKey
+import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.example.BuildConfig
+import com.example.healthsync.HealthConnectDataCategory
 import com.example.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
@@ -43,6 +46,63 @@ data class CategoryToneSetting(
     val repeatIntervalMinutes: Int = 1440
 )
 
+data class AiDataAuthorization(
+    val includeHydration: Boolean = true,
+    val includeSleep: Boolean = true,
+    val includeFitnessAndVitals: Boolean = true,
+    val includeNutrition: Boolean = true,
+    val includeMedicinesAndVisits: Boolean = true,
+    val includeWellbeingAndSelfCare: Boolean = true,
+    val includeCycle: Boolean = true
+) {
+    fun authorizedCount(cycleTrackingEnabled: Boolean): Int {
+        var count = 0
+        if (includeHydration) count++
+        if (includeSleep) count++
+        if (includeFitnessAndVitals) count++
+        if (includeNutrition) count++
+        if (includeMedicinesAndVisits) count++
+        if (includeWellbeingAndSelfCare) count++
+        if (cycleTrackingEnabled && includeCycle) count++
+        return count
+    }
+
+    fun maxCount(cycleTrackingEnabled: Boolean): Int = if (cycleTrackingEnabled) 7 else 6
+
+    companion object {
+        const val MODULE_HYDRATION = "hydration"
+        const val MODULE_SLEEP = "sleep"
+        const val MODULE_FITNESS = "fitness"
+        const val MODULE_NUTRITION = "nutrition"
+        const val MODULE_MEDICINES = "medicines"
+        const val MODULE_WELLBEING = "wellbeing"
+        const val MODULE_CYCLE = "cycle"
+    }
+}
+
+data class HealthConnectImportAuthorization(
+    val importStepsAndActivity: Boolean = true,
+    val importWorkouts: Boolean = true,
+    val importSleep: Boolean = true,
+    val importHeartRate: Boolean = true,
+    val importHydration: Boolean = true,
+    val importNutrition: Boolean = true,
+    val importWeight: Boolean = true
+) {
+    fun isCategoryEnabled(category: HealthConnectDataCategory): Boolean = when (category) {
+        HealthConnectDataCategory.STEPS_AND_ACTIVITY -> importStepsAndActivity
+        HealthConnectDataCategory.WORKOUTS -> importWorkouts
+        HealthConnectDataCategory.SLEEP -> importSleep
+        HealthConnectDataCategory.HEART_RATE -> importHeartRate
+        HealthConnectDataCategory.HYDRATION -> importHydration
+        HealthConnectDataCategory.NUTRITION -> importNutrition
+        HealthConnectDataCategory.WEIGHT -> importWeight
+    }
+
+    fun enabledCategories(): Set<HealthConnectDataCategory> =
+        HealthConnectDataCategory.entries.filter(::isCategoryEnabled).toSet()
+}
+
 data class UiPreferencesState(
     val themeMode: ThemeMode = ThemeMode.SYSTEM,
     val language: SupportedLanguage = SupportedLanguage.ENGLISH,
@@ -71,7 +131,17 @@ data class UiPreferencesState(
     val wellbeingOveruseAlertsEnabled: Boolean = true,
     val wellbeingWarningPercent: Int = 80,
     val lastOveruseAlertDayKey: String = "",
-    val lastOveruseAlertStage: String = ""
+    val lastOveruseAlertStage: String = "",
+    val aiDataAuth: AiDataAuthorization = AiDataAuthorization(),
+    val healthConnectImportAuth: HealthConnectImportAuthorization = HealthConnectImportAuthorization(),
+    val activeProfileId: Long = 0L,
+    val familyPlanActivated: Boolean = false,
+    val familyPlanRef: String = "",
+    val billingVerificationUrl: String = BuildConfig.BILLING_VERIFICATION_URL,
+    val billingPricingConfigUrl: String = BuildConfig.BILLING_PRICING_CONFIG_URL,
+    val cachedSubscriptionTierId: String = SubscriptionTier.FREE.id,
+    val cachedSubscriptionExpiresAtEpochMs: Long = 0L,
+    val cachedSubscriptionGraceEndsAtEpochMs: Long = 0L
 )
 
 class LocalPreferencesManager(private val context: Context) {
@@ -100,6 +170,31 @@ class LocalPreferencesManager(private val context: Context) {
         val WELLBEING_WARNING_PERCENT = intPreferencesKey("wellbeing_warning_percent")
         val LAST_OVERUSE_DAY_KEY = stringPreferencesKey("wellbeing_last_alert_day")
         val LAST_OVERUSE_STAGE = stringPreferencesKey("wellbeing_last_alert_stage")
+
+        val AI_SHARE_HYDRATION = booleanPreferencesKey("ai_share_hydration")
+        val AI_SHARE_SLEEP = booleanPreferencesKey("ai_share_sleep")
+        val AI_SHARE_FITNESS = booleanPreferencesKey("ai_share_fitness")
+        val AI_SHARE_NUTRITION = booleanPreferencesKey("ai_share_nutrition")
+        val AI_SHARE_MEDICINES = booleanPreferencesKey("ai_share_medicines")
+        val AI_SHARE_WELLBEING = booleanPreferencesKey("ai_share_wellbeing")
+        val AI_SHARE_CYCLE = booleanPreferencesKey("ai_share_cycle")
+
+        val HC_IMPORT_STEPS = booleanPreferencesKey("hc_import_steps")
+        val HC_IMPORT_WORKOUTS = booleanPreferencesKey("hc_import_workouts")
+        val HC_IMPORT_SLEEP = booleanPreferencesKey("hc_import_sleep")
+        val HC_IMPORT_HEART_RATE = booleanPreferencesKey("hc_import_heart_rate")
+        val HC_IMPORT_HYDRATION = booleanPreferencesKey("hc_import_hydration")
+        val HC_IMPORT_NUTRITION = booleanPreferencesKey("hc_import_nutrition")
+        val HC_IMPORT_WEIGHT = booleanPreferencesKey("hc_import_weight")
+
+        val ACTIVE_PROFILE_ID = longPreferencesKey("active_profile_id")
+        val FAMILY_PLAN_ACTIVATED = booleanPreferencesKey("family_plan_activated")
+        val FAMILY_PLAN_REF = stringPreferencesKey("family_plan_ref")
+        val BILLING_VERIFICATION_URL = stringPreferencesKey("billing_verification_url")
+        val BILLING_PRICING_CONFIG_URL = stringPreferencesKey("billing_pricing_config_url")
+        val CACHED_SUBSCRIPTION_TIER_ID = stringPreferencesKey("cached_subscription_tier_id")
+        val CACHED_SUBSCRIPTION_EXPIRES_MS = longPreferencesKey("cached_subscription_expires_ms")
+        val CACHED_SUBSCRIPTION_GRACE_MS = longPreferencesKey("cached_subscription_grace_ms")
     }
 
     val preferencesFlow: Flow<UiPreferencesState> = context.lifeCompanionPrefsDataStore.data.map { prefs ->
@@ -142,7 +237,37 @@ class LocalPreferencesManager(private val context: Context) {
             wellbeingOveruseAlertsEnabled = prefs[Keys.WELLBEING_ALERTS_ENABLED] ?: true,
             wellbeingWarningPercent = (prefs[Keys.WELLBEING_WARNING_PERCENT] ?: 80).coerceIn(50, 95),
             lastOveruseAlertDayKey = prefs[Keys.LAST_OVERUSE_DAY_KEY] ?: "",
-            lastOveruseAlertStage = prefs[Keys.LAST_OVERUSE_STAGE] ?: ""
+            lastOveruseAlertStage = prefs[Keys.LAST_OVERUSE_STAGE] ?: "",
+            aiDataAuth = AiDataAuthorization(
+                includeHydration = prefs[Keys.AI_SHARE_HYDRATION] ?: true,
+                includeSleep = prefs[Keys.AI_SHARE_SLEEP] ?: true,
+                includeFitnessAndVitals = prefs[Keys.AI_SHARE_FITNESS] ?: true,
+                includeNutrition = prefs[Keys.AI_SHARE_NUTRITION] ?: true,
+                includeMedicinesAndVisits = prefs[Keys.AI_SHARE_MEDICINES] ?: true,
+                includeWellbeingAndSelfCare = prefs[Keys.AI_SHARE_WELLBEING] ?: true,
+                includeCycle = prefs[Keys.AI_SHARE_CYCLE] ?: true
+            ),
+            healthConnectImportAuth = HealthConnectImportAuthorization(
+                importStepsAndActivity = prefs[Keys.HC_IMPORT_STEPS] ?: true,
+                importWorkouts = prefs[Keys.HC_IMPORT_WORKOUTS] ?: true,
+                importSleep = prefs[Keys.HC_IMPORT_SLEEP] ?: true,
+                importHeartRate = prefs[Keys.HC_IMPORT_HEART_RATE] ?: true,
+                importHydration = prefs[Keys.HC_IMPORT_HYDRATION] ?: true,
+                importNutrition = prefs[Keys.HC_IMPORT_NUTRITION] ?: true,
+                importWeight = prefs[Keys.HC_IMPORT_WEIGHT] ?: true
+            ),
+            activeProfileId = prefs[Keys.ACTIVE_PROFILE_ID] ?: 0L,
+            familyPlanActivated = prefs[Keys.FAMILY_PLAN_ACTIVATED] ?: false,
+            familyPlanRef = prefs[Keys.FAMILY_PLAN_REF] ?: "",
+            billingVerificationUrl = prefs[Keys.BILLING_VERIFICATION_URL]
+                ?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.BILLING_VERIFICATION_URL,
+            billingPricingConfigUrl = prefs[Keys.BILLING_PRICING_CONFIG_URL]
+                ?.takeIf { it.isNotBlank() }
+                ?: BuildConfig.BILLING_PRICING_CONFIG_URL,
+            cachedSubscriptionTierId = prefs[Keys.CACHED_SUBSCRIPTION_TIER_ID] ?: SubscriptionTier.FREE.id,
+            cachedSubscriptionExpiresAtEpochMs = prefs[Keys.CACHED_SUBSCRIPTION_EXPIRES_MS] ?: 0L,
+            cachedSubscriptionGraceEndsAtEpochMs = prefs[Keys.CACHED_SUBSCRIPTION_GRACE_MS] ?: 0L
         )
     }
 
@@ -270,6 +395,103 @@ class LocalPreferencesManager(private val context: Context) {
         context.lifeCompanionPrefsDataStore.edit { prefs ->
             prefs[Keys.LAST_OVERUSE_DAY_KEY] = dayKey
             prefs[Keys.LAST_OVERUSE_STAGE] = stageKey
+        }
+    }
+
+    suspend fun setAiModuleSharing(moduleKey: String, enabled: Boolean) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            val prefKey = when (moduleKey) {
+                AiDataAuthorization.MODULE_HYDRATION -> Keys.AI_SHARE_HYDRATION
+                AiDataAuthorization.MODULE_SLEEP -> Keys.AI_SHARE_SLEEP
+                AiDataAuthorization.MODULE_FITNESS -> Keys.AI_SHARE_FITNESS
+                AiDataAuthorization.MODULE_NUTRITION -> Keys.AI_SHARE_NUTRITION
+                AiDataAuthorization.MODULE_MEDICINES -> Keys.AI_SHARE_MEDICINES
+                AiDataAuthorization.MODULE_WELLBEING -> Keys.AI_SHARE_WELLBEING
+                AiDataAuthorization.MODULE_CYCLE -> Keys.AI_SHARE_CYCLE
+                else -> null
+            }
+            if (prefKey != null) {
+                prefs[prefKey] = enabled
+            }
+        }
+    }
+
+    suspend fun updateAiDataAuthorization(auth: AiDataAuthorization) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.AI_SHARE_HYDRATION] = auth.includeHydration
+            prefs[Keys.AI_SHARE_SLEEP] = auth.includeSleep
+            prefs[Keys.AI_SHARE_FITNESS] = auth.includeFitnessAndVitals
+            prefs[Keys.AI_SHARE_NUTRITION] = auth.includeNutrition
+            prefs[Keys.AI_SHARE_MEDICINES] = auth.includeMedicinesAndVisits
+            prefs[Keys.AI_SHARE_WELLBEING] = auth.includeWellbeingAndSelfCare
+            prefs[Keys.AI_SHARE_CYCLE] = auth.includeCycle
+        }
+    }
+
+    suspend fun setHealthConnectCategoryEnabled(
+        category: HealthConnectDataCategory,
+        enabled: Boolean
+    ) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            val key = when (category) {
+                HealthConnectDataCategory.STEPS_AND_ACTIVITY -> Keys.HC_IMPORT_STEPS
+                HealthConnectDataCategory.WORKOUTS -> Keys.HC_IMPORT_WORKOUTS
+                HealthConnectDataCategory.SLEEP -> Keys.HC_IMPORT_SLEEP
+                HealthConnectDataCategory.HEART_RATE -> Keys.HC_IMPORT_HEART_RATE
+                HealthConnectDataCategory.HYDRATION -> Keys.HC_IMPORT_HYDRATION
+                HealthConnectDataCategory.NUTRITION -> Keys.HC_IMPORT_NUTRITION
+                HealthConnectDataCategory.WEIGHT -> Keys.HC_IMPORT_WEIGHT
+            }
+            prefs[key] = enabled
+        }
+    }
+
+    suspend fun setActiveProfileId(profileId: Long) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.ACTIVE_PROFILE_ID] = profileId.coerceAtLeast(0L)
+        }
+    }
+
+    suspend fun setFamilyPlanActivated(activated: Boolean, reference: String = "") {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.FAMILY_PLAN_ACTIVATED] = activated
+            if (reference.isNotBlank()) {
+                prefs[Keys.FAMILY_PLAN_REF] = reference.trim()
+            } else if (!activated) {
+                prefs.remove(Keys.FAMILY_PLAN_REF)
+            }
+        }
+    }
+
+    suspend fun setVerifiedSubscriptionCache(
+        tier: SubscriptionTier,
+        expiresAtEpochMs: Long,
+        gracePeriodEndsAtEpochMs: Long,
+        receiptId: String = ""
+    ) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            prefs[Keys.CACHED_SUBSCRIPTION_TIER_ID] = tier.id
+            prefs[Keys.CACHED_SUBSCRIPTION_EXPIRES_MS] = expiresAtEpochMs
+            prefs[Keys.CACHED_SUBSCRIPTION_GRACE_MS] = gracePeriodEndsAtEpochMs
+            val isFamily = tier == SubscriptionTier.FAMILY
+            prefs[Keys.FAMILY_PLAN_ACTIVATED] = isFamily
+            if (isFamily && receiptId.isNotBlank()) {
+                prefs[Keys.FAMILY_PLAN_REF] = receiptId
+            } else if (!isFamily) {
+                prefs.remove(Keys.FAMILY_PLAN_REF)
+            }
+        }
+    }
+
+    suspend fun setBillingEndpoints(
+        verificationUrl: String,
+        pricingConfigUrl: String
+    ) {
+        context.lifeCompanionPrefsDataStore.edit { prefs ->
+            val vUrl = verificationUrl.trim()
+            val pUrl = pricingConfigUrl.trim()
+            if (vUrl.isEmpty()) prefs.remove(Keys.BILLING_VERIFICATION_URL) else prefs[Keys.BILLING_VERIFICATION_URL] = vUrl
+            if (pUrl.isEmpty()) prefs.remove(Keys.BILLING_PRICING_CONFIG_URL) else prefs[Keys.BILLING_PRICING_CONFIG_URL] = pUrl
         }
     }
 

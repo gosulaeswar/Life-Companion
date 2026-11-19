@@ -3,6 +3,7 @@ package com.example.healthsync
 import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.ConnectedDeviceSourceEntity
+import com.example.data.local.entity.DietRecordEntity
 import com.example.data.local.entity.ExerciseRecordEntity
 import com.example.data.local.entity.HealthVitalMetricEntity
 import com.example.data.local.entity.SleepRecordEntity
@@ -15,6 +16,7 @@ class FitnessSyncRepository(private val database: AppDatabase) {
     private val connectedDao = database.connectedFitnessDao()
     private val fitnessDao = database.fitnessDao()
     private val waterDao = database.waterDao()
+    private val dietDao = database.dietDao()
     private val profileDao = database.userProfileDao()
 
     fun observeConnectedSources(profileId: Long): Flow<List<ConnectedDeviceSourceEntity>> =
@@ -116,6 +118,31 @@ class FitnessSyncRepository(private val database: AppDatabase) {
                             note = "Synced",
                             dayKey = w.dayKey,
                             loggedAtEpochMs = w.loggedAtEpochMs
+                        )
+                    )
+                    importedCount++
+                }
+            }
+
+            // 4b. Deduplicated nutrition entries (never overwrites manual diet logs)
+            val existingDiet = dietDao.getDietRecordsSnapshot(profileId)
+            for (meal in payload.nutritionEntries) {
+                val alreadyPresent = existingDiet.any {
+                    abs(it.loggedAtEpochMs - meal.loggedAtEpochMs) < 120_000L &&
+                        it.calories == meal.calories &&
+                        it.foodSummary.equals(meal.foodSummary, ignoreCase = true)
+                }
+                if (!alreadyPresent) {
+                    dietDao.insertDietRecord(
+                        DietRecordEntity(
+                            profileId = profileId,
+                            mealType = meal.mealType,
+                            foodSummary = meal.foodSummary,
+                            calories = meal.calories.coerceAtLeast(0),
+                            proteinGrams = meal.proteinGrams.coerceAtLeast(0),
+                            carbsGrams = meal.carbsGrams.coerceAtLeast(0),
+                            fatGrams = meal.fatGrams.coerceAtLeast(0),
+                            loggedAtEpochMs = meal.loggedAtEpochMs
                         )
                     )
                     importedCount++

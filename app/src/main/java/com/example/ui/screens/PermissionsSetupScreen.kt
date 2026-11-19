@@ -305,7 +305,7 @@ fun PermissionsSetupScreen(
                         color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
                     ) {
                         Text(
-                            text = "Tip: Granting Notifications + Screen-Off Popups + Floating Over Apps guarantees mini-alarms appear whether your phone screen is locked or unlocked.",
+                            text = "Tip: Notifications are required for reliable background reminders. Optional Screen-Off and Floating Popup permissions enhance alert cards on devices and OEMs that support them.",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSecondaryContainer,
                             modifier = Modifier.padding(14.dp)

@@ -6,14 +6,18 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.ai.AiActionType
 import com.example.ai.AiDiagnosticReport
+import com.example.ai.AiHealthIntelligenceReport
 import com.example.ai.AiParsedAction
 import com.example.ai.ExtractedPrescriptionResult
 import com.example.ai.LifeWeaveAiService
 import com.example.ai.SupportedVoiceLanguages
 import com.example.ai.VoiceAssistantManager
+import com.example.data.local.entity.AchievementBadgeEntity
 import com.example.data.local.entity.AiPreferenceEntity
+import com.example.data.local.entity.AllergyRecordEntity
 import com.example.data.local.entity.BeautyCareRecordEntity
 import com.example.data.local.entity.ConnectedDeviceSourceEntity
+import com.example.data.local.entity.DailyRoutineEntity
 import com.example.data.local.entity.DietRecordEntity
 import com.example.data.local.entity.DigitalWellbeingRecordEntity
 import com.example.data.local.entity.DoctorConsultationEntity
@@ -22,34 +26,60 @@ import com.example.data.local.entity.HealthVitalMetricEntity
 import com.example.data.local.entity.MedicineEntity
 import com.example.data.local.entity.MedicineIntakeEntity
 import com.example.data.local.entity.ModuleActivationEntity
+import com.example.data.local.entity.MoodJournalEntryEntity
+import com.example.data.local.entity.NutritionPlanEntity
+import com.example.data.local.entity.NutritionPreferenceEntity
 import com.example.data.local.entity.PeriodRecordEntity
 import com.example.data.local.entity.ReminderEntity
+import com.example.data.local.entity.RoutineCompletionEntity
 import com.example.data.local.entity.SleepRecordEntity
 import com.example.data.local.entity.StepRecordEntity
 import com.example.data.local.entity.UserProfileEntity
 import com.example.data.local.entity.WaterRecordEntity
+import com.example.data.local.entity.WellnessChallengeEntity
 import com.example.data.repository.AllModulesRepository
 import com.example.data.repository.CustomAlarmRepository
+import com.example.data.repository.HealthVaultRepository
 import com.example.data.repository.ModuleRepository
 import com.example.data.repository.PeriodRepository
+import com.example.data.repository.RoutineMoodRepository
 import com.example.data.repository.UserProfileRepository
 import com.example.data.repository.WaterRepository
 import com.example.domain.CycleCalculator
 import com.example.domain.CycleInsights
+import com.example.domain.DailyNutritionProgress
+import com.example.domain.DailyNutritionTarget
 import com.example.domain.DateEpochUtils
 import com.example.domain.HydrationCalculator
 import com.example.domain.HydrationSummary
+import com.example.domain.IndianDietaryPreference
+import com.example.domain.IndianFoodItem
+import com.example.domain.IndianMealPlanResult
+import com.example.domain.IndianNutritionEngine
+import com.example.domain.IndianRegion
+import com.example.domain.IntelligenceTimeframe
 import com.example.domain.LocalAiMessage
+import com.example.domain.MoodJournalAnalytics
+import com.example.domain.MoodPresetOption
+import com.example.domain.NutritionGoalType
 import com.example.domain.OnDeviceWellnessAdvisor
+import com.example.domain.PersonalHealthIntelligenceEngine
+import com.example.domain.PersonalHealthIntelligenceSnapshot
+import com.example.domain.PlannedIndianMealSlot
+import com.example.domain.RoutineAdherenceSummary
+import com.example.domain.RoutineMoodAnalyticsEngine
 import com.example.healthsync.AppleAndFileFitnessImporter
 import com.example.healthsync.FitnessSyncRepository
 import com.example.healthsync.HealthConnectAvailability
+import com.example.healthsync.HealthConnectDataCategory
 import com.example.healthsync.HealthConnectManager
 import com.example.notifications.AlertMetricsCalculator
 import com.example.notifications.AlertMetricsSummary
 import com.example.notifications.AlertSoundManager
 import com.example.notifications.BundledAlertTone
+import com.example.security.AiDataAuthorization
 import com.example.security.CategoryToneSetting
+import com.example.security.HealthConnectImportAuthorization
 import com.example.security.LocalPreferencesManager
 import com.example.wellbeing.AppUsageMetric
 import com.example.wellbeing.DeviceWellbeingManager
@@ -63,9 +93,11 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
@@ -128,7 +160,30 @@ data class ModulesHubUiState(
     val isSyncingWellbeing: Boolean = false,
     val wellbeingSyncBanner: String? = null,
     val customAlarms: List<ReminderEntity> = emptyList(),
-    val alertMetrics: AlertMetricsSummary = AlertMetricsSummary()
+    val alertMetrics: AlertMetricsSummary = AlertMetricsSummary(),
+    val healthIntelligence: PersonalHealthIntelligenceSnapshot = PersonalHealthIntelligenceSnapshot.empty(),
+    val aiDataAuthorization: AiDataAuthorization = AiDataAuthorization(),
+    val selectedIntelligenceTimeframe: IntelligenceTimeframe = IntelligenceTimeframe.WEEKLY,
+    val generatedAiHealthReport: AiHealthIntelligenceReport? = null,
+    val nutritionPreference: NutritionPreferenceEntity? = null,
+    val selectedIndianRegion: IndianRegion = IndianRegion.SOUTH,
+    val selectedDietaryPreference: IndianDietaryPreference = IndianDietaryPreference.VEGETARIAN,
+    val selectedNutritionGoal: NutritionGoalType = NutritionGoalType.BALANCED,
+    val avoidVaultAllergens: Boolean = true,
+    val nutritionTarget: DailyNutritionTarget = IndianNutritionEngine.calculateTargets(null),
+    val todayNutritionProgress: DailyNutritionProgress = IndianNutritionEngine.evaluateTodayIntake(emptyList(), nutritionTarget),
+    val vaultAllergies: List<AllergyRecordEntity> = emptyList(),
+    val activeIndianMealPlan: IndianMealPlanResult? = null,
+    val isGeneratingMealPlan: Boolean = false,
+    val mealPlanStatusMessage: String? = null,
+    val healthConnectImportAuth: HealthConnectImportAuthorization = HealthConnectImportAuthorization(),
+    val routines: List<DailyRoutineEntity> = emptyList(),
+    val routineAdherence: RoutineAdherenceSummary = RoutineAdherenceSummary(0, 0, 0f, 0, 0, emptyList()),
+    val moodEntries: List<MoodJournalEntryEntity> = emptyList(),
+    val moodAnalytics: MoodJournalAnalytics = MoodJournalAnalytics(0, 0, null, null, null, emptyMap(), null, emptyList(), emptyList()),
+    val wellnessChallenges: List<WellnessChallengeEntity> = emptyList(),
+    val achievementBadges: List<AchievementBadgeEntity> = emptyList(),
+    val latestMoodEntry: MoodJournalEntryEntity? = null
 )
 
 private data class AiAndSyncOverlayState(
@@ -156,7 +211,11 @@ private data class AiAndSyncOverlayState(
     val warningPercent: Int,
     val wellnessTone: CategoryToneSetting,
     val isSyncingWellbeing: Boolean,
-    val wellbeingBanner: String?
+    val wellbeingBanner: String?,
+    val selectedTimeframe: IntelligenceTimeframe,
+    val generatedHealthReport: AiHealthIntelligenceReport?,
+    val isGeneratingMealPlan: Boolean,
+    val mealPlanStatusMessage: String?
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -174,7 +233,9 @@ class ModulesHubViewModel(
     private val deviceWellbeingManager: DeviceWellbeingManager,
     private val alertSoundManager: AlertSoundManager,
     private val preferencesManager: LocalPreferencesManager,
-    private val customAlarmRepository: CustomAlarmRepository
+    private val customAlarmRepository: CustomAlarmRepository,
+    private val healthVaultRepository: HealthVaultRepository? = null,
+    private val routineMoodRepository: RoutineMoodRepository? = null
 ) : ViewModel() {
 
     private val aiMessages = MutableStateFlow<List<LocalAiMessage>>(emptyList())
@@ -186,6 +247,11 @@ class ModulesHubViewModel(
     private val lastAiPromptFlow = MutableStateFlow<String?>(null)
     private val diagnosticReportFlow = MutableStateFlow<AiDiagnosticReport?>(null)
     private val isRunningDiagFlow = MutableStateFlow(false)
+    private val selectedTimeframeFlow = MutableStateFlow(IntelligenceTimeframe.WEEKLY)
+    private val generatedHealthReportFlow = MutableStateFlow<AiHealthIntelligenceReport?>(null)
+    private val isGeneratingMealPlanFlow = MutableStateFlow(false)
+    private val mealPlanStatusFlow = MutableStateFlow<String?>(null)
+    private val seededPhase6ProfileIds = mutableSetOf<Long>()
 
     private val hcAvailability = MutableStateFlow(healthConnectManager.checkAvailability())
     private val grantedHealthPerms = MutableStateFlow<Set<String>>(emptySet())
@@ -242,7 +308,11 @@ class ModulesHubViewModel(
             warningPercent = 80,
             wellnessTone = CategoryToneSetting(),
             isSyncingWellbeing = false,
-            wellbeingBanner = null
+            wellbeingBanner = null,
+            selectedTimeframe = IntelligenceTimeframe.WEEKLY,
+            generatedHealthReport = null,
+            isGeneratingMealPlan = false,
+            mealPlanStatusMessage = null
         )
     }.combine(
         combine(
@@ -268,17 +338,21 @@ class ModulesHubViewModel(
             hcAvailability,
             grantedHealthPerms,
             isSyncingFitness,
-            fitnessSyncBanner
-        ) { avail, perms, syncing, banner ->
-            listOf(avail, perms, syncing, banner)
+            fitnessSyncBanner,
+            combine(isGeneratingMealPlanFlow, mealPlanStatusFlow) { gen, msg -> gen to msg }
+        ) { avail, perms, syncing, banner, mealPair ->
+            listOf(avail, perms, syncing, banner, mealPair)
         }
     ) { base, arr ->
         @Suppress("UNCHECKED_CAST")
+        val mealPair = arr[4] as Pair<Boolean, String?>
         base.copy(
             hcAvailability = arr[0] as HealthConnectAvailability,
             grantedPerms = arr[1] as Set<String>,
             isSyncingFitness = arr[2] as Boolean,
-            syncBanner = arr[3] as String?
+            syncBanner = arr[3] as String?,
+            isGeneratingMealPlan = mealPair.first,
+            mealPlanStatusMessage = mealPair.second
         )
     }.combine(
         combine(
@@ -288,17 +362,19 @@ class ModulesHubViewModel(
             wellbeingSyncBanner,
             combine(
                 combine(hasNotificationPerm, snoozedUntilMs) { n, s -> n to s },
-                combine(lastAiPromptFlow, diagnosticReportFlow, isRunningDiagFlow) { p, r, d -> Triple(p, r, d) }
-            ) { notifPair, diagTriple -> notifPair to diagTriple }
+                combine(lastAiPromptFlow, diagnosticReportFlow, isRunningDiagFlow) { p, r, d -> Triple(p, r, d) },
+                combine(selectedTimeframeFlow, generatedHealthReportFlow) { tf, rep -> tf to rep }
+            ) { notifPair, diagTriple, intelPair -> Triple(notifPair, diagTriple, intelPair) }
         ) { usagePerm, prefs, syncingWb, wbBanner, bundled ->
             listOf(usagePerm, prefs, syncingWb, wbBanner, bundled)
         }
     ) { base, arr ->
         val prefs = arr[1] as com.example.security.UiPreferencesState
         @Suppress("UNCHECKED_CAST")
-        val bundled = arr[4] as Pair<Pair<Boolean, Long>, Triple<String?, AiDiagnosticReport?, Boolean>>
+        val bundled = arr[4] as Triple<Pair<Boolean, Long>, Triple<String?, AiDiagnosticReport?, Boolean>, Pair<IntelligenceTimeframe, AiHealthIntelligenceReport?>>
         val notifAndSnooze = bundled.first
         val diagTriple = bundled.second
+        val intelPair = bundled.third
         base.copy(
             hasUsageAccess = arr[0] as Boolean,
             hasNotificationPermission = notifAndSnooze.first,
@@ -310,7 +386,9 @@ class ModulesHubViewModel(
             warningPercent = prefs.wellbeingWarningPercent,
             wellnessTone = prefs.wellnessTone,
             isSyncingWellbeing = arr[2] as Boolean,
-            wellbeingBanner = arr[3] as String?
+            wellbeingBanner = arr[3] as String?,
+            selectedTimeframe = intelPair.first,
+            generatedHealthReport = intelPair.second
         )
     }
 
@@ -321,11 +399,11 @@ class ModulesHubViewModel(
             } else {
                 val coreFlow = combine(
                     moduleRepository.observeModules(),
-                    waterRepository.observeLast7Days(profile.id),
+                    waterRepository.observeLast60Days(profile.id),
                     periodRepository.observeRecords(profile.id),
                     allModulesRepo.observeExercises(profile.id),
                     allModulesRepo.observeSleep(profile.id),
-                    allModulesRepo.observeTodaySteps(profile.id),
+                    allModulesRepo.observeAllSteps(profile.id),
                     allModulesRepo.observeDiet(profile.id),
                     allModulesRepo.observeMedicines(profile.id),
                     allModulesRepo.observeTodayMedicineIntakes(profile.id),
@@ -336,29 +414,87 @@ class ModulesHubViewModel(
                     allModulesRepo.observeAllWellbeing(profile.id)
                 ) { arr -> arr }
 
-                combine(
+                val settingsSnapshotFlow = preferencesManager.preferencesFlow
+                    .map { Triple(it.wellbeingWarningPercent, it.aiDataAuth, it.healthConnectImportAuth) }
+                    .distinctUntilChanged()
+
+                val nutritionAndVaultFlow = combine(
+                    allModulesRepo.observeNutritionPreference(profile.id),
+                    allModulesRepo.observeLatestNutritionPlan(profile.id),
+                    healthVaultRepository?.observeAllergies(profile.id) ?: flowOf(emptyList())
+                ) { pref, plan, allergies -> Triple(pref, plan, allergies) }
+
+                if (routineMoodRepository != null && seededPhase6ProfileIds.add(profile.id)) {
+                    viewModelScope.launch {
+                        routineMoodRepository.ensureDefaultCatalogSeeded(profile.id)
+                    }
+                }
+                val phase6Flow = combine(
+                    routineMoodRepository?.observeRoutines(profile.id) ?: flowOf(emptyList()),
+                    routineMoodRepository?.observeRecentCompletions(profile.id, 30) ?: flowOf(emptyList()),
+                    routineMoodRepository?.observeMoodEntries(profile.id) ?: flowOf(emptyList()),
+                    routineMoodRepository?.observeChallenges(profile.id) ?: flowOf(emptyList()),
+                    routineMoodRepository?.observeBadges(profile.id) ?: flowOf(emptyList())
+                ) { routines, completions, moods, challenges, badges ->
+                    listOf(routines, completions, moods, challenges, badges)
+                }
+
+                val dataSummaryFlow = combine(
                     coreFlow,
                     combine(
                         allModulesRepo.observeRecentMedicineIntakes(profile.id),
+                        allModulesRepo.observeMedicineIntakesLast60Days(profile.id),
                         customAlarmRepository.observeAlarms(profile.id)
-                    ) { recent, alarms -> recent to alarms },
-                    fitnessSyncRepo.observeConnectedSources(profile.id),
-                    fitnessSyncRepo.observeVitalMetrics(profile.id),
-                    aiFlow
-                ) { arr, recentAndAlarms, sources, vitals, overlay ->
-                    val recentIntakes = recentAndAlarms.first
-                    val customAlarms = recentAndAlarms.second
+                    ) { recent, intakes60d, alarms -> Triple(recent, intakes60d, alarms) },
+                    combine(
+                        fitnessSyncRepo.observeConnectedSources(profile.id),
+                        fitnessSyncRepo.observeVitalMetrics(profile.id),
+                        nutritionAndVaultFlow,
+                        phase6Flow
+                    ) { sources, vitals, nv, p6 -> listOf(sources, vitals, nv, p6) },
+                    settingsSnapshotFlow
+                ) { arr, medicineAndAlarms, syncAndNutritionAndP6, settingsTriple ->
+                    val recentIntakes = medicineAndAlarms.first
+                    val intakes60d = medicineAndAlarms.second
+                    val customAlarms = medicineAndAlarms.third
+                    @Suppress("UNCHECKED_CAST")
+                    val sources = syncAndNutritionAndP6[0] as List<ConnectedDeviceSourceEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val vitals = syncAndNutritionAndP6[1] as List<HealthVitalMetricEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val nv = syncAndNutritionAndP6[2] as Triple<NutritionPreferenceEntity?, NutritionPlanEntity?, List<AllergyRecordEntity>>
+                    val nutritionPref = nv.first
+                    val latestPlanEntity = nv.second
+                    val vaultAllergies = nv.third
+                    @Suppress("UNCHECKED_CAST")
+                    val p6 = syncAndNutritionAndP6[3] as List<Any>
+                    @Suppress("UNCHECKED_CAST")
+                    val routinesList = p6[0] as List<DailyRoutineEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val routineCompletions = p6[1] as List<RoutineCompletionEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val moodEntriesList = p6[2] as List<MoodJournalEntryEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val challengesList = p6[3] as List<WellnessChallengeEntity>
+                    @Suppress("UNCHECKED_CAST")
+                    val badgesList = p6[4] as List<AchievementBadgeEntity>
+                    val warningPercent = settingsTriple.first
+                    val aiDataAuth = settingsTriple.second
+                    val hcImportAuth = settingsTriple.third
+
                     @Suppress("UNCHECKED_CAST")
                     val modules = arr[0] as List<ModuleActivationEntity>
                     @Suppress("UNCHECKED_CAST")
-                    val water = arr[1] as List<WaterRecordEntity>
+                    val water60d = arr[1] as List<WaterRecordEntity>
                     @Suppress("UNCHECKED_CAST")
                     val period = arr[2] as List<PeriodRecordEntity>
                     @Suppress("UNCHECKED_CAST")
                     val exercises = arr[3] as List<ExerciseRecordEntity>
                     @Suppress("UNCHECKED_CAST")
                     val sleep = arr[4] as List<SleepRecordEntity>
-                    val steps = arr[5] as StepRecordEntity?
+                    @Suppress("UNCHECKED_CAST")
+                    val allSteps = arr[5] as List<StepRecordEntity>
+                    val todaySteps = allSteps.firstOrNull { it.dayKey == DateEpochUtils.todayDayKey() }
                     @Suppress("UNCHECKED_CAST")
                     val diet = arr[6] as List<DietRecordEntity>
                     @Suppress("UNCHECKED_CAST")
@@ -385,17 +521,21 @@ class ModulesHubViewModel(
                     val balanceScore = WellbeingMetricsCalculator.computeMindfulBalanceScore(wellbeing)
                     val overuseAlert = WellbeingMetricsCalculator.evaluateOveruse(
                         record = wellbeing,
-                        warningPercent = overlay.warningPercent,
+                        warningPercent = warningPercent,
                         topApps = topApps
                     )
-                    val isSnoozed = System.currentTimeMillis() < overlay.snoozedUntilMs
 
-                    val hydration = HydrationCalculator.summarize(water, profile.dailyWaterGoalMl)
+                    val water7dStart = DateEpochUtils.dayKeyDaysAgo(6)
+                    val hydration = HydrationCalculator.summarize(
+                        recordsLast7Days = water60d.filter { it.dayKey >= water7dStart },
+                        goalMl = profile.dailyWaterGoalMl
+                    )
                     val cycle = CycleCalculator.analyze(
                         period,
                         profile.averageCycleLengthDays,
                         profile.averagePeriodDurationDays
                     )
+                    val alertMetrics = AlertMetricsCalculator.summarize(customAlarms)
                     val briefing = OnDeviceWellnessAdvisor.buildDailyBriefing(
                         profile = profile,
                         hydration = hydration,
@@ -403,7 +543,7 @@ class ModulesHubViewModel(
                         exercises = exercises,
                         diet = diet,
                         sleep = sleep,
-                        steps = steps,
+                        steps = todaySteps,
                         wellbeing = wellbeing,
                         aiPref = aiPref,
                         medicines = medicines,
@@ -412,6 +552,58 @@ class ModulesHubViewModel(
                         connectedSources = sources,
                         vitalMetrics = vitals
                     )
+                    val healthIntelligence = PersonalHealthIntelligenceEngine.analyze(
+                        profile = profile,
+                        authorization = aiDataAuth,
+                        waterRecords60d = water60d,
+                        sleepRecords = sleep,
+                        exercises = exercises,
+                        stepRecords = allSteps,
+                        dietRecords = diet,
+                        medicines = medicines,
+                        medicineIntakes60d = intakes60d,
+                        consultations = consultations,
+                        beautyRecords = beauty,
+                        wellbeingRecords = wellbeingHistory,
+                        cycleInsights = cycle,
+                        connectedSources = sources,
+                        vitalMetrics = vitals,
+                        customAlarms = customAlarms,
+                        alertMetrics = alertMetrics,
+                        aiPref = aiPref
+                    )
+                    val selectedRegion = IndianRegion.entries.firstOrNull {
+                        it.name == nutritionPref?.preferredRegion
+                    } ?: IndianRegion.SOUTH
+                    val selectedDietary = IndianDietaryPreference.entries.firstOrNull {
+                        it.name == nutritionPref?.dietaryPreference
+                    } ?: IndianDietaryPreference.VEGETARIAN
+                    val selectedGoal = NutritionGoalType.entries.firstOrNull {
+                        it.name == nutritionPref?.nutritionGoal
+                    } ?: NutritionGoalType.BALANCED
+                    val avoidAllergens = nutritionPref?.avoidVaultAllergens ?: true
+                    val nutritionTarget = IndianNutritionEngine.calculateTargets(
+                        profile = profile,
+                        goal = selectedGoal,
+                        dietaryPreference = selectedDietary,
+                        customCalorieTarget = nutritionPref?.customCalorieTarget
+                    )
+                    val todayNutritionProgress = IndianNutritionEngine.evaluateTodayIntake(
+                        dietRecords = diet,
+                        target = nutritionTarget
+                    )
+                    val activeMealPlan = latestPlanEntity?.let { AllModulesRepository.entityToMealPlanResult(it) }
+                    val routineAdherence = RoutineMoodAnalyticsEngine.summarizeRoutineAdherence(
+                        routines = routinesList,
+                        completions = routineCompletions
+                    )
+                    val moodAnalytics = RoutineMoodAnalyticsEngine.analyzeMoodJournal(
+                        entries = moodEntriesList,
+                        sleepRecords = sleep,
+                        waterRecords = water60d,
+                        routineCompletions = routineCompletions
+                    )
+
                     ModulesHubUiState(
                         profile = profile,
                         modules = modules,
@@ -419,7 +611,7 @@ class ModulesHubViewModel(
                         cycleInsights = cycle,
                         exercises = exercises,
                         sleepRecords = sleep,
-                        todaySteps = steps,
+                        todaySteps = todaySteps,
                         dietRecords = diet,
                         medicines = medicines,
                         todayMedicineIntakes = medicineIntakes,
@@ -429,6 +621,42 @@ class ModulesHubViewModel(
                         todayWellbeing = wellbeing,
                         aiPreference = aiPref,
                         dailyBriefing = briefing,
+                        connectedSources = sources,
+                        vitalMetrics = vitals,
+                        wellbeingHistory = wellbeingHistory.take(7),
+                        topAppsUsage = topApps,
+                        longUsedApps = longApps,
+                        categoryScreenMinutes = categories,
+                        mindfulBalanceScore = balanceScore,
+                        wellbeingOveruseAlert = overuseAlert,
+                        wellbeingWarningPercent = warningPercent,
+                        customAlarms = customAlarms,
+                        alertMetrics = alertMetrics,
+                        healthIntelligence = healthIntelligence,
+                        aiDataAuthorization = aiDataAuth,
+                        nutritionPreference = nutritionPref,
+                        selectedIndianRegion = selectedRegion,
+                        selectedDietaryPreference = selectedDietary,
+                        selectedNutritionGoal = selectedGoal,
+                        avoidVaultAllergens = avoidAllergens,
+                        nutritionTarget = nutritionTarget,
+                        todayNutritionProgress = todayNutritionProgress,
+                        vaultAllergies = vaultAllergies,
+                        activeIndianMealPlan = activeMealPlan,
+                        healthConnectImportAuth = hcImportAuth,
+                        routines = routinesList,
+                        routineAdherence = routineAdherence,
+                        moodEntries = moodEntriesList,
+                        moodAnalytics = moodAnalytics,
+                        wellnessChallenges = challengesList,
+                        achievementBadges = badgesList,
+                        latestMoodEntry = moodEntriesList.firstOrNull()
+                    )
+                }
+
+                combine(dataSummaryFlow, aiFlow) { base, overlay ->
+                    val isSnoozed = System.currentTimeMillis() < overlay.snoozedUntilMs
+                    base.copy(
                         aiChatMessages = overlay.chat,
                         selectedVoiceLanguageTag = overlay.languageTag,
                         autoSpeakReplies = overlay.autoSpeak,
@@ -442,27 +670,21 @@ class ModulesHubViewModel(
                         lastAiPrompt = overlay.lastAiPrompt,
                         aiDiagnosticReport = overlay.diagnosticReport,
                         isRunningDiagnostics = overlay.isRunningDiagnostics,
-                        connectedSources = sources,
-                        vitalMetrics = vitals,
                         healthConnectAvailability = overlay.hcAvailability,
                         grantedHealthPermissions = overlay.grantedPerms,
                         isSyncingFitness = overlay.isSyncingFitness,
                         fitnessSyncBanner = overlay.syncBanner,
                         hasUsageAccessPermission = overlay.hasUsageAccess,
                         hasNotificationPermission = overlay.hasNotificationPermission,
-                        wellbeingHistory = wellbeingHistory.take(7),
-                        topAppsUsage = topApps,
-                        longUsedApps = longApps,
-                        categoryScreenMinutes = categories,
-                        mindfulBalanceScore = balanceScore,
-                        wellbeingOveruseAlert = overuseAlert,
                         isWellbeingAlertSnoozed = isSnoozed,
                         wellbeingOveruseAlertsEnabled = overlay.alertsEnabled,
                         wellbeingWarningPercent = overlay.warningPercent,
                         isSyncingWellbeing = overlay.isSyncingWellbeing,
                         wellbeingSyncBanner = overlay.wellbeingBanner,
-                        customAlarms = customAlarms,
-                        alertMetrics = AlertMetricsCalculator.summarize(customAlarms)
+                        selectedIntelligenceTimeframe = overlay.selectedTimeframe,
+                        generatedAiHealthReport = overlay.generatedHealthReport,
+                        isGeneratingMealPlan = overlay.isGeneratingMealPlan,
+                        mealPlanStatusMessage = overlay.mealPlanStatusMessage
                     )
                 }
             }
@@ -489,20 +711,40 @@ class ModulesHubViewModel(
         }
     }
 
+    fun setHealthConnectCategoryEnabled(category: HealthConnectDataCategory, enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setHealthConnectCategoryEnabled(category, enabled)
+        }
+    }
+
     fun syncFromHealthConnect() {
-        val pid = uiState.value.profile?.id ?: return
+        val snapshot = uiState.value
+        val pid = snapshot.profile?.id ?: return
+        val enabledCategories = snapshot.healthConnectImportAuth.enabledCategories()
         viewModelScope.launch {
             isSyncingFitness.value = true
             fitnessSyncBanner.value = null
             hcAvailability.value = healthConnectManager.checkAvailability()
             grantedHealthPerms.value = healthConnectManager.getGrantedPermissions()
-            val result = healthConnectManager.readRecentMetrics(daysBack = 7)
+            val result = healthConnectManager.readRecentMetrics(
+                daysBack = 7,
+                enabledCategories = enabledCategories
+            )
             result.onSuccess { payload ->
                 val saved = fitnessSyncRepo.ingestSyncPayload(pid, payload)
+                val breakdown = buildList {
+                    if (payload.dailySteps.isNotEmpty()) add("${payload.dailySteps.size}d steps")
+                    if (payload.workouts.isNotEmpty()) add("${payload.workouts.size} workouts")
+                    if (payload.sleepSessions.isNotEmpty()) add("${payload.sleepSessions.size} sleep")
+                    if (payload.waterEntries.isNotEmpty()) add("${payload.waterEntries.size} hydration")
+                    if (payload.nutritionEntries.isNotEmpty()) add("${payload.nutritionEntries.size} meals")
+                }.joinToString(", ")
+                val sourceNames = payload.sources.joinToString(", ") { "${it.emoji} ${it.displayName}" }
+                    .ifBlank { "Health Connect" }
                 fitnessSyncBanner.value = if (saved > 0) {
-                    "✅ Synced $saved metric updates from ${payload.sources.joinToString(", ") { "${it.emoji} ${it.displayName}" }.ifBlank { "Health Connect" }}"
+                    "✅ Synced $saved updates ($breakdown) from $sourceNames"
                 } else {
-                    "ℹ️ Connected! No new records found in the last 7 days yet."
+                    "ℹ️ Connected to $sourceNames! No new records found in the last 7 days for enabled categories."
                 }
             }.onFailure { err ->
                 fitnessSyncBanner.value = err.localizedMessage ?: "Unable to read Health Connect data."
@@ -539,6 +781,22 @@ class ModulesHubViewModel(
 
     fun clearFitnessBanner() {
         fitnessSyncBanner.value = null
+    }
+
+    fun logQuickHomeMood(preset: MoodPresetOption) {
+        val pid = uiState.value.profile?.id ?: return
+        val repo = routineMoodRepository ?: return
+        viewModelScope.launch {
+            repo.logMoodEntry(
+                profileId = pid,
+                preset = preset,
+                energyLevel = preset.defaultEnergy,
+                stressLevel = preset.defaultStress,
+                tags = emptyList(),
+                reflectionNote = "Quick check-in from Home",
+                gratitudeText = ""
+            )
+        }
     }
 
     // --- Voice & Multilingual AI Guide + Prescription Extraction ---
@@ -603,9 +861,101 @@ class ModulesHubViewModel(
         diagnosticReportFlow.value = null
     }
 
+    fun selectIntelligenceTimeframe(timeframe: IntelligenceTimeframe) {
+        selectedTimeframeFlow.value = timeframe
+        val current = generatedHealthReportFlow.value
+        if (current != null && current.timeframe != timeframe.name) {
+            generatedHealthReportFlow.value = null
+        }
+    }
+
+    fun setAiModuleSharing(moduleKey: String, enabled: Boolean) {
+        viewModelScope.launch {
+            preferencesManager.setAiModuleSharing(moduleKey, enabled)
+            generatedHealthReportFlow.value = null
+        }
+    }
+
+    fun clearAiHealthIntelligenceReport() {
+        generatedHealthReportFlow.value = null
+    }
+
+    fun generateAiHealthIntelligence(
+        timeframe: IntelligenceTimeframe = uiState.value.selectedIntelligenceTimeframe
+    ) {
+        selectedTimeframeFlow.value = timeframe
+        val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
+        val snapshot = uiState.value.healthIntelligence
+        viewModelScope.launch {
+            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            val result = aiService.generatePersonalHealthIntelligence(
+                timeframeName = timeframe.name,
+                languageOption = lang,
+                groundedWellnessContext = snapshot.groundedAiPromptContext,
+                onStageUpdate = { stage -> aiTaskStatus.value = AiTaskStatus.Loading(stage) },
+                onPartialPreview = { preview ->
+                    aiTaskStatus.value = AiTaskStatus.Streaming("Synthesizing ${timeframe.label} briefing...", preview)
+                }
+            )
+            result.onSuccess { report ->
+                aiTaskStatus.value = AiTaskStatus.Idle
+                generatedHealthReportFlow.value = report
+                if (autoSpeakReplies.value) {
+                    val spoken = buildString {
+                        append(report.headline).append(". ")
+                        append(report.recordedFactsSummary).append(" ")
+                        report.personalizedSuggestions.firstOrNull()?.let { append(it) }
+                    }
+                    voiceManager.speak(spoken, lang.tag)
+                }
+            }.onFailure { err ->
+                if (err is CancellationException) throw err
+                val msg = err.localizedMessage ?: "AI synthesis unavailable. Showing your local grounded insights."
+                aiTaskStatus.value = AiTaskStatus.Error(msg)
+            }
+        }
+    }
+
+    fun speakIntelligenceSummary() {
+        val state = uiState.value
+        val lang = SupportedVoiceLanguages.byTag(state.selectedVoiceLanguageTag)
+        val activeReport = state.generatedAiHealthReport
+            ?.takeIf { it.timeframe == state.selectedIntelligenceTimeframe.name }
+            ?: state.healthIntelligence.offlineReportFor(state.selectedIntelligenceTimeframe)
+        val spoken = buildString {
+            append(activeReport.headline).append(". ")
+            append(activeReport.recordedFactsSummary).append(" ")
+            activeReport.personalizedSuggestions.take(2).forEach { append(it).append(" ") }
+            append(activeReport.disclaimer)
+        }
+        voiceManager.speak(spoken, lang.tag)
+    }
+
+    fun answerOfflineHealthQuestion(prompt: String? = lastAiPromptFlow.value) {
+        val clean = prompt?.trim().orEmpty()
+        if (clean.isEmpty()) return
+        val answer = PersonalHealthIntelligenceEngine.answerGroundedQuestion(
+            prompt = clean,
+            snapshot = uiState.value.healthIntelligence
+        )
+        val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
+        aiTaskStatus.value = AiTaskStatus.Idle
+        aiMessages.update { list ->
+            list + LocalAiMessage(
+                id = nextMsgId++,
+                isFromUser = false,
+                text = answer,
+                actionBadges = listOf("📊 Grounded On-Device Summary")
+            )
+        }
+        if (autoSpeakReplies.value) {
+            voiceManager.speak(answer, lang.tag)
+        }
+    }
+
     fun playMultilingualAppGuide() {
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
-        val contextSummary = uiState.value.dailyBriefing
+        val contextSummary = uiState.value.healthIntelligence.groundedAiPromptContext
         viewModelScope.launch {
             aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
             val result = aiService.generateMultilingualAppGuide(
@@ -630,10 +980,19 @@ class ModulesHubViewModel(
                 }
             }.onFailure { err ->
                 if (err is CancellationException) throw err
-                val msg = err.localizedMessage ?: "Unable to generate AI guide."
+                val msg = err.localizedMessage ?: "Unable to generate cloud AI guide."
+                val offlineDaily = uiState.value.healthIntelligence.offlineReportFor(IntelligenceTimeframe.DAILY)
+                val localSummary = "${offlineDaily.headline}\n${offlineDaily.recordedFactsSummary}"
                 aiTaskStatus.value = AiTaskStatus.Error(msg)
                 aiMessages.update { list ->
-                    list + LocalAiMessage(nextMsgId++, isFromUser = false, text = msg, isError = true)
+                    list + LocalAiMessage(
+                        id = nextMsgId++,
+                        isFromUser = false,
+                        text = msg,
+                        actionBadges = listOf("📊 Auto Local Summary"),
+                        isError = true,
+                        fallbackSummary = localSummary
+                    )
                 }
             }
         }
@@ -655,7 +1014,7 @@ class ModulesHubViewModel(
             val result = aiService.processVoiceOrTextCommand(
                 userMessage = clean,
                 languageOption = lang,
-                wellnessContextSummary = snapshot.dailyBriefing,
+                wellnessContextSummary = snapshot.healthIntelligence.groundedAiPromptContext,
                 onStageUpdate = { stage -> aiTaskStatus.value = AiTaskStatus.Loading(stage) },
                 onPartialPreview = { preview ->
                     aiTaskStatus.value = AiTaskStatus.Streaming("Streaming in ${lang.label}...", preview)
@@ -677,14 +1036,20 @@ class ModulesHubViewModel(
                 }
             }.onFailure { err ->
                 if (err is CancellationException) throw err
-                val msg = err.localizedMessage ?: "AI request failed. Check connection or try again."
+                val msg = err.localizedMessage ?: "Cloud AI unavailable. Check connection or retry."
+                val localFallback = PersonalHealthIntelligenceEngine.answerGroundedQuestion(
+                    prompt = clean,
+                    snapshot = snapshot.healthIntelligence
+                )
                 aiTaskStatus.value = AiTaskStatus.Error(msg)
                 aiMessages.update { list ->
                     list + LocalAiMessage(
                         id = nextMsgId++,
                         isFromUser = false,
                         text = msg,
-                        isError = true
+                        actionBadges = listOf("📊 Auto Local Summary"),
+                        isError = true,
+                        fallbackSummary = localFallback
                     )
                 }
             }
@@ -943,6 +1308,142 @@ class ModulesHubViewModel(
 
     fun deleteMeal(id: Long) = viewModelScope.launch { allModulesRepo.deleteMeal(id) }
 
+    fun updateNutritionPreferences(
+        region: IndianRegion = uiState.value.selectedIndianRegion,
+        dietary: IndianDietaryPreference = uiState.value.selectedDietaryPreference,
+        goal: NutritionGoalType = uiState.value.selectedNutritionGoal,
+        customCalorieTarget: Int? = uiState.value.nutritionPreference?.customCalorieTarget,
+        avoidVaultAllergens: Boolean = uiState.value.avoidVaultAllergens
+    ) {
+        val pid = uiState.value.profile?.id ?: return
+        viewModelScope.launch {
+            allModulesRepo.saveNutritionPreference(
+                NutritionPreferenceEntity(
+                    id = uiState.value.nutritionPreference?.id ?: 0L,
+                    profileId = pid,
+                    preferredRegion = region.name,
+                    dietaryPreference = dietary.name,
+                    nutritionGoal = goal.name,
+                    customCalorieTarget = customCalorieTarget,
+                    avoidVaultAllergens = avoidVaultAllergens
+                )
+            )
+        }
+    }
+
+    fun logIndianFood(
+        item: IndianFoodItem,
+        servings: Float = 1f,
+        mealType: String = item.mealSlots.firstOrNull() ?: "Lunch",
+        loggedAtEpochMs: Long = System.currentTimeMillis()
+    ) {
+        val pid = uiState.value.profile?.id ?: return
+        val scaled = IndianNutritionEngine.scaleFood(item, servings)
+        viewModelScope.launch {
+            allModulesRepo.logMeal(
+                profileId = pid,
+                mealType = mealType,
+                foodSummary = scaled.formattedName,
+                calories = scaled.calories,
+                proteinGrams = scaled.proteinGrams,
+                carbsGrams = scaled.carbsGrams,
+                fatGrams = scaled.fatGrams,
+                loggedAtEpochMs = loggedAtEpochMs
+            )
+            mealPlanStatusFlow.value = "✅ Logged ${scaled.formattedName} (${scaled.calories} kcal, ${scaled.proteinGrams}g P)."
+        }
+    }
+
+    fun logPlannedMealSlot(slot: PlannedIndianMealSlot) {
+        val pid = uiState.value.profile?.id ?: return
+        viewModelScope.launch {
+            allModulesRepo.logMeal(
+                profileId = pid,
+                mealType = slot.mealType,
+                foodSummary = "🇮🇳 ${slot.dishName} (${slot.portionLabel})",
+                calories = slot.calories,
+                proteinGrams = slot.proteinGrams,
+                carbsGrams = slot.carbsGrams,
+                fatGrams = slot.fatGrams
+            )
+            mealPlanStatusFlow.value = "✅ Logged ${slot.dishName} to ${slot.mealType}."
+        }
+    }
+
+    fun logEntireMealPlan(plan: IndianMealPlanResult) {
+        val pid = uiState.value.profile?.id ?: return
+        if (plan.meals.isEmpty()) return
+        viewModelScope.launch {
+            plan.meals.forEach { slot ->
+                allModulesRepo.logMeal(
+                    profileId = pid,
+                    mealType = slot.mealType,
+                    foodSummary = "🇮🇳 ${slot.dishName} (${slot.portionLabel})",
+                    calories = slot.calories,
+                    proteinGrams = slot.proteinGrams,
+                    carbsGrams = slot.carbsGrams,
+                    fatGrams = slot.fatGrams
+                )
+            }
+            mealPlanStatusFlow.value = "✅ Logged all ${plan.meals.size} meals (${plan.totalCalories} kcal total)."
+        }
+    }
+
+    fun clearMealPlanStatus() {
+        mealPlanStatusFlow.value = null
+    }
+
+    fun generateIndianMealPlan() {
+        val state = uiState.value
+        val pid = state.profile?.id ?: return
+        if (isGeneratingMealPlanFlow.value) return
+        val lang = SupportedVoiceLanguages.byTag(state.selectedVoiceLanguageTag)
+        val region = state.selectedIndianRegion
+        val dietary = state.selectedDietaryPreference
+        val target = state.nutritionTarget
+        val allergiesToAvoid = if (state.avoidVaultAllergens) state.vaultAllergies else emptyList()
+        val allergenNames = allergiesToAvoid.map { it.allergen.trim() }.filter { it.isNotBlank() }.distinct()
+        val loggedTodaySummary = if (state.todayNutritionProgress.todayMealCount == 0) {
+            "No meals logged yet today."
+        } else {
+            "${state.todayNutritionProgress.consumedCalories} kcal consumed (${state.todayNutritionProgress.consumedProteinGrams}g protein across ${state.todayNutritionProgress.todayMealCount} meals)."
+        }
+
+        viewModelScope.launch {
+            isGeneratingMealPlanFlow.value = true
+            mealPlanStatusFlow.value = "Checking App Check & calibrating ${region.label} plan..."
+            val result = aiService.generateIndianNutritionPlan(
+                regionLabel = region.label,
+                dietaryLabel = dietary.label,
+                goalLabel = target.goal.label,
+                targetCalories = target.targetCalories,
+                targetProteinGrams = target.targetProteinGrams,
+                targetCarbsGrams = target.targetCarbsGrams,
+                targetFatGrams = target.targetFatGrams,
+                alreadyLoggedTodaySummary = loggedTodaySummary,
+                avoidAllergens = allergenNames,
+                languageOption = lang,
+                onStageUpdate = { stage -> mealPlanStatusFlow.value = stage },
+                onPartialPreview = { title -> mealPlanStatusFlow.value = "✨ Designing: $title..." }
+            )
+            result.onSuccess { plan ->
+                allModulesRepo.saveNutritionPlan(pid, plan)
+                mealPlanStatusFlow.value = "✨ Gemini AI generated & saved your ${region.label} meal plan."
+            }.onFailure { err ->
+                if (err is CancellationException) throw err
+                val offlinePlan = IndianNutritionEngine.generateOfflineIndianMealPlan(
+                    region = region,
+                    dietaryPreference = dietary,
+                    target = target,
+                    allergies = allergiesToAvoid
+                )
+                allModulesRepo.saveNutritionPlan(pid, offlinePlan)
+                mealPlanStatusFlow.value = "🌿 Offline ${region.label} plan generated (cloud AI unavailable: ${err.localizedMessage ?: "offline"})."
+            }
+            isGeneratingMealPlanFlow.value = false
+        }
+    }
+
     fun addMedicine(
         name: String,
         dosage: String,
@@ -952,7 +1453,12 @@ class ModulesHubViewModel(
         intervalHours: Int = 24,
         mealRelation: String = "After Meal",
         categoryEmoji: String = "💊",
-        notes: String = ""
+        notes: String = "",
+        stockQuantity: Float = 0f,
+        stockUnit: String = "tablets",
+        unitsPerDose: Float = 1f,
+        lowStockThresholdDays: Int = 5,
+        expiryEpochDay: Long? = null
     ) {
         val pid = uiState.value.profile?.id ?: return
         viewModelScope.launch {
@@ -966,7 +1472,12 @@ class ModulesHubViewModel(
                 intervalHours = intervalHours,
                 mealRelation = mealRelation,
                 categoryEmoji = categoryEmoji,
-                notes = notes
+                notes = notes,
+                stockQuantity = stockQuantity,
+                stockUnit = stockUnit,
+                unitsPerDose = unitsPerDose,
+                lowStockThresholdDays = lowStockThresholdDays,
+                expiryEpochDay = expiryEpochDay
             )
             scheduleAutoAlarmForMedicine(
                 profileId = pid,

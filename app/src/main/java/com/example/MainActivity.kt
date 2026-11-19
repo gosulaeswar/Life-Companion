@@ -25,9 +25,19 @@ class MainActivity : ComponentActivity() {
                     preferencesManager = appContainer.preferencesManager
                 )
             }
+            runCatching {
+                appContainer.subscriptionRepository.initializeAndRefresh()
+            }
         }
         setContent {
             LifeCompanionApp(container = appContainer)
         }
+    }
+
+    override fun onDestroy() {
+        if (isFinishing) {
+            runCatching { appContainer.playBillingGateway.endConnection() }
+        }
+        super.onDestroy()
     }
 }

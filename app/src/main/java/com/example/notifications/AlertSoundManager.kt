@@ -379,10 +379,12 @@ class AlertSoundManager(private val context: Context) {
 
     fun hasNotificationPermission(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            ContextCompat.checkSelfPermission(
-                context,
-                Manifest.permission.POST_NOTIFICATIONS
-            ) == PackageManager.PERMISSION_GRANTED
+            runCatching {
+                ContextCompat.checkSelfPermission(
+                    context,
+                    Manifest.permission.POST_NOTIFICATIONS
+                ) == PackageManager.PERMISSION_GRANTED
+            }.getOrDefault(false)
         } else {
             true
         }
@@ -526,6 +528,32 @@ class AlertSoundManager(private val context: Context) {
         )
     }
 
+    fun showMedicineRefillOrExpiryNotification(
+        title: String,
+        body: String,
+        wellnessToneSetting: CategoryToneSetting,
+        notificationId: Int = 1005
+    ): Boolean {
+        val channelId = ensureNotificationChannel(AlertCategory.WELLNESS, wellnessToneSetting)
+        val soundUri = resolveSoundUri(AlertCategory.WELLNESS, wellnessToneSetting)
+        val payload = AlarmPopupPayload(
+            notificationId = notificationId,
+            categoryKey = "medicine",
+            title = title,
+            message = body,
+            emoji = "💊",
+            toneLabel = describeCurrentTone(AlertCategory.WELLNESS, wellnessToneSetting),
+            gesturePreset = AlarmEmojiGesturePreset.SWIPE_SLIDE,
+            soundUriString = soundUri.toString()
+        )
+        return dispatchPopupNotification(
+            channelId = channelId,
+            payload = payload,
+            soundUri = soundUri,
+            forceDirectLaunch = false
+        )
+    }
+
     fun showCustomAlarmNotification(
         reminder: ReminderEntity,
         enrichedMessage: String? = null,
@@ -585,13 +613,14 @@ class AlertSoundManager(private val context: Context) {
         payload: AlarmPopupPayload,
         soundUri: Uri?
     ): Boolean {
+        val reqBase = (payload.notificationId and 0x03FF_FFFF) * 10
         val popupIntent = Intent(context, AlarmPopupActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             payload.writeToIntent(this)
         }
         val popupPending = PendingIntent.getActivity(
             context,
-            8000 + payload.notificationId,
+            reqBase + 1,
             popupIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -604,7 +633,7 @@ class AlertSoundManager(private val context: Context) {
         }
         val dismissPending = PendingIntent.getBroadcast(
             context,
-            9000 + payload.notificationId,
+            reqBase + 2,
             dismissIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -617,7 +646,7 @@ class AlertSoundManager(private val context: Context) {
         }
         val donePending = PendingIntent.getBroadcast(
             context,
-            9200 + payload.notificationId,
+            reqBase + 3,
             doneIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -628,7 +657,7 @@ class AlertSoundManager(private val context: Context) {
         }
         val snoozePending = PendingIntent.getBroadcast(
             context,
-            9500 + payload.notificationId,
+            reqBase + 4,
             snoozeIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -766,7 +795,7 @@ class AlertSoundManager(private val context: Context) {
             action = AlertAlarmReceiver.ACTION_SNOOZE_TRIGGER
             snoozePayload.writeToIntent(this)
         }
-        val requestCode = 7000 + payload.notificationId
+        val requestCode = (payload.notificationId and 0x03FF_FFFF) * 10 + 5
         val pendingIntent = PendingIntent.getBroadcast(
             context,
             requestCode,
@@ -784,7 +813,7 @@ class AlertSoundManager(private val context: Context) {
     ) {
         val showIntent = PendingIntent.getActivity(
             context,
-            10_000 + showRequestCode,
+            (showRequestCode and 0x03FF_FFFF) * 10 + 6,
             Intent(context, MainActivity::class.java).apply {
                 flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             },
@@ -889,23 +918,12 @@ class AlertSoundManager(private val context: Context) {
         if (prefs.wellbeingOveruseAlertsEnabled) {
             scheduleWellbeingMonitor(delayMs = 5 * 60_000L)
         }
-        val profile = db.userProfileDao().getActiveProfileSnapshot()
+        val allProfiles = db.userProfileDao().getAllProfilesSnapshot()
+        val profile = allProfiles.firstOrNull { it.id == prefs.activeProfileId } ?: allProfiles.firstOrNull()
         if (profile != null) {
             db.reminderDao().getRemindersSnapshot(profile.id)
                 .filter { it.isEnabled }
                 .forEach { scheduleCustomAlarm(it) }
-        }
-    }
-
-    private fun nextTriggerCalendar(hour: Int, minute: Int): Calendar {
-        return Calendar.getInstance().apply {
-            set(Calendar.HOUR_OF_DAY, hour.coerceIn(0, 23))
-            set(Calendar.MINUTE, minute.coerceIn(0, 59))
-            set(Calendar.SECOND, 0)
-            set(Calendar.MILLISECOND, 0)
-            if (timeInMillis <= System.currentTimeMillis()) {
-                add(Calendar.DAY_OF_YEAR, 1)
-            }
         }
     }
 

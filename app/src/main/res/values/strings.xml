@@ -22,7 +22,9 @@
     <string name="profile_setup_title">Personalize Your Companion</string>
     <string name="profile_edit_title">Edit Local Profile</string>
     <string name="period_always_free_badge">Always Free</string>
-    <string name="privacy_export_json">Export Local JSON</string>
+    <string name="privacy_export_json">Export Portable JSON (29 Tables)</string>
+    <string name="privacy_export_encrypted">Export Encrypted Vault (LCENC1)</string>
+    <string name="privacy_restore_backup">Restore Backup (JSON / Encrypted)</string>
     <string name="privacy_delete_all">Delete All Local Data</string>
     <string name="activation_verify_button">Verify Offline Key</string>
 
@@ -61,8 +63,27 @@
     <string name="settings_regional_language">Language</string>
     <string name="settings_screen_off_popup_title">🌙 Enable Screen-Off Alarm Popups</string>
     <string name="settings_screen_off_popup_cta">Allow Screen-Off Popups</string>
-    <string name="permissions_setup_title">Allow Access Before Sign-In</string>
-    <string name="permissions_setup_subtitle">Grant notifications, exact alarms, lock-screen popups, overlay window, battery &amp; wellbeing access so drink-water and medicine notes fire reliably in background.</string>
+    <string name="permissions_setup_title">Allow Access Before Setup</string>
+    <string name="permissions_setup_subtitle">Allow notifications for water and medicine reminders, plus optional exact-alarm, popup, battery, mic, and wellbeing permissions supported by your device.</string>
     <string name="permissions_grant_prompts_cta">Allow Notification &amp; Mic Prompts</string>
-    <string name="permissions_continue_cta">Continue to Local Login</string>
+    <string name="permissions_continue_cta">Continue to Local Profile</string>
+
+    <string name="intel_screen_title">Health Intelligence &amp; Reports</string>
+    <string name="intel_disclaimer">Informational wellness guidance only — never replaces qualified clinical advice.</string>
+    <string name="intel_privacy_title">AI Data Authorization</string>
+    <string name="vault_screen_title">Personal Health Records Vault</string>
+    <string name="vault_ai_disclaimer">Informational explanation only — not a medical diagnosis or substitute for a qualified medical professional.</string>
+    <string name="vault_export_pdf">Export Doctor-Ready PDF</string>
+    <string name="medical_refill_alert">Refill or expiry attention needed</string>
+    <string name="nutrition_indian_planner_title">AI Indian Nutrition Planner</string>
+    <string name="nutrition_disclaimer">Informational Indian wellness &amp; meal planning guidance only — not medical nutrition therapy. Check ingredients against personal allergies.</string>
+    <string name="hc_permissions_categories_title">Health Connect Permissions &amp; Categories</string>
+    <string name="hc_manual_preserved_note">Manual logging across Diet, Water, Fitness, Sleep, Medical, Vault &amp; Cycle always remains active.</string>
+    <string name="family_circle_title">LifeWeave Family Circle</string>
+    <string name="family_circle_consent_note">Sign in with your Google Account to manage up to 5 profiles on eligible plans, caregiver reminders, shared appointments, and explicit consent-based sharing.</string>
+    <string name="routines_mood_title">Routines, Mood &amp; Growth</string>
+    <string name="routines_mood_subtitle">Optional habits, private reflections &amp; guilt-free milestones</string>
+    <string name="subscription_screen_title">LifeWeave Plans &amp; Billing</string>
+    <string name="subscription_period_always_free">Cycle &amp; Period Care stays 100% Free Forever — never gated behind any subscription.</string>
+    <string name="subscription_restore_cta">Restore Google Play Purchases</string>
 </resources>

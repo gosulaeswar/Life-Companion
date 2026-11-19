@@ -56,20 +56,29 @@ import androidx.compose.ui.unit.dp
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.DocumentScanner
+import androidx.compose.material.icons.rounded.Inventory2
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.WarningAmber
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.font.FontWeight
 import com.example.data.local.entity.DoctorConsultationEntity
 import com.example.data.local.entity.MedicineEntity
 import com.example.domain.DateEpochUtils
+import com.example.domain.ExpiryAlertState
+import com.example.domain.HealthVaultAndRefillEngine
+import com.example.domain.RefillAlertState
 import com.example.ui.components.CalendarDatePickerDialog
 import com.example.ui.components.ClockTimePickerDialog
 import com.example.ui.components.DateTimeSelectorRow
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.theme.JetBrainsMonoMetricFont
 import com.example.ui.viewmodel.AiTaskStatus
+import com.example.ui.viewmodel.HealthVaultUiState
 import com.example.ui.viewmodel.ModulesHubUiState
 import com.example.ui.viewmodel.ModulesHubViewModel
 import java.util.Locale
@@ -79,12 +88,26 @@ import java.util.Locale
 fun MedicalCareScreen(
     uiState: ModulesHubUiState,
     viewModel: ModulesHubViewModel,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    vaultState: HealthVaultUiState = HealthVaultUiState(),
+    onOpenHealthVault: () -> Unit = {},
+    onRestockMedicine: (
+        medicine: MedicineEntity,
+        quantityAdded: Float,
+        unitLabel: String,
+        purchaseDateEpochDay: Long,
+        expiryEpochDay: Long?,
+        lowStockThresholdDays: Int,
+        pharmacyOrSource: String,
+        costNote: String,
+        prescriptionDocId: Long?
+    ) -> Unit = { _, _, _, _, _, _, _, _, _ -> }
 ) {
     val context = LocalContext.current
     var showMedDialog by remember { mutableStateOf(false) }
     var showVisitDialog by remember { mutableStateOf(false) }
     var intakeDialogMed by remember { mutableStateOf<MedicineEntity?>(null) }
+    var refillDialogMed by remember { mutableStateOf<MedicineEntity?>(null) }
     val prescriptionPickerLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.PickVisualMedia()
     ) { uri ->
@@ -103,6 +126,18 @@ fun MedicalCareScreen(
     }
 
     val todayEpochDay = remember { DateEpochUtils.todayEpochDay() }
+    val medicineInventories = remember(uiState.medicines, todayEpochDay) {
+        HealthVaultAndRefillEngine.evaluateAllMedicines(uiState.medicines, todayEpochDay)
+    }
+    val attentionInventories = remember(medicineInventories) {
+        medicineInventories.filter { it.medicine.isActive && it.needsAttention }
+    }
+    val prescriptionDocs = remember(vaultState.documents) {
+        vaultState.documents.filter {
+            it.category.equals("Prescription", ignoreCase = true) ||
+                it.category.equals("Doctor Note", ignoreCase = true)
+        }.ifEmpty { vaultState.documents }
+    }
     val pendingFollowUps = uiState.consultations
         .filter { it.followUpEpochDay != null && !it.isFollowUpCompleted }
         .sortedBy { it.followUpEpochDay }
@@ -135,6 +170,134 @@ fun MedicalCareScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )
+                }
+            }
+        }
+
+        // Encrypted Personal Health Records Vault Shortcut Card
+        item {
+            Card(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f)
+                ),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.25f))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Row(
+                        modifier = Modifier.weight(1f),
+                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            imageVector = Icons.Rounded.Lock,
+                            contentDescription = null,
+                            tint = MaterialTheme.colorScheme.secondary
+                        )
+                        Column {
+                            Text(
+                                text = "🗂️ Encrypted Health Records Vault",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold)
+                            )
+                            Text(
+                                text = "${vaultState.documents.size} document(s) • ${vaultState.labResults.size} lab(s) • ${vaultState.allergies.size} allergie(s)",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = onOpenHealthVault,
+                        modifier = Modifier.testTag("medical_open_health_vault_button")
+                    ) {
+                        Text("Open Vault →")
+                    }
+                }
+            }
+        }
+
+        // Refill & Expiry Attention Banner
+        if (attentionInventories.isNotEmpty()) {
+            item {
+                Card(
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth()
+                        .testTag("medical_refill_attention_banner"),
+                    shape = RoundedCornerShape(22.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.errorContainer.copy(alpha = 0.65f)
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Row(
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Rounded.WarningAmber,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.error
+                            )
+                            Text(
+                                text = "Refill & Expiry Alerts (${attentionInventories.size})",
+                                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.onErrorContainer
+                            )
+                        }
+                        attentionInventories.forEach { inv ->
+                            val details = buildList {
+                                when (inv.refillState) {
+                                    RefillAlertState.OUT_OF_STOCK -> add("Out of stock")
+                                    RefillAlertState.REFILL_SOON -> add(
+                                        "${HealthVaultAndRefillEngine.formatStockQuantity(inv.medicine.stockQuantity, inv.medicine.stockUnit)} (~${inv.estimatedDaysRemaining?.toInt() ?: 0}d left)"
+                                    )
+                                    else -> Unit
+                                }
+                                when (inv.expiryState) {
+                                    ExpiryAlertState.EXPIRED -> add("Expired")
+                                    ExpiryAlertState.EXPIRING_SOON -> add("Expires in ${inv.daysUntilExpiry ?: 0}d")
+                                    else -> Unit
+                                }
+                            }.joinToString(" • ")
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surface
+                            ) {
+                                Row(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(inv.medicine.name, style = MaterialTheme.typography.labelLarge)
+                                        Text(
+                                            text = details,
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.error
+                                        )
+                                    }
+                                    TextButton(onClick = { refillDialogMed = inv.medicine }) {
+                                        Text("Restock")
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }
             }
         }
@@ -382,12 +545,18 @@ fun MedicalCareScreen(
             }
         }
 
-        // Individual Medicine Cards with Dose Slots & Intake Logging
+        // Individual Medicine Cards with Dose Slots, Stock Inventory & Intake Logging
         items(uiState.medicines, key = { "med_${it.id}" }) { med ->
             val medIntakes = uiState.todayMedicineIntakes.filter { it.medicineId == med.id }
             val takenCount = medIntakes.count { it.status == "Taken" }
             val scheduleSlots = remember(med.scheduleTime24h, med.dosesPerDay, med.intervalHours) {
                 computeDoseTimes(med.scheduleTime24h, med.dosesPerDay, med.intervalHours)
+            }
+            val invStatus = remember(med, todayEpochDay) {
+                HealthVaultAndRefillEngine.evaluateMedicineInventory(med, todayEpochDay)
+            }
+            val linkedDoc = remember(med.linkedPrescriptionDocId, vaultState.documents) {
+                vaultState.documents.firstOrNull { it.id == med.linkedPrescriptionDocId }
             }
 
             Surface(
@@ -449,16 +618,90 @@ fun MedicalCareScreen(
                         }
                     }
 
-                    if (med.isActive) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
+                    // Inventory, Expiry & Linked Rx Row
+                    FlowRow(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        val stockBg = when (invStatus.refillState) {
+                            RefillAlertState.OUT_OF_STOCK, RefillAlertState.REFILL_SOON ->
+                                MaterialTheme.colorScheme.errorContainer
+                            RefillAlertState.OK ->
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.55f)
+                            RefillAlertState.UNTRACKED ->
+                                MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.6f)
+                        }
+                        val stockLabel = when (invStatus.refillState) {
+                            RefillAlertState.UNTRACKED -> "📦 Stock unset"
+                            RefillAlertState.OUT_OF_STOCK -> "⚠️ Out of stock"
+                            else -> {
+                                val qtyText = HealthVaultAndRefillEngine.formatStockQuantity(med.stockQuantity, med.stockUnit)
+                                val daysText = invStatus.estimatedDaysRemaining?.let { " (~${it.toInt()}d)" }.orEmpty()
+                                val prefix = if (invStatus.refillState == RefillAlertState.REFILL_SOON) "⚠️ Refill soon: " else "📦 "
+                                "$prefix$qtyText$daysText"
+                            }
+                        }
+                        Surface(shape = CircleShape, color = stockBg) {
+                            Text(
+                                text = stockLabel,
+                                style = MaterialTheme.typography.labelSmall,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        if (med.expiryEpochDay != null) {
+                            val expBg = when (invStatus.expiryState) {
+                                ExpiryAlertState.EXPIRED, ExpiryAlertState.EXPIRING_SOON ->
+                                    MaterialTheme.colorScheme.errorContainer
+                                else -> MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.6f)
+                            }
+                            val expLabel = when (invStatus.expiryState) {
+                                ExpiryAlertState.EXPIRED -> "⚠️ Expired (${DateEpochUtils.formatEpochDayShort(med.expiryEpochDay)})"
+                                ExpiryAlertState.EXPIRING_SOON -> "⏳ Expires in ${invStatus.daysUntilExpiry}d"
+                                else -> "🗓️ Exp ${DateEpochUtils.formatEpochDayShort(med.expiryEpochDay)}"
+                            }
+                            Surface(shape = CircleShape, color = expBg) {
+                                Text(
+                                    text = expLabel,
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+
+                        if (linkedDoc != null) {
+                            Surface(
+                                shape = CircleShape,
+                                color = MaterialTheme.colorScheme.tertiaryContainer.copy(alpha = 0.6f)
+                            ) {
+                                Text(
+                                    text = "📄 Rx: ${linkedDoc.title.take(22)}",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        OutlinedButton(
+                            onClick = { refillDialogMed = med },
+                            modifier = Modifier.testTag("restock_med_btn_${med.id}")
                         ) {
+                            Icon(Icons.Rounded.Inventory2, contentDescription = null, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.size(6.dp))
+                            Text("Restock / Expiry")
+                        }
+
+                        if (med.isActive) {
                             val nextSlotNum = (medIntakes.size + 1).coerceAtMost(med.dosesPerDay.coerceAtLeast(1))
                             val nextSlotLabel = scheduleSlots.getOrNull(nextSlotNum - 1) ?: med.scheduleTime24h
                             Text(
-                                text = "Today: $takenCount/${med.dosesPerDay} taken",
+                                text = "Today: $takenCount/${med.dosesPerDay}",
                                 style = MaterialTheme.typography.labelMedium,
                                 color = if (takenCount >= med.dosesPerDay) {
                                     MaterialTheme.colorScheme.primary
@@ -466,6 +709,17 @@ fun MedicalCareScreen(
                                     MaterialTheme.colorScheme.onSurfaceVariant
                                 }
                             )
+                        }
+                    }
+
+                    if (med.isActive) {
+                        val nextSlotNum = (medIntakes.size + 1).coerceAtMost(med.dosesPerDay.coerceAtLeast(1))
+                        val nextSlotLabel = scheduleSlots.getOrNull(nextSlotNum - 1) ?: med.scheduleTime24h
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.End,
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
                             Row(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
                                 verticalAlignment = Alignment.CenterVertically
@@ -603,13 +857,55 @@ fun MedicalCareScreen(
             )
         }
 
+        // Refill & Purchase History
+        if (vaultState.refillLogs.isNotEmpty()) {
+            item {
+                Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth()) {
+                    Text(
+                        "🛒 Refill & Purchase History (${vaultState.refillLogs.size})",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+            items(vaultState.refillLogs.take(10), key = { "refill_${it.id}" }) { refill ->
+                Surface(
+                    modifier = Modifier
+                        .widthIn(max = 600.dp)
+                        .fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    color = MaterialTheme.colorScheme.surface
+                ) {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                        verticalArrangement = Arrangement.spacedBy(2.dp)
+                    ) {
+                        Text(
+                            text = "📦 ${refill.medicineName} (+${HealthVaultAndRefillEngine.formatStockQuantity(refill.quantityAdded, refill.unitLabel)})",
+                            style = MaterialTheme.typography.titleSmall
+                        )
+                        val meta = buildList {
+                            add("Purchased ${DateEpochUtils.formatEpochDayShort(refill.purchaseDateEpochDay)}")
+                            refill.expiryEpochDay?.let { add("Exp ${DateEpochUtils.formatEpochDayShort(it)}") }
+                            if (refill.pharmacyOrSource.isNotBlank()) add(refill.pharmacyOrSource)
+                            if (refill.costNote.isNotBlank()) add(refill.costNote)
+                        }.joinToString(" • ")
+                        Text(
+                            text = meta,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                }
+            }
+        }
+
         item { Spacer(modifier = Modifier.height(20.dp)) }
     }
 
     if (showMedDialog) {
         AddMedicineDialog(
             onDismiss = { showMedDialog = false },
-            onSave = { name, dosage, time, dosesPerDay, intervalHrs, mealRel, emoji, notes ->
+            onSave = { name, dosage, time, dosesPerDay, intervalHrs, mealRel, emoji, notes, stockQty, stockUnit ->
                 viewModel.addMedicine(
                     name = name,
                     dosage = dosage,
@@ -619,7 +915,9 @@ fun MedicalCareScreen(
                     intervalHours = intervalHrs,
                     mealRelation = mealRel,
                     categoryEmoji = emoji,
-                    notes = notes
+                    notes = notes,
+                    stockQuantity = stockQty,
+                    stockUnit = stockUnit
                 )
                 showMedDialog = false
             }
@@ -657,6 +955,28 @@ fun MedicalCareScreen(
                     takenAtEpochMs = takenAtEpochMs
                 )
                 intakeDialogMed = null
+            }
+        )
+    }
+
+    refillDialogMed?.let { selectedMed ->
+        RestockAndExpiryDialog(
+            medicine = selectedMed,
+            prescriptionDocs = prescriptionDocs,
+            onDismiss = { refillDialogMed = null },
+            onSave = { qtyAdded, unitLabel, purchaseDay, expiryDay, thresholdDays, pharmacy, costNote, rxDocId ->
+                onRestockMedicine(
+                    selectedMed,
+                    qtyAdded,
+                    unitLabel,
+                    purchaseDay,
+                    expiryDay,
+                    thresholdDays,
+                    pharmacy,
+                    costNote,
+                    rxDocId
+                )
+                refillDialogMed = null
             }
         )
     }
@@ -780,7 +1100,7 @@ private fun ConsultationCard(
 @Composable
 private fun AddMedicineDialog(
     onDismiss: () -> Unit,
-    onSave: (String, String, String, Int, Int, String, String, String) -> Unit
+    onSave: (String, String, String, Int, Int, String, String, String, Float, String) -> Unit
 ) {
     var name by remember { mutableStateOf("") }
     var dosage by remember { mutableStateOf("500mg") }
@@ -795,6 +1115,8 @@ private fun AddMedicineDialog(
     var mealRelation by remember { mutableStateOf("After Meal") }
     var emoji by remember { mutableStateOf("💊") }
     var notes by remember { mutableStateOf("") }
+    var initialStockText by remember { mutableStateOf("") }
+    var stockUnitText by remember { mutableStateOf("tablets") }
 
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -867,6 +1189,23 @@ private fun AddMedicineDialog(
                     }
                 }
 
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = initialStockText,
+                        onValueChange = { initialStockText = it },
+                        label = { Text("Initial Stock (opt.)") },
+                        singleLine = true,
+                        modifier = Modifier.weight(1f)
+                    )
+                    OutlinedTextField(
+                        value = stockUnitText,
+                        onValueChange = { stockUnitText = it },
+                        label = { Text("Unit") },
+                        singleLine = true,
+                        modifier = Modifier.weight(0.8f)
+                    )
+                }
+
                 OutlinedTextField(
                     value = notes,
                     onValueChange = { notes = it },
@@ -878,6 +1217,7 @@ private fun AddMedicineDialog(
         confirmButton = {
             Button(
                 onClick = {
+                    val stockQty = initialStockText.toFloatOrNull()?.coerceAtLeast(0f) ?: 0f
                     onSave(
                         name.ifBlank { "Daily Medicine" },
                         dosage.ifBlank { "1 dose" },
@@ -886,7 +1226,9 @@ private fun AddMedicineDialog(
                         intervalHours,
                         mealRelation,
                         emoji,
-                        notes
+                        notes,
+                        stockQty,
+                        stockUnitText.ifBlank { "tablets" }
                     )
                 },
                 modifier = Modifier.testTag("save_medicine_dialog_button")

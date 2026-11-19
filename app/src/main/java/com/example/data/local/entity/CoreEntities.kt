@@ -20,6 +20,9 @@ data class UserProfileEntity(
     val averageCycleLengthDays: Int = 28,
     val averagePeriodDurationDays: Int = 5,
     val preferredLanguageCode: String = "en",
+    val relationLabel: String = "Self",
+    val linkedFamilyId: String? = null,
+    val linkedSlotId: String? = null,
     val createdAtEpochMs: Long = System.currentTimeMillis(),
     val updatedAtEpochMs: Long = System.currentTimeMillis()
 )

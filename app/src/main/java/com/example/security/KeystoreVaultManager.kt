@@ -22,13 +22,16 @@ data class VaultSecurityStatus(
  * Strictly separated from [OfflineLicenseVerifier] public-key activation credentials.
  * Ready to wrap user-controlled local or encrypted Google Drive backup blobs.
  */
-class KeystoreVaultManager {
+class KeystoreVaultManager(
+    private val testKeyProvider: (() -> SecretKey)? = null
+) {
 
     companion object {
         private const val ANDROID_KEYSTORE = "AndroidKeyStore"
         const val DATA_KEY_ALIAS = "life_companion_data_master_v1"
         private const val TRANSFORMATION = "AES/GCM/NoPadding"
         private const val GCM_TAG_BITS = 128
+        private const val BYTE_ENVELOPE_MAGIC = "LCEB1"
     }
 
     fun inspectVaultStatus(): VaultSecurityStatus {
@@ -58,12 +61,14 @@ class KeystoreVaultManager {
     }
 
     fun decryptBackupPayload(encryptedBlob: String): String {
-        val parts = encryptedBlob.split(":")
+        val parts = encryptedBlob.trim().split(":")
         require(parts.size == 3 && parts[0] == "LCENC1") {
             "Unsupported encrypted backup envelope"
         }
         val iv = Base64.decode(parts[1], Base64.NO_WRAP)
         val cipherBytes = Base64.decode(parts[2], Base64.NO_WRAP)
+        require(iv.size == 12) { "Invalid AES-GCM initialization vector length" }
+        require(cipherBytes.size >= (GCM_TAG_BITS / 8) + 1) { "Truncated encrypted payload" }
         val secretKey = ensureDataKey()
         val cipher = Cipher.getInstance(TRANSFORMATION)
         cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_BITS, iv))
@@ -71,7 +76,41 @@ class KeystoreVaultManager {
         return String(plainBytes, StandardCharsets.UTF_8)
     }
 
+    fun encryptBytes(plainBytes: ByteArray): ByteArray {
+        val secretKey = ensureDataKey()
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.ENCRYPT_MODE, secretKey)
+        val iv = cipher.iv
+        require(iv.size == 12) { "Unexpected AES-GCM IV size: ${iv.size}" }
+        val cipherBytes = cipher.doFinal(plainBytes)
+        val header = BYTE_ENVELOPE_MAGIC.toByteArray(StandardCharsets.US_ASCII)
+        return ByteArray(header.size + iv.size + cipherBytes.size).apply {
+            System.arraycopy(header, 0, this, 0, header.size)
+            System.arraycopy(iv, 0, this, header.size, iv.size)
+            System.arraycopy(cipherBytes, 0, this, header.size + iv.size, cipherBytes.size)
+        }
+    }
+
+    fun decryptBytes(encryptedBytes: ByteArray): ByteArray {
+        val header = BYTE_ENVELOPE_MAGIC.toByteArray(StandardCharsets.US_ASCII)
+        val minCipherLength = (GCM_TAG_BITS / 8)
+        require(encryptedBytes.size >= header.size + 12 + minCipherLength) {
+            "Truncated or invalid encrypted document bytes"
+        }
+        val actualHeader = encryptedBytes.copyOfRange(0, header.size)
+        require(actualHeader.contentEquals(header)) {
+            "Unsupported encrypted document binary header"
+        }
+        val iv = encryptedBytes.copyOfRange(header.size, header.size + 12)
+        val cipherBytes = encryptedBytes.copyOfRange(header.size + 12, encryptedBytes.size)
+        val secretKey = ensureDataKey()
+        val cipher = Cipher.getInstance(TRANSFORMATION)
+        cipher.init(Cipher.DECRYPT_MODE, secretKey, GCMParameterSpec(GCM_TAG_BITS, iv))
+        return cipher.doFinal(cipherBytes)
+    }
+
     private fun ensureDataKey(): SecretKey {
+        testKeyProvider?.let { return it() }
         val keyStore = KeyStore.getInstance(ANDROID_KEYSTORE).apply { load(null) }
         val existing = keyStore.getKey(DATA_KEY_ALIAS, null) as? SecretKey
         if (existing != null) return existing

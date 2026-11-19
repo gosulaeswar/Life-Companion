@@ -29,7 +29,14 @@ data class MedicineEntity(
     val mealRelation: String = "After Meal",
     val categoryEmoji: String = "💊",
     val isActive: Boolean = true,
-    val notes: String = ""
+    val notes: String = "",
+    val stockQuantity: Float = 0f,
+    val stockUnit: String = "tablets",
+    val unitsPerDose: Float = 1f,
+    val lowStockThresholdDays: Int = 5,
+    val expiryEpochDay: Long? = null,
+    val linkedPrescriptionDocId: Long? = null,
+    val refillReminderEnabled: Boolean = true
 )
 
 @Entity(

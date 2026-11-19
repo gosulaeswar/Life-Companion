@@ -1,0 +1,653 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global Safety Net (Default Deny)
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL HARDENED PRIMITIVES ---
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function isValidSlotId(slotId) {
+      return slotId in ['slot_1', 'slot_2', 'slot_3', 'slot_4', 'slot_5'];
+    }
+
+    function expectedSlotIndex(slotId) {
+      return slotId == 'slot_1' ? 1 :
+             slotId == 'slot_2' ? 2 :
+             slotId == 'slot_3' ? 3 :
+             slotId == 'slot_4' ? 4 :
+             slotId == 'slot_5' ? 5 : 0;
+    }
+
+    function isValidStringList(arr, maxLen) {
+      return arr is list && arr.size() >= 1 && arr.size() <= maxLen && arr[0] is string;
+    }
+
+    function hasVerifiedEmail() {
+      return isSignedIn() &&
+             request.auth.token.email_verified == true &&
+             request.auth.token.email is string &&
+             request.auth.token.email.size() >= 5;
+    }
+
+    function familyDoc(familyId) {
+      return get(/databases/$(database)/documents/families/$(familyId));
+    }
+
+    function familyExists(familyId) {
+      return exists(/databases/$(database)/documents/families/$(familyId));
+    }
+
+    function isFamilyMember(familyId) {
+      return isSignedIn() &&
+             familyExists(familyId) &&
+             request.auth.uid in familyDoc(familyId).data.memberUids;
+    }
+
+    function familyRole(familyId) {
+      return familyDoc(familyId).data.memberRoles[request.auth.uid];
+    }
+
+    function isFamilyOwner(familyId) {
+      return isFamilyMember(familyId) &&
+             familyDoc(familyId).data.ownerUid == request.auth.uid &&
+             familyRole(familyId) == 'OWNER';
+    }
+
+    function isOwnerOrCaregiver(familyId) {
+      return isFamilyMember(familyId) &&
+             familyRole(familyId) in ['OWNER', 'CAREGIVER'];
+    }
+
+    function profileSlotDoc(familyId, slotId) {
+      return get(/databases/$(database)/documents/families/$(familyId)/profiles/$(slotId));
+    }
+
+    function profileSlotExists(familyId, slotId) {
+      return exists(/databases/$(database)/documents/families/$(familyId)/profiles/$(slotId));
+    }
+
+    // --- ENTITY VALIDATION HELPERS ---
+
+    function isValidUserAccount(data) {
+      return data.uid is string && data.uid.size() >= 1 && data.uid.size() <= 128 &&
+             data.emailLower is string && data.emailLower.size() >= 3 && data.emailLower.size() <= 120 &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.subscriptionTier in ['free', 'plus', 'family'] &&
+             data.eligibleForFiveProfiles is bool &&
+             data.eligibleForFiveProfiles == (data.subscriptionTier == 'family') &&
+             (!('activeFamilyId' in data) || data.activeFamilyId == null || isValidId(data.activeFamilyId)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFamilyCircle(data) {
+      return data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.familyName is string && data.familyName.size() >= 2 && data.familyName.size() <= 60 &&
+             data.subscriptionTier in ['free', 'family'] &&
+             data.eligibleForFiveProfiles is bool &&
+             data.eligibleForFiveProfiles == (data.subscriptionTier == 'family') &&
+             data.maxProfiles is int &&
+             ((data.subscriptionTier == 'family' && data.maxProfiles == 5) ||
+              (data.subscriptionTier == 'free' && data.maxProfiles == 1)) &&
+             data.activeProfileCount is int &&
+             data.activeProfileCount >= 1 &&
+             data.activeProfileCount <= data.maxProfiles &&
+             data.activeProfileCount <= 5 &&
+             isValidStringList(data.memberUids, 5) &&
+             data.memberUids.size() <= data.maxProfiles &&
+             data.ownerUid in data.memberUids &&
+             data.memberRoles is map &&
+             data.memberRoles[data.ownerUid] == 'OWNER' &&
+             (!('lastAcceptedInviteId' in data) || data.lastAcceptedInviteId == null || isValidId(data.lastAcceptedInviteId)) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidFamilyMember(data, familyId, memberUid) {
+      return data.uid == memberUid &&
+             data.familyId == familyId &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.relationLabel is string && data.relationLabel.size() >= 1 && data.relationLabel.size() <= 40 &&
+             data.role in ['OWNER', 'CAREGIVER', 'MEMBER', 'DEPENDENT_VIEW'] &&
+             isValidStringList(data.memberUids, 5) &&
+             data.uid in data.memberUids &&
+             data.shareHydration is bool &&
+             data.shareFitnessSleep is bool &&
+             data.shareNutrition is bool &&
+             data.shareMedicines is bool &&
+             data.shareAppointments is bool &&
+             data.shareCycle is bool &&
+             data.allowCaregiverReminders is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidProfileSlot(data, familyId, slotId) {
+      return isValidSlotId(slotId) &&
+             data.slotIndex is int &&
+             data.slotIndex == expectedSlotIndex(slotId) &&
+             data.familyId == familyId &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             (!('linkedMemberUid' in data) || data.linkedMemberUid == null || (data.linkedMemberUid is string && data.linkedMemberUid.size() >= 1 && data.linkedMemberUid.size() <= 128)) &&
+             data.displayName is string && data.displayName.size() >= 1 && data.displayName.size() <= 60 &&
+             data.relationLabel is string && data.relationLabel.size() >= 1 && data.relationLabel.size() <= 40 &&
+             data.age is int && data.age >= 1 && data.age <= 120 &&
+             data.genderIdentity is string && data.genderIdentity.size() >= 1 && data.genderIdentity.size() <= 40 &&
+             data.dailyWaterGoalMl is int && data.dailyWaterGoalMl >= 500 && data.dailyWaterGoalMl <= 6000 &&
+             data.managedByCaregiver is bool &&
+             isValidStringList(data.memberUids, 5) &&
+             data.shareHydration is bool &&
+             data.shareFitnessSleep is bool &&
+             data.shareNutrition is bool &&
+             data.shareMedicines is bool &&
+             data.shareAppointments is bool &&
+             data.shareCycle is bool &&
+             data.allowCaregiverReminders is bool &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidInvitation(data) {
+      return isValidId(data.familyId) &&
+             data.familyName is string && data.familyName.size() >= 2 && data.familyName.size() <= 60 &&
+             data.inviterUid is string && data.inviterUid.size() >= 1 && data.inviterUid.size() <= 128 &&
+             data.inviterName is string && data.inviterName.size() >= 1 && data.inviterName.size() <= 60 &&
+             data.inviteeEmailLower is string && data.inviteeEmailLower.size() >= 5 && data.inviteeEmailLower.size() <= 120 &&
+             data.inviteeEmailLower.matches('^[^@\\s]+@[^@\\s]+\\.[^@\\s]+$') &&
+             (!('acceptedByUid' in data) || data.acceptedByUid == null || (data.acceptedByUid is string && data.acceptedByUid.size() >= 1 && data.acceptedByUid.size() <= 128)) &&
+             data.assignedRole in ['CAREGIVER', 'MEMBER', 'DEPENDENT_VIEW'] &&
+             data.status in ['PENDING', 'ACCEPTED', 'DECLINED', 'REVOKED'] &&
+             data.inviteNote is string && data.inviteNote.size() <= 200 &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidCaregiverReminder(data, familyId) {
+      return data.familyId == familyId &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             data.createdByName is string && data.createdByName.size() >= 1 && data.createdByName.size() <= 60 &&
+             isValidSlotId(data.targetProfileSlotId) &&
+             data.targetMemberUid is string && data.targetMemberUid.size() >= 1 && data.targetMemberUid.size() <= 128 &&
+             data.targetDisplayName is string && data.targetDisplayName.size() >= 1 && data.targetDisplayName.size() <= 60 &&
+             data.title is string && data.title.size() >= 2 && data.title.size() <= 80 &&
+             data.category in ['HYDRATION', 'MEDICINE', 'APPOINTMENT', 'WELLNESS'] &&
+             data.scheduleTime24h is string && data.scheduleTime24h.matches('^([01][0-9]|2[0-3]):[0-5][0-9]$') &&
+             data.message is string && data.message.size() <= 240 &&
+             data.status in ['ACTIVE', 'COMPLETED', 'PAUSED'] &&
+             isValidStringList(data.memberUids, 5) &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSharedAppointment(data, familyId) {
+      return data.familyId == familyId &&
+             data.createdByUid is string && data.createdByUid.size() >= 1 && data.createdByUid.size() <= 128 &&
+             isValidSlotId(data.patientProfileSlotId) &&
+             data.patientMemberUid is string && data.patientMemberUid.size() >= 1 && data.patientMemberUid.size() <= 128 &&
+             data.patientName is string && data.patientName.size() >= 1 && data.patientName.size() <= 60 &&
+             data.doctorName is string && data.doctorName.size() >= 2 && data.doctorName.size() <= 80 &&
+             data.specialty is string && data.specialty.size() >= 1 && data.specialty.size() <= 60 &&
+             data.clinicOrHospital is string && data.clinicOrHospital.size() <= 100 &&
+             data.scheduledEpochMs is int && data.scheduledEpochMs > 0 &&
+             data.notes is string && data.notes.size() <= 300 &&
+             data.status in ['SCHEDULED', 'COMPLETED', 'CANCELLED'] &&
+             data.consentGranted is bool &&
+             isValidStringList(data.visibleMemberUids, 5) &&
+             data.patientMemberUid in data.visibleMemberUids &&
+             data.createdAt is timestamp && data.createdAt <= request.time &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function isValidSharedSnapshot(data, familyId) {
+      return data.familyId == familyId &&
+             isValidSlotId(data.profileSlotId) &&
+             data.ownerUid is string && data.ownerUid.size() >= 1 && data.ownerUid.size() <= 128 &&
+             data.profileName is string && data.profileName.size() >= 1 && data.profileName.size() <= 60 &&
+             data.category in ['HYDRATION', 'FITNESS_SLEEP', 'NUTRITION', 'MEDICINES', 'CYCLE'] &&
+             data.summaryLine is string && data.summaryLine.size() >= 1 && data.summaryLine.size() <= 200 &&
+             data.primaryMetricLabel is string && data.primaryMetricLabel.size() >= 1 && data.primaryMetricLabel.size() <= 60 &&
+             data.consentEnabled is bool &&
+             isValidStringList(data.memberUids, 5) &&
+             data.ownerUid in data.memberUids &&
+             data.updatedAt is timestamp && data.updatedAt <= request.time;
+    }
+
+    function hasCategoryConsent(profileData, category) {
+      return (category == 'HYDRATION' && profileData.shareHydration == true) ||
+             (category == 'FITNESS_SLEEP' && profileData.shareFitnessSleep == true) ||
+             (category == 'NUTRITION' && profileData.shareNutrition == true) ||
+             (category == 'MEDICINES' && profileData.shareMedicines == true) ||
+             (category == 'CYCLE' && profileData.shareCycle == true);
+    }
+
+    // --- 1. USERS COLLECTION ---
+    match /users/{userId} {
+      allow get, list: if isSignedIn() && request.auth.uid == userId;
+
+      allow create: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().keys().hasAll(['uid', 'emailLower', 'displayName', 'subscriptionTier', 'eligibleForFiveProfiles', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['uid', 'emailLower', 'displayName', 'subscriptionTier', 'eligibleForFiveProfiles', 'activeFamilyId', 'createdAt', 'updatedAt']) &&
+                       isValidUserAccount(incoming());
+
+      allow update: if isSignedIn() &&
+                       isValidId(userId) &&
+                       request.auth.uid == userId &&
+                       isValidUserAccount(incoming()) &&
+                       incoming().uid == existing().uid &&
+                       incoming().createdAt == existing().createdAt &&
+                       incoming().diff(existing()).affectedKeys().hasOnly(['emailLower', 'displayName', 'subscriptionTier', 'eligibleForFiveProfiles', 'activeFamilyId', 'updatedAt']);
+
+      allow delete: if isSignedIn() && isValidId(userId) && request.auth.uid == userId;
+    }
+
+    // --- 2. FAMILY CIRCLES ROOT COLLECTION ---
+    match /families/{familyId} {
+      allow get: if isSignedIn() && isValidId(familyId) && request.auth.uid in existing().memberUids;
+      allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+      allow create: if isSignedIn() &&
+                       isValidId(familyId) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().memberUids.size() == 1 &&
+                       incoming().activeProfileCount == 1 &&
+                       incoming().keys().hasAll(['ownerUid', 'familyName', 'subscriptionTier', 'eligibleForFiveProfiles', 'maxProfiles', 'activeProfileCount', 'memberUids', 'memberRoles', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['ownerUid', 'familyName', 'subscriptionTier', 'eligibleForFiveProfiles', 'maxProfiles', 'activeProfileCount', 'memberUids', 'memberRoles', 'lastAcceptedInviteId', 'createdAt', 'updatedAt']) &&
+                       isValidFamilyCircle(incoming()) &&
+                       (incoming().subscriptionTier == 'free' ||
+                        (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                         get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eligibleForFiveProfiles == true));
+
+      allow update: if isSignedIn() &&
+                       isValidId(familyId) &&
+                       isValidFamilyCircle(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         // Action A: Owner manages circle config, tier, capacity, roles, members
+                         (request.auth.uid == existing().ownerUid &&
+                          existing().memberRoles[request.auth.uid] == 'OWNER' &&
+                          (incoming().subscriptionTier == existing().subscriptionTier ||
+                           incoming().subscriptionTier == 'free' ||
+                           (exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+                            get(/databases/$(database)/documents/users/$(request.auth.uid)).data.eligibleForFiveProfiles == true)) &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['familyName', 'subscriptionTier', 'eligibleForFiveProfiles', 'maxProfiles', 'activeProfileCount', 'memberUids', 'memberRoles', 'updatedAt'])) ||
+
+                         // Action B: Caregiver updates active profile count only (cannot escalate roles or subscription)
+                         (request.auth.uid in existing().memberUids &&
+                          existing().memberRoles[request.auth.uid] == 'CAREGIVER' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['activeProfileCount', 'updatedAt'])) ||
+
+                         // Action C: Invited user joins via pending verified invitation in same batch
+                         (incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'memberRoles', 'activeProfileCount', 'lastAcceptedInviteId', 'updatedAt']) &&
+                          incoming().lastAcceptedInviteId is string &&
+                          isValidId(incoming().lastAcceptedInviteId) &&
+                          existing().eligibleForFiveProfiles == true &&
+                          existing().maxProfiles == 5 &&
+                          existing().memberUids.size() < existing().maxProfiles &&
+                          incoming().memberUids.hasAll(existing().memberUids) &&
+                          incoming().memberUids.size() == existing().memberUids.size() + 1 &&
+                          !(request.auth.uid in existing().memberUids) &&
+                          request.auth.uid in incoming().memberUids &&
+                          incoming().memberRoles.diff(existing().memberRoles).affectedKeys().hasOnly([request.auth.uid]) &&
+                          hasVerifiedEmail() &&
+                          exists(/databases/$(database)/documents/familyInvitations/$(incoming().lastAcceptedInviteId)) &&
+                          get(/databases/$(database)/documents/familyInvitations/$(incoming().lastAcceptedInviteId)).data.familyId == familyId &&
+                          get(/databases/$(database)/documents/familyInvitations/$(incoming().lastAcceptedInviteId)).data.status == 'PENDING' &&
+                          get(/databases/$(database)/documents/familyInvitations/$(incoming().lastAcceptedInviteId)).data.inviteeEmailLower == request.auth.token.email.lower() &&
+                          getAfter(/databases/$(database)/documents/familyInvitations/$(incoming().lastAcceptedInviteId)).data.status == 'ACCEPTED' &&
+                          incoming().memberRoles[request.auth.uid] == get(/databases/$(database)/documents/familyInvitations/$(incoming().lastAcceptedInviteId)).data.assignedRole) ||
+
+                         // Action D: Non-owner member leaves the circle voluntarily
+                         (request.auth.uid in existing().memberUids &&
+                          request.auth.uid != existing().ownerUid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['memberUids', 'memberRoles', 'updatedAt']) &&
+                          !(request.auth.uid in incoming().memberUids) &&
+                          existing().memberUids.hasAll(incoming().memberUids) &&
+                          incoming().memberUids.size() == existing().memberUids.size() - 1 &&
+                          existing().memberRoles.diff(incoming().memberRoles).affectedKeys().hasOnly([request.auth.uid]))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(familyId) && request.auth.uid == existing().ownerUid;
+
+      // --- 2A. MEMBERS & EXPLICIT CONSENT SUBCOLLECTION ---
+      match /members/{memberUid} {
+        allow get: if isSignedIn() && isValidId(familyId) && isValidId(memberUid) &&
+                      (request.auth.uid in existing().memberUids || isFamilyMember(familyId));
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(memberUid) &&
+                         incoming().keys().hasAll(['uid', 'familyId', 'displayName', 'relationLabel', 'role', 'memberUids', 'shareHydration', 'shareFitnessSleep', 'shareNutrition', 'shareMedicines', 'shareAppointments', 'shareCycle', 'allowCaregiverReminders', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['uid', 'familyId', 'displayName', 'relationLabel', 'role', 'memberUids', 'shareHydration', 'shareFitnessSleep', 'shareNutrition', 'shareMedicines', 'shareAppointments', 'shareCycle', 'allowCaregiverReminders', 'createdAt', 'updatedAt']) &&
+                         isValidFamilyMember(incoming(), familyId, memberUid) &&
+                         (
+                           (request.auth.uid == memberUid &&
+                            getAfter(/databases/$(database)/documents/families/$(familyId)).data.memberRoles[memberUid] == incoming().role &&
+                            memberUid in getAfter(/databases/$(database)/documents/families/$(familyId)).data.memberUids) ||
+                           (isFamilyOwner(familyId) && incoming().role != 'OWNER')
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(memberUid) &&
+                         isValidFamilyMember(incoming(), familyId, memberUid) &&
+                         incoming().uid == existing().uid &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdAt == existing().createdAt &&
+                         isFamilyMember(familyId) &&
+                         (
+                           // Self updates display/consent flags (cannot escalate own role!)
+                           (request.auth.uid == memberUid &&
+                            incoming().role == existing().role &&
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'displayName', 'relationLabel', 'memberUids',
+                              'shareHydration', 'shareFitnessSleep', 'shareNutrition',
+                              'shareMedicines', 'shareAppointments', 'shareCycle',
+                              'allowCaregiverReminders', 'updatedAt'
+                            ])) ||
+                           // Owner updates role or membership list for non-owners (cannot touch consent flags of another user!)
+                           (isFamilyOwner(familyId) &&
+                            request.auth.uid != memberUid &&
+                            incoming().role != 'OWNER' &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['role', 'relationLabel', 'memberUids', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(familyId) && isValidId(memberUid) &&
+                         (isFamilyOwner(familyId) || request.auth.uid == memberUid);
+      }
+
+      // --- 2B. INDIVIDUAL WELLNESS PROFILE SLOTS (MAX 5 ENFORCED ON BACKEND) ---
+      match /profiles/{profileSlotId} {
+        allow get: if isSignedIn() && isValidId(familyId) && isValidSlotId(profileSlotId) &&
+                      (request.auth.uid in existing().memberUids || isFamilyMember(familyId));
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidSlotId(profileSlotId) &&
+                         incoming().keys().hasAll(['slotIndex', 'familyId', 'ownerUid', 'displayName', 'relationLabel', 'age', 'genderIdentity', 'dailyWaterGoalMl', 'managedByCaregiver', 'memberUids', 'shareHydration', 'shareFitnessSleep', 'shareNutrition', 'shareMedicines', 'shareAppointments', 'shareCycle', 'allowCaregiverReminders', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['slotIndex', 'familyId', 'ownerUid', 'linkedMemberUid', 'displayName', 'relationLabel', 'age', 'genderIdentity', 'dailyWaterGoalMl', 'managedByCaregiver', 'memberUids', 'shareHydration', 'shareFitnessSleep', 'shareNutrition', 'shareMedicines', 'shareAppointments', 'shareCycle', 'allowCaregiverReminders', 'createdAt', 'updatedAt']) &&
+                         isValidProfileSlot(incoming(), familyId, profileSlotId) &&
+                         familyExists(familyId) &&
+                         incoming().slotIndex <= getAfter(/databases/$(database)/documents/families/$(familyId)).data.maxProfiles &&
+                         getAfter(/databases/$(database)/documents/families/$(familyId)).data.maxProfiles <= 5 &&
+                         (incoming().slotIndex == 1 ||
+                           (getAfter(/databases/$(database)/documents/families/$(familyId)).data.subscriptionTier == 'family' &&
+                            getAfter(/databases/$(database)/documents/families/$(familyId)).data.eligibleForFiveProfiles == true &&
+                            getAfter(/databases/$(database)/documents/families/$(familyId)).data.maxProfiles == 5)) &&
+                         (
+                           (request.auth.uid == incoming().ownerUid &&
+                            request.auth.uid in getAfter(/databases/$(database)/documents/families/$(familyId)).data.memberUids &&
+                            getAfter(/databases/$(database)/documents/families/$(familyId)).data.memberRoles[request.auth.uid] in ['OWNER', 'CAREGIVER']) ||
+                           (incoming().linkedMemberUid == request.auth.uid &&
+                            request.auth.uid in getAfter(/databases/$(database)/documents/families/$(familyId)).data.memberUids)
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidSlotId(profileSlotId) &&
+                         isValidProfileSlot(incoming(), familyId, profileSlotId) &&
+                         incoming().slotIndex == existing().slotIndex &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isFamilyMember(familyId) &&
+                         (
+                           // Linked member or Owner of self-managed profile controls their own consent & stats
+                           (request.auth.uid == existing().ownerUid || request.auth.uid == existing().linkedMemberUid) &&
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'displayName', 'relationLabel', 'age', 'genderIdentity',
+                              'dailyWaterGoalMl', 'managedByCaregiver', 'memberUids',
+                              'shareHydration', 'shareFitnessSleep', 'shareNutrition',
+                              'shareMedicines', 'shareAppointments', 'shareCycle',
+                              'allowCaregiverReminders', 'updatedAt'
+                            ]) ||
+                           // Caregiver can update basic profile stats ONLY for managed dependents (never steal consent switches of non-managed adults)
+                           (isOwnerOrCaregiver(familyId) &&
+                            existing().managedByCaregiver == true &&
+                            incoming().diff(existing()).affectedKeys().hasOnly([
+                              'displayName', 'relationLabel', 'age', 'genderIdentity',
+                              'dailyWaterGoalMl', 'memberUids',
+                              'shareHydration', 'shareFitnessSleep', 'shareNutrition',
+                              'shareMedicines', 'shareAppointments', 'shareCycle',
+                              'allowCaregiverReminders', 'updatedAt'
+                            ]))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(familyId) && isValidSlotId(profileSlotId) &&
+                         profileSlotId != 'slot_1' &&
+                         isFamilyOwner(familyId);
+      }
+
+      // --- 2C. CAREGIVER REMINDERS SUBCOLLECTION ---
+      match /caregiverReminders/{reminderId} {
+        allow get: if isSignedIn() && isValidId(familyId) && isValidId(reminderId) &&
+                      (request.auth.uid in existing().memberUids || isFamilyMember(familyId));
+        allow list: if isSignedIn() && request.auth.uid in existing().memberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(reminderId) &&
+                         incoming().createdByUid == request.auth.uid &&
+                         incoming().keys().hasAll(['familyId', 'createdByUid', 'createdByName', 'targetProfileSlotId', 'targetMemberUid', 'targetDisplayName', 'title', 'category', 'scheduleTime24h', 'message', 'status', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'createdByUid', 'createdByName', 'targetProfileSlotId', 'targetMemberUid', 'targetDisplayName', 'title', 'category', 'scheduleTime24h', 'message', 'status', 'memberUids', 'createdAt', 'updatedAt']) &&
+                         isValidCaregiverReminder(incoming(), familyId) &&
+                         isOwnerOrCaregiver(familyId) &&
+                         profileSlotExists(familyId, incoming().targetProfileSlotId) &&
+                         (
+                           incoming().targetMemberUid == request.auth.uid ||
+                           (profileSlotDoc(familyId, incoming().targetProfileSlotId).data.allowCaregiverReminders == true &&
+                            (!exists(/databases/$(database)/documents/families/$(familyId)/members/$(incoming().targetMemberUid)) ||
+                             get(/databases/$(database)/documents/families/$(familyId)/members/$(incoming().targetMemberUid)).data.allowCaregiverReminders == true))
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(reminderId) &&
+                         isValidCaregiverReminder(incoming(), familyId) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         isFamilyMember(familyId) &&
+                         (
+                           (isOwnerOrCaregiver(familyId) &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['title', 'category', 'scheduleTime24h', 'message', 'status', 'memberUids', 'updatedAt'])) ||
+                           (request.auth.uid == existing().targetMemberUid &&
+                            incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt']))
+                         );
+
+        allow delete: if isSignedIn() && isValidId(familyId) && isValidId(reminderId) &&
+                         (isFamilyOwner(familyId) || request.auth.uid == existing().createdByUid);
+      }
+
+      // --- 2D. SHARED APPOINTMENTS SUBCOLLECTION ---
+      match /appointments/{appointmentId} {
+        allow get: if isSignedIn() && isValidId(familyId) && isValidId(appointmentId) &&
+                      request.auth.uid in existing().visibleMemberUids &&
+                      (request.auth.uid == existing().patientMemberUid ||
+                       (existing().consentGranted == true &&
+                        profileSlotExists(familyId, existing().patientProfileSlotId) &&
+                        profileSlotDoc(familyId, existing().patientProfileSlotId).data.shareAppointments == true));
+
+        allow list: if isSignedIn() && request.auth.uid in existing().visibleMemberUids;
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(appointmentId) &&
+                         incoming().createdByUid == request.auth.uid &&
+                         incoming().keys().hasAll(['familyId', 'createdByUid', 'patientProfileSlotId', 'patientMemberUid', 'patientName', 'doctorName', 'specialty', 'clinicOrHospital', 'scheduledEpochMs', 'notes', 'status', 'consentGranted', 'visibleMemberUids', 'createdAt', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'createdByUid', 'patientProfileSlotId', 'patientMemberUid', 'patientName', 'doctorName', 'specialty', 'clinicOrHospital', 'scheduledEpochMs', 'notes', 'status', 'consentGranted', 'visibleMemberUids', 'createdAt', 'updatedAt']) &&
+                         isValidSharedAppointment(incoming(), familyId) &&
+                         isFamilyMember(familyId) &&
+                         profileSlotExists(familyId, incoming().patientProfileSlotId) &&
+                         (request.auth.uid == incoming().patientMemberUid || isOwnerOrCaregiver(familyId)) &&
+                         (
+                           (incoming().visibleMemberUids.size() == 1 && incoming().visibleMemberUids[0] == incoming().patientMemberUid) ||
+                           (incoming().consentGranted == true &&
+                            profileSlotDoc(familyId, incoming().patientProfileSlotId).data.shareAppointments == true)
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(appointmentId) &&
+                         isValidSharedAppointment(incoming(), familyId) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().createdByUid == existing().createdByUid &&
+                         incoming().createdAt == existing().createdAt &&
+                         existing().status != 'CANCELLED' &&
+                         isFamilyMember(familyId) &&
+                         (
+                           request.auth.uid == existing().patientMemberUid ||
+                           request.auth.uid == existing().createdByUid ||
+                           isOwnerOrCaregiver(familyId)
+                         ) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'doctorName', 'specialty', 'clinicOrHospital',
+                           'scheduledEpochMs', 'notes', 'status',
+                           'consentGranted', 'visibleMemberUids', 'updatedAt'
+                         ]) &&
+                         (
+                           (incoming().visibleMemberUids.size() == 1 && incoming().visibleMemberUids[0] == existing().patientMemberUid) ||
+                           (incoming().consentGranted == true &&
+                            profileSlotDoc(familyId, existing().patientProfileSlotId).data.shareAppointments == true)
+                         );
+
+        allow delete: if isSignedIn() && isValidId(familyId) && isValidId(appointmentId) &&
+                         (isFamilyOwner(familyId) || request.auth.uid == existing().createdByUid || request.auth.uid == existing().patientMemberUid);
+      }
+
+      // --- 2E. CONSENT-GATED SHARED WELLNESS SNAPSHOTS ---
+      match /sharedWellnessSnapshots/{snapshotId} {
+        allow get: if isSignedIn() && isValidId(familyId) && isValidId(snapshotId) &&
+                      request.auth.uid in existing().memberUids &&
+                      (
+                        request.auth.uid == existing().ownerUid ||
+                        (existing().consentEnabled == true &&
+                         profileSlotExists(familyId, existing().profileSlotId) &&
+                         hasCategoryConsent(profileSlotDoc(familyId, existing().profileSlotId).data, existing().category))
+                      );
+
+        allow list: if isSignedIn() &&
+                       request.auth.uid in existing().memberUids &&
+                       existing().consentEnabled == true;
+
+        allow create: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(snapshotId) &&
+                         incoming().keys().hasAll(['familyId', 'profileSlotId', 'ownerUid', 'profileName', 'category', 'summaryLine', 'primaryMetricLabel', 'consentEnabled', 'memberUids', 'updatedAt']) &&
+                         incoming().keys().hasOnly(['familyId', 'profileSlotId', 'ownerUid', 'profileName', 'category', 'summaryLine', 'primaryMetricLabel', 'consentEnabled', 'memberUids', 'updatedAt']) &&
+                         isValidSharedSnapshot(incoming(), familyId) &&
+                         isFamilyMember(familyId) &&
+                         incoming().consentEnabled == true &&
+                         profileSlotExists(familyId, incoming().profileSlotId) &&
+                         hasCategoryConsent(profileSlotDoc(familyId, incoming().profileSlotId).data, incoming().category) &&
+                         (
+                           request.auth.uid == incoming().ownerUid ||
+                           (isOwnerOrCaregiver(familyId) &&
+                            profileSlotDoc(familyId, incoming().profileSlotId).data.managedByCaregiver == true)
+                         );
+
+        allow update: if isSignedIn() &&
+                         isValidId(familyId) &&
+                         isValidId(snapshotId) &&
+                         isValidSharedSnapshot(incoming(), familyId) &&
+                         incoming().familyId == existing().familyId &&
+                         incoming().profileSlotId == existing().profileSlotId &&
+                         incoming().ownerUid == existing().ownerUid &&
+                         incoming().category == existing().category &&
+                         isFamilyMember(familyId) &&
+                         incoming().consentEnabled == true &&
+                         profileSlotExists(familyId, incoming().profileSlotId) &&
+                         hasCategoryConsent(profileSlotDoc(familyId, incoming().profileSlotId).data, incoming().category) &&
+                         (
+                           request.auth.uid == existing().ownerUid ||
+                           (isOwnerOrCaregiver(familyId) &&
+                            profileSlotDoc(familyId, incoming().profileSlotId).data.managedByCaregiver == true)
+                         ) &&
+                         incoming().diff(existing()).affectedKeys().hasOnly([
+                           'profileName', 'summaryLine', 'primaryMetricLabel', 'consentEnabled', 'memberUids', 'updatedAt'
+                         ]);
+
+        allow delete: if isSignedIn() && isValidId(familyId) && isValidId(snapshotId) &&
+                         (request.auth.uid == existing().ownerUid || isFamilyOwner(familyId));
+      }
+    }
+
+    // --- 3. FAMILY INVITATIONS ROOT COLLECTION ---
+    match /familyInvitations/{inviteId} {
+      allow get: if isSignedIn() && isValidId(inviteId) &&
+                    (existing().inviterUid == request.auth.uid ||
+                     existing().acceptedByUid == request.auth.uid ||
+                     (hasVerifiedEmail() && existing().inviteeEmailLower == request.auth.token.email.lower()));
+
+      allow list: if isSignedIn() &&
+                     (existing().inviterUid == request.auth.uid ||
+                      existing().acceptedByUid == request.auth.uid ||
+                      (hasVerifiedEmail() && existing().inviteeEmailLower == request.auth.token.email.lower()));
+
+      allow create: if isSignedIn() &&
+                       isValidId(inviteId) &&
+                       incoming().inviterUid == request.auth.uid &&
+                       incoming().status == 'PENDING' &&
+                       !('acceptedByUid' in incoming()) &&
+                       incoming().keys().hasAll(['familyId', 'familyName', 'inviterUid', 'inviterName', 'inviteeEmailLower', 'assignedRole', 'status', 'inviteNote', 'createdAt', 'updatedAt']) &&
+                       incoming().keys().hasOnly(['familyId', 'familyName', 'inviterUid', 'inviterName', 'inviteeEmailLower', 'acceptedByUid', 'assignedRole', 'status', 'inviteNote', 'createdAt', 'updatedAt']) &&
+                       isValidInvitation(incoming()) &&
+                       familyExists(incoming().familyId) &&
+                       familyDoc(incoming().familyId).data.eligibleForFiveProfiles == true &&
+                       familyDoc(incoming().familyId).data.maxProfiles == 5 &&
+                       familyDoc(incoming().familyId).data.memberUids.size() < familyDoc(incoming().familyId).data.maxProfiles &&
+                       familyDoc(incoming().familyId).data.memberRoles[request.auth.uid] in ['OWNER', 'CAREGIVER'];
+
+      allow update: if isSignedIn() &&
+                       isValidId(inviteId) &&
+                       existing().status == 'PENDING' &&
+                       isValidInvitation(incoming()) &&
+                       incoming().familyId == existing().familyId &&
+                       incoming().familyName == existing().familyName &&
+                       incoming().inviterUid == existing().inviterUid &&
+                       incoming().inviterName == existing().inviterName &&
+                       incoming().inviteeEmailLower == existing().inviteeEmailLower &&
+                       incoming().assignedRole == existing().assignedRole &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         // Action A: Inviter or Family Owner revokes pending invite
+                         ((request.auth.uid == existing().inviterUid || isFamilyOwner(existing().familyId)) &&
+                          incoming().status == 'REVOKED' &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'updatedAt'])) ||
+
+                         // Action B: Verified invitee accepts or declines pending invite
+                         (hasVerifiedEmail() &&
+                          existing().inviteeEmailLower == request.auth.token.email.lower() &&
+                          incoming().status in ['ACCEPTED', 'DECLINED'] &&
+                          incoming().acceptedByUid == request.auth.uid &&
+                          incoming().diff(existing()).affectedKeys().hasOnly(['status', 'acceptedByUid', 'updatedAt']))
+                       );
+
+      allow delete: if isSignedIn() && isValidId(inviteId) &&
+                       (request.auth.uid == existing().inviterUid || isFamilyOwner(existing().familyId));
+    }
+  }
+}

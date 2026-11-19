@@ -61,6 +61,9 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
 import androidx.core.content.ContextCompat
 import com.example.ai.SupportedVoiceLanguages
+import com.example.domain.IntelligenceTimeframe
+import com.example.ui.components.MoodTrendChartCard
+import com.example.ui.components.RoutineAdherenceRingCard
 import com.example.ui.components.WeeklyHydrationBarChart
 import com.example.ui.viewmodel.AiTaskStatus
 import com.example.ui.viewmodel.ModulesHubUiState
@@ -69,7 +72,15 @@ import com.example.ui.viewmodel.ModulesHubViewModel
 @Composable
 fun ReportsAnalyticsScreen(
     uiState: ModulesHubUiState,
-    onBack: () -> Unit
+    onBack: () -> Unit,
+    onSelectTimeframe: (IntelligenceTimeframe) -> Unit = {},
+    onGenerateAiInsights: (IntelligenceTimeframe) -> Unit = {},
+    onClearAiReport: () -> Unit = {},
+    onSpeakSummary: () -> Unit = {},
+    onStopSpeaking: () -> Unit = {},
+    onToggleAiModuleSharing: (String, Boolean) -> Unit = { _, _ -> },
+    onOpenModuleKey: (String) -> Unit = {},
+    onRunDiagnostics: () -> Unit = {}
 ) {
     val latestHr = uiState.vitalMetrics.firstOrNull { it.metricType == "HEART_RATE" }
     LazyColumn(
@@ -80,12 +91,44 @@ fun ReportsAnalyticsScreen(
         item {
             Spacer(modifier = Modifier.height(6.dp))
             Row(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back") }
+                IconButton(onClick = onBack, modifier = Modifier.testTag("reports_back_button")) {
+                    Icon(Icons.AutoMirrored.Rounded.ArrowBack, contentDescription = "Back")
+                }
                 Column {
-                    Text("📊 Reports & Analytics", style = MaterialTheme.typography.headlineSmall)
-                    Text("Cross-module insights, synced wearables & weekly rhythms", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text("📊 Health Intelligence & Reports", style = MaterialTheme.typography.headlineSmall)
+                    Text(
+                        "Daily & weekly briefings, cross-module trends & privacy controls",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
+        }
+
+        item {
+            PersonalHealthIntelligenceCard(
+                uiState = uiState,
+                onSelectTimeframe = onSelectTimeframe,
+                onGenerateAiInsights = onGenerateAiInsights,
+                onClearAiReport = onClearAiReport,
+                onSpeakSummary = onSpeakSummary,
+                onStopSpeaking = onStopSpeaking,
+                onRunDiagnostics = onRunDiagnostics
+            )
+        }
+
+        item {
+            TrendComparisonsSection(
+                trends = uiState.healthIntelligence.trends,
+                onOpenModuleKey = onOpenModuleKey
+            )
+        }
+
+        item {
+            RoutineGapsAndPlanSection(
+                snapshot = uiState.healthIntelligence,
+                onOpenModuleKey = onOpenModuleKey
+            )
         }
 
         item {
@@ -98,6 +141,22 @@ fun ReportsAnalyticsScreen(
                     Text("💧 7-Day Hydration Consistency (${uiState.hydration.streakDays}d streak 🔥)", style = MaterialTheme.typography.titleMedium)
                     WeeklyHydrationBarChart(bars = uiState.hydration.weeklyBars, goalMl = uiState.hydration.goalMl)
                 }
+            }
+        }
+
+        item {
+            RoutineAdherenceRingCard(
+                adherence = uiState.routineAdherence,
+                modifier = Modifier.widthIn(max = 600.dp)
+            )
+        }
+
+        if (uiState.moodAnalytics.totalEntriesAllTime > 0 || uiState.moodEntries.isNotEmpty()) {
+            item {
+                MoodTrendChartCard(
+                    analytics = uiState.moodAnalytics,
+                    modifier = Modifier.widthIn(max = 600.dp)
+                )
             }
         }
 
@@ -185,7 +244,27 @@ fun ReportsAnalyticsScreen(
                 SummaryStatRow("😴 Sleep Entries", "${uiState.sleepRecords.size} recorded nights")
                 SummaryStatRow("🌸 Cycle Care", uiState.cycleInsights?.currentCycleDay?.let { "Cycle Day $it • ${uiState.cycleInsights.currentPhase.label}" } ?: "Ready when enabled")
                 SummaryStatRow("✨ Self-Care & Wellbeing", "${uiState.beautyRecords.size} beauty rituals • ${uiState.todayWellbeing?.focusSessionsCount ?: 0} focus sessions")
+                SummaryStatRow(
+                    "🌅 Smart Daily Routines",
+                    if (uiState.routineAdherence.activeRoutinesCount > 0) {
+                        "${uiState.routineAdherence.completedTodayCount}/${uiState.routineAdherence.activeRoutinesCount} today • ${uiState.routineAdherence.weeklyConsistencyPercent}% 7d"
+                    } else {
+                        "Optional habits ready to build"
+                    }
+                )
+                SummaryStatRow(
+                    "📓 Mood Journal & Badges",
+                    "${uiState.moodAnalytics.totalEntriesLast7Days} logs (7d) • ${uiState.achievementBadges.count { it.earnedAtEpochMs != null }}/${uiState.achievementBadges.size} badges"
+                )
             }
+        }
+
+        item {
+            AiPrivacyControlsCard(
+                authorization = uiState.aiDataAuthorization,
+                cycleTrackingEnabled = uiState.profile?.cycleTrackingEnabled == true,
+                onToggleModuleSharing = onToggleAiModuleSharing
+            )
         }
 
         item { Spacer(modifier = Modifier.height(20.dp)) }
@@ -261,6 +340,47 @@ fun OnDeviceAiScreen(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary
                     )
+                    Text(
+                        "Wellness companion only — never replaces qualified clinical advice.",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
+        }
+
+        // Grounded Health Intelligence Coverage Strip
+        item {
+            val cycleEnabled = uiState.profile?.cycleTrackingEnabled == true
+            val maxMod = uiState.aiDataAuthorization.maxCount(cycleEnabled)
+            Surface(
+                modifier = Modifier
+                    .widthIn(max = 600.dp)
+                    .fillMaxWidth()
+                    .testTag("ai_privacy_coverage_strip"),
+                shape = RoundedCornerShape(18.dp),
+                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.55f),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "🧠 Grounded in ${uiState.healthIntelligence.authorizedModuleCount}/$maxMod authorized modules",
+                            style = MaterialTheme.typography.labelLarge
+                        )
+                        Text(
+                            text = "${uiState.healthIntelligence.loggedModuleCount} logged • Never invents data or diagnoses",
+                            style = MaterialTheme.typography.labelSmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+                    TextButton(onClick = { onNavigateModuleKey("reports_analytics") }) {
+                        Text("Intelligence →")
+                    }
                 }
             }
         }
@@ -564,9 +684,28 @@ fun OnDeviceAiScreen(
             }
         }
 
-        // Quick Voice / Smart-Log Try-It Chips
+        // Contextual Health Intelligence & Smart-Log Try-It Chips
         item {
-            Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Column(modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("🧠 Ask About Your Health Records", style = MaterialTheme.typography.labelLarge)
+                FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    listOf(
+                        "📊 How was my health routine this week?" to "How was my health routine this week?",
+                        "😴 Compare sleep & screen time" to "Compare my sleep and screen time trends",
+                        "🔎 Any missed routines today?" to "What routines or medicines did I miss today?",
+                        "🗓️ Build my daily wellness plan" to "Generate a personalized daily wellness plan based on my records"
+                    ).forEach { (label, prompt) ->
+                        FilterChip(
+                            selected = false,
+                            onClick = { viewModel.askAiAssistant(prompt) },
+                            label = { Text(label) }
+                        )
+                    }
+                }
+
                 Text("⚡ Try Saying or Tapping (Auto-Logs to App)", style = MaterialTheme.typography.labelLarge)
                 FlowRow(
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -614,6 +753,30 @@ fun OnDeviceAiScreen(
                                 else -> MaterialTheme.colorScheme.onSurface
                             }
                         )
+                        msg.fallbackSummary?.takeIf { it.isNotBlank() }?.let { localSummary ->
+                            Surface(
+                                shape = RoundedCornerShape(14.dp),
+                                color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f)
+                            ) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .padding(11.dp),
+                                    verticalArrangement = Arrangement.spacedBy(4.dp)
+                                ) {
+                                    Text(
+                                        text = "📊 Grounded Local Summary (On-Device)",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.primary
+                                    )
+                                    Text(
+                                        text = localSummary,
+                                        style = MaterialTheme.typography.bodySmall,
+                                        color = MaterialTheme.colorScheme.onSurface
+                                    )
+                                }
+                            }
+                        }
                         if (msg.actionBadges.isNotEmpty()) {
                             FlowRow(
                                 horizontalArrangement = Arrangement.spacedBy(6.dp),
@@ -634,12 +797,20 @@ fun OnDeviceAiScreen(
                             }
                         }
                         if (msg.isError) {
-                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            FlowRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                verticalArrangement = Arrangement.spacedBy(6.dp)
+                            ) {
                                 OutlinedButton(
                                     onClick = viewModel::retryLastAiPrompt,
                                     enabled = !isAiBusy
                                 ) {
                                     Text("🔄 Retry")
+                                }
+                                OutlinedButton(
+                                    onClick = { viewModel.answerOfflineHealthQuestion() }
+                                ) {
+                                    Text("📊 Local Answer")
                                 }
                                 TextButton(
                                     onClick = viewModel::runAiDiagnostics,

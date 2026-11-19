@@ -111,7 +111,7 @@ fun PeriodTrackerScreen(
                             )
                         }
                         Text(
-                            text = "🔔 Alert tone: $activeToneLabel",
+                            text = "🌸 100% Free Forever • Zero Paywalls • 🔔 $activeToneLabel",
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.tertiary
                         )

@@ -5,9 +5,12 @@ import android.content.Intent
 import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.billing.EffectiveEntitlement
+import com.example.billing.SubscriptionRepository
 import com.example.data.local.entity.ModuleActivationEntity
 import com.example.data.local.entity.ReminderEntity
 import com.example.data.local.entity.UserProfileEntity
+import com.example.data.repository.BackupPreviewSummary
 import com.example.data.repository.CustomAlarmRepository
 import com.example.data.repository.ModuleRepository
 import com.example.data.repository.PrivacyBackupRepository
@@ -32,6 +35,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flatMapLatest
 import kotlinx.coroutines.flow.flowOf
 import kotlinx.coroutines.flow.stateIn
@@ -58,7 +62,10 @@ data class SettingsPrivacyUiState(
     val popupPermissions: PopupPermissionsSnapshot = PopupPermissionsSnapshot(),
     val activationBanner: String? = null,
     val activationSuccess: Boolean? = null,
-    val statusMessage: String? = null
+    val statusMessage: String? = null,
+    val pendingRestorePreview: BackupPreviewSummary? = null,
+    val isRestoringOrExporting: Boolean = false,
+    val effectiveEntitlement: EffectiveEntitlement = EffectiveEntitlement()
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -70,7 +77,8 @@ class SettingsPrivacyViewModel(
     private val privacyBackupRepository: PrivacyBackupRepository,
     private val alertSoundManager: AlertSoundManager,
     vaultManager: KeystoreVaultManager,
-    licenseVerifier: OfflineLicenseVerifier
+    licenseVerifier: OfflineLicenseVerifier,
+    private val subscriptionRepository: SubscriptionRepository? = null
 ) : ViewModel() {
 
     private fun readPopupPermissions(): PopupPermissionsSnapshot = PopupPermissionsSnapshot(
@@ -83,6 +91,8 @@ class SettingsPrivacyViewModel(
 
     private val activationBanner = MutableStateFlow<Pair<String, Boolean>?>(null)
     private val statusMessage = MutableStateFlow<String?>(null)
+    private val pendingRestoreState = MutableStateFlow<Pair<BackupPreviewSummary, String>?>(null)
+    private val isVaultBusy = MutableStateFlow(false)
     private val popupPermissionsFlow = MutableStateFlow(readPopupPermissions())
     private val vaultStatus = vaultManager.inspectVaultStatus()
     private val publicKeyReady = licenseVerifier.isPublicKeyReady()
@@ -91,6 +101,9 @@ class SettingsPrivacyViewModel(
     private val alarmsFlow = profileFlow.flatMapLatest { profile ->
         if (profile == null) flowOf(emptyList()) else customAlarmRepository.observeAlarms(profile.id)
     }
+
+    private val entitlementFlow = subscriptionRepository?.observeEffectiveEntitlement()
+        ?: flowOf(EffectiveEntitlement())
 
     val uiState: StateFlow<SettingsPrivacyUiState> = combine(
         combine(
@@ -105,9 +118,12 @@ class SettingsPrivacyViewModel(
         combine(
             activationBanner,
             statusMessage,
-            popupPermissionsFlow
-        ) { act, msg, perms ->
-            Triple(act, msg, perms)
+            popupPermissionsFlow,
+            pendingRestoreState,
+            isVaultBusy,
+            entitlementFlow
+        ) { metaArray ->
+            metaArray
         }
     ) { mainList, meta ->
         val prefs = mainList[0] as UiPreferencesState
@@ -117,7 +133,14 @@ class SettingsPrivacyViewModel(
         @Suppress("UNCHECKED_CAST")
         val modules = mainList[3] as List<ModuleActivationEntity>
         val playingKey = mainList[4] as String?
-        val perms = meta.third
+        @Suppress("UNCHECKED_CAST")
+        val act = meta[0] as Pair<String, Boolean>?
+        val msg = meta[1] as String?
+        val perms = meta[2] as PopupPermissionsSnapshot
+        @Suppress("UNCHECKED_CAST")
+        val pendingRestore = meta[3] as Pair<BackupPreviewSummary, String>?
+        val busy = meta[4] as Boolean
+        val entitlement = meta[5] as EffectiveEntitlement
 
         SettingsPrivacyUiState(
             preferences = prefs,
@@ -130,9 +153,12 @@ class SettingsPrivacyViewModel(
             publicKeyReady = publicKeyReady,
             canUseFullScreenPopup = perms.canUseFullScreenPopup,
             popupPermissions = perms,
-            activationBanner = meta.first?.first,
-            activationSuccess = meta.first?.second,
-            statusMessage = meta.second
+            activationBanner = act?.first,
+            activationSuccess = act?.second,
+            statusMessage = msg,
+            pendingRestorePreview = pendingRestore?.first,
+            isRestoringOrExporting = busy,
+            effectiveEntitlement = entitlement
         )
     }.stateIn(
         scope = viewModelScope,
@@ -488,12 +514,104 @@ class SettingsPrivacyViewModel(
 
     fun exportLocalJson(context: Context, uri: Uri) {
         viewModelScope.launch {
-            val result = privacyBackupRepository.writeExportToUri(context, uri)
-            statusMessage.value = result.fold(
-                onSuccess = { bytes -> "Exported $bytes bytes of local JSON directly to your chosen folder." },
-                onFailure = { err -> "Export failed: ${err.message ?: "unknown error"}" }
-            )
+            isVaultBusy.value = true
+            try {
+                val result = privacyBackupRepository.writeExportToUri(context, uri)
+                statusMessage.value = result.fold(
+                    onSuccess = { bytes -> "✅ Exported full 17-table vault ($bytes bytes JSON) cleanly." },
+                    onFailure = { err -> "Export failed: ${err.message ?: "unknown error"}" }
+                )
+            } finally {
+                isVaultBusy.value = false
+            }
         }
+    }
+
+    fun exportEncryptedVault(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            isVaultBusy.value = true
+            try {
+                val result = privacyBackupRepository.writeEncryptedExportToUri(context, uri)
+                statusMessage.value = result.fold(
+                    onSuccess = { bytes -> "🔐 Exported AES-256-GCM encrypted vault ($bytes bytes, LCENC1)." },
+                    onFailure = { err -> "Encrypted export failed: ${err.message ?: "unknown error"}" }
+                )
+            } finally {
+                isVaultBusy.value = false
+            }
+        }
+    }
+
+    fun prepareRestoreFromUri(context: Context, uri: Uri) {
+        viewModelScope.launch {
+            isVaultBusy.value = true
+            try {
+                val rawResult = privacyBackupRepository.readPayloadFromUri(context, uri)
+                rawResult.onSuccess { raw ->
+                    privacyBackupRepository.parseBackupPreview(raw)
+                        .onSuccess { preview ->
+                            pendingRestoreState.value = preview to raw
+                        }
+                        .onFailure { err ->
+                            statusMessage.value = err.message ?: "Selected file is not a valid LifeWeave backup."
+                        }
+                }.onFailure { err ->
+                    statusMessage.value = err.message ?: "Unable to open selected backup file."
+                }
+            } finally {
+                isVaultBusy.value = false
+            }
+        }
+    }
+
+    fun confirmRestoreBackup() {
+        val pending = pendingRestoreState.value ?: return
+        pendingRestoreState.value = null
+        viewModelScope.launch {
+            isVaultBusy.value = true
+            try {
+                val existingAlarms = uiState.value.customAlarms
+                val result = privacyBackupRepository.restoreFromRawPayload(pending.second)
+                result.onSuccess { summary ->
+                    existingAlarms.forEach { alertSoundManager.cancelCustomAlarm(it.id) }
+                    val restoredPrefs = preferencesManager.preferencesFlow.first()
+                    listOf(
+                        AlertCategory.WATER to restoredPrefs.waterTone,
+                        AlertCategory.PERIOD to restoredPrefs.periodTone,
+                        AlertCategory.WELLNESS to restoredPrefs.wellnessTone
+                    ).forEach { (cat, tone) ->
+                        alertSoundManager.ensureNotificationChannel(cat, tone)
+                        if (tone.reminderEnabled) {
+                            alertSoundManager.scheduleDailyReminder(
+                                cat,
+                                tone.reminderHour,
+                                tone.reminderMinute,
+                                tone.repeatIntervalMinutes
+                            )
+                        } else {
+                            alertSoundManager.cancelReminder(cat)
+                        }
+                    }
+                    if (restoredPrefs.wellbeingOveruseAlertsEnabled) {
+                        alertSoundManager.scheduleWellbeingMonitor()
+                    } else {
+                        alertSoundManager.cancelWellbeingMonitor()
+                    }
+                    summary.restoredReminders.filter { it.isEnabled }.forEach { alarm ->
+                        alertSoundManager.scheduleCustomAlarm(alarm)
+                    }
+                    statusMessage.value = "✅ Restored ${summary.restoredRecordsCount} records for ${summary.profileName} across all local modules."
+                }.onFailure { err ->
+                    statusMessage.value = "Restore failed safely (existing data preserved): ${err.message ?: "invalid data"}"
+                }
+            } finally {
+                isVaultBusy.value = false
+            }
+        }
+    }
+
+    fun dismissRestorePreview() {
+        pendingRestoreState.value = null
     }
 
     fun deleteAllLocalData(onComplete: () -> Unit) {
@@ -503,6 +621,19 @@ class SettingsPrivacyViewModel(
             privacyBackupRepository.deleteAllLocalData()
             statusMessage.value = "All local records and preferences erased from this device."
             onComplete()
+        }
+    }
+
+    fun restoreGooglePlayPurchases() {
+        val repo = subscriptionRepository ?: return
+        viewModelScope.launch {
+            isVaultBusy.value = true
+            try {
+                val res = repo.restorePurchases()
+                statusMessage.value = res.message
+            } finally {
+                isVaultBusy.value = false
+            }
         }
     }
 

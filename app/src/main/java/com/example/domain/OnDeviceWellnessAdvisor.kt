@@ -18,7 +18,8 @@ data class LocalAiMessage(
     val isFromUser: Boolean,
     val text: String,
     val actionBadges: List<String> = emptyList(),
-    val isError: Boolean = false
+    val isError: Boolean = false,
+    val fallbackSummary: String? = null
 )
 
 /**

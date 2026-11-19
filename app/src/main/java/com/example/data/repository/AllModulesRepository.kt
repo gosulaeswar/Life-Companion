@@ -1,5 +1,6 @@
 package com.example.data.repository
 
+import androidx.room.withTransaction
 import com.example.data.local.AppDatabase
 import com.example.data.local.entity.AiPreferenceEntity
 import com.example.data.local.entity.BeautyCareRecordEntity
@@ -9,16 +10,24 @@ import com.example.data.local.entity.DoctorConsultationEntity
 import com.example.data.local.entity.ExerciseRecordEntity
 import com.example.data.local.entity.MedicineEntity
 import com.example.data.local.entity.MedicineIntakeEntity
+import com.example.data.local.entity.NutritionPlanEntity
+import com.example.data.local.entity.NutritionPreferenceEntity
 import com.example.data.local.entity.SleepRecordEntity
 import com.example.data.local.entity.StepRecordEntity
 import com.example.domain.DateEpochUtils
+import com.example.domain.IndianMealPlanResult
+import com.example.domain.IndianNutritionEngine
+import com.example.domain.PlannedIndianMealSlot
 import com.example.wellbeing.DeviceUsageSnapshot
 import com.example.wellbeing.WellbeingMetricsCalculator
 import kotlinx.coroutines.flow.Flow
+import org.json.JSONArray
+import org.json.JSONObject
 
 class AllModulesRepository(private val database: AppDatabase) {
     private val fitnessDao = database.fitnessDao()
     private val dietDao = database.dietDao()
+    private val nutritionDao = database.nutritionDao()
     private val medicalDao = database.medicalCareDao()
     private val beautyDao = database.beautyCareDao()
     private val wellbeingDao = database.digitalWellbeingDao()
@@ -47,6 +56,9 @@ class AllModulesRepository(private val database: AppDatabase) {
 
     fun observeRecentMedicineIntakes(profileId: Long): Flow<List<MedicineIntakeEntity>> =
         medicalDao.observeRecentIntakes(profileId)
+
+    fun observeMedicineIntakesLast60Days(profileId: Long): Flow<List<MedicineIntakeEntity>> =
+        medicalDao.observeIntakesSince(profileId, DateEpochUtils.dayKeyDaysAgo(59))
 
     fun observeConsultations(profileId: Long): Flow<List<DoctorConsultationEntity>> =
         medicalDao.observeConsultations(profileId)
@@ -158,9 +170,16 @@ class AllModulesRepository(private val database: AppDatabase) {
         intervalHours: Int = 24,
         mealRelation: String = "After Meal",
         categoryEmoji: String = "💊",
-        notes: String = ""
-    ) {
-        medicalDao.insertMedicine(
+        notes: String = "",
+        stockQuantity: Float = 0f,
+        stockUnit: String = "tablets",
+        unitsPerDose: Float = 1f,
+        lowStockThresholdDays: Int = 5,
+        expiryEpochDay: Long? = null,
+        linkedPrescriptionDocId: Long? = null,
+        refillReminderEnabled: Boolean = true
+    ): Long {
+        return medicalDao.insertMedicine(
             MedicineEntity(
                 profileId = profileId,
                 name = name.trim(),
@@ -172,7 +191,14 @@ class AllModulesRepository(private val database: AppDatabase) {
                 mealRelation = mealRelation,
                 categoryEmoji = categoryEmoji,
                 isActive = true,
-                notes = notes.trim()
+                notes = notes.trim(),
+                stockQuantity = stockQuantity.coerceAtLeast(0f),
+                stockUnit = stockUnit.trim().ifBlank { "tablets" },
+                unitsPerDose = unitsPerDose.coerceIn(0.25f, 20f),
+                lowStockThresholdDays = lowStockThresholdDays.coerceIn(1, 30),
+                expiryEpochDay = expiryEpochDay,
+                linkedPrescriptionDocId = linkedPrescriptionDocId,
+                refillReminderEnabled = refillReminderEnabled
             )
         )
     }
@@ -190,18 +216,28 @@ class AllModulesRepository(private val database: AppDatabase) {
         status: String = "Taken",
         takenAtEpochMs: Long = System.currentTimeMillis()
     ) {
-        medicalDao.insertMedicineIntake(
-            MedicineIntakeEntity(
-                profileId = profileId,
-                medicineId = medicine.id,
-                medicineName = medicine.name,
-                dosageTaken = medicine.dosage,
-                slotLabel = slotLabel,
-                status = status,
-                dayKey = DateEpochUtils.todayDayKey(takenAtEpochMs),
-                takenAtEpochMs = takenAtEpochMs
+        database.withTransaction {
+            medicalDao.insertMedicineIntake(
+                MedicineIntakeEntity(
+                    profileId = profileId,
+                    medicineId = medicine.id,
+                    medicineName = medicine.name,
+                    dosageTaken = medicine.dosage,
+                    slotLabel = slotLabel,
+                    status = status,
+                    dayKey = DateEpochUtils.todayDayKey(takenAtEpochMs),
+                    takenAtEpochMs = takenAtEpochMs
+                )
             )
-        )
+            if (status == "Taken") {
+                val freshMed = medicalDao.getMedicineById(medicine.id) ?: medicine
+                if (freshMed.stockQuantity > 0f) {
+                    val consumed = freshMed.unitsPerDose.coerceAtLeast(0.25f)
+                    val remaining = (freshMed.stockQuantity - consumed).coerceAtLeast(0f)
+                    medicalDao.updateMedicine(freshMed.copy(stockQuantity = remaining))
+                }
+            }
+        }
     }
 
     suspend fun deleteMedicineIntake(id: Long) = medicalDao.deleteMedicineIntake(id)
@@ -328,5 +364,113 @@ class AllModulesRepository(private val database: AppDatabase) {
 
     suspend fun updateAiPreference(preference: AiPreferenceEntity) {
         profileDao.upsertAiPreference(preference.copy(updatedAtEpochMs = System.currentTimeMillis()))
+    }
+
+    fun observeNutritionPreference(profileId: Long): Flow<NutritionPreferenceEntity?> =
+        nutritionDao.observePreference(profileId)
+
+    fun observeLatestNutritionPlan(profileId: Long): Flow<NutritionPlanEntity?> =
+        nutritionDao.observeLatestPlan(profileId)
+
+    suspend fun saveNutritionPreference(preference: NutritionPreferenceEntity) {
+        val existing = nutritionDao.getPreferenceSnapshot(preference.profileId)
+        nutritionDao.upsertPreference(
+            preference.copy(
+                id = existing?.id ?: preference.id,
+                updatedAtEpochMs = System.currentTimeMillis()
+            )
+        )
+    }
+
+    suspend fun saveNutritionPlan(profileId: Long, plan: IndianMealPlanResult): Long {
+        val mealsArray = JSONArray().apply {
+            plan.meals.forEach { slot ->
+                put(
+                    JSONObject().apply {
+                        put("mealType", slot.mealType)
+                        put("slotLabel", slot.slotLabel)
+                        put("dishName", slot.dishName)
+                        put("portionLabel", slot.portionLabel)
+                        put("calories", slot.calories)
+                        put("proteinGrams", slot.proteinGrams)
+                        put("carbsGrams", slot.carbsGrams)
+                        put("fatGrams", slot.fatGrams)
+                        put("prepTip", slot.prepTip)
+                    }
+                )
+            }
+        }
+        val groceryArray = JSONArray().apply {
+            plan.groceryHighlights.forEach { put(it) }
+        }
+        return nutritionDao.insertPlan(
+            NutritionPlanEntity(
+                profileId = profileId,
+                planTitle = plan.planTitle,
+                regionLabel = plan.regionLabel,
+                dietaryLabel = plan.dietaryLabel,
+                goalLabel = plan.goalLabel,
+                regionalNotes = plan.regionalNotes,
+                totalCalories = plan.totalCalories,
+                totalProteinGrams = plan.totalProteinGrams,
+                totalCarbsGrams = plan.totalCarbsGrams,
+                totalFatGrams = plan.totalFatGrams,
+                mealsJson = mealsArray.toString(),
+                groceryHighlightsJson = groceryArray.toString(),
+                avoidedAllergensCsv = plan.avoidedAllergens.joinToString(", "),
+                isFromCloudAi = plan.isFromCloudAi,
+                createdAtEpochMs = System.currentTimeMillis()
+            )
+        )
+    }
+
+    companion object {
+        fun entityToMealPlanResult(entity: NutritionPlanEntity): IndianMealPlanResult {
+            val slots = mutableListOf<PlannedIndianMealSlot>()
+            runCatching {
+                val arr = JSONArray(entity.mealsJson)
+                for (i in 0 until arr.length()) {
+                    val obj = arr.optJSONObject(i) ?: continue
+                    slots += PlannedIndianMealSlot(
+                        mealType = obj.optString("mealType", "Lunch"),
+                        slotLabel = obj.optString("slotLabel", obj.optString("mealType", "Meal")),
+                        dishName = obj.optString("dishName", "Indian Meal"),
+                        portionLabel = obj.optString("portionLabel", "1 serving"),
+                        calories = obj.optInt("calories", 300),
+                        proteinGrams = obj.optInt("proteinGrams", 10),
+                        carbsGrams = obj.optInt("carbsGrams", 40),
+                        fatGrams = obj.optInt("fatGrams", 8),
+                        prepTip = obj.optString("prepTip", "")
+                    )
+                }
+            }
+            val groceries = mutableListOf<String>()
+            runCatching {
+                val arr = JSONArray(entity.groceryHighlightsJson)
+                for (i in 0 until arr.length()) {
+                    arr.optString(i)?.takeIf { it.isNotBlank() }?.let { groceries += it }
+                }
+            }
+            val allergens = entity.avoidedAllergensCsv
+                .split(',')
+                .map { it.trim() }
+                .filter { it.isNotBlank() }
+            return IndianMealPlanResult(
+                planTitle = entity.planTitle,
+                regionLabel = entity.regionLabel,
+                dietaryLabel = entity.dietaryLabel,
+                goalLabel = entity.goalLabel,
+                regionalNotes = entity.regionalNotes,
+                meals = slots,
+                totalCalories = entity.totalCalories,
+                totalProteinGrams = entity.totalProteinGrams,
+                totalCarbsGrams = entity.totalCarbsGrams,
+                totalFatGrams = entity.totalFatGrams,
+                groceryHighlights = groceries,
+                avoidedAllergens = allergens,
+                disclaimer = IndianNutritionEngine.STANDARD_NUTRITION_DISCLAIMER,
+                isFromCloudAi = entity.isFromCloudAi
+            )
+        }
     }
 }

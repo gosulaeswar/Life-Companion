@@ -16,6 +16,8 @@ import com.example.data.local.entity.HealthVitalMetricEntity
 import com.example.data.local.entity.MedicineEntity
 import com.example.data.local.entity.MedicineIntakeEntity
 import com.example.data.local.entity.ModuleActivationEntity
+import com.example.data.local.entity.NutritionPlanEntity
+import com.example.data.local.entity.NutritionPreferenceEntity
 import com.example.data.local.entity.PeriodRecordEntity
 import com.example.data.local.entity.ReminderEntity
 import com.example.data.local.entity.SleepRecordEntity
@@ -32,11 +34,29 @@ interface UserProfileDao {
     @Query("SELECT * FROM user_profiles ORDER BY id ASC LIMIT 1")
     suspend fun getActiveProfileSnapshot(): UserProfileEntity?
 
+    @Query("SELECT * FROM user_profiles ORDER BY id ASC")
+    fun observeAllProfiles(): Flow<List<UserProfileEntity>>
+
+    @Query("SELECT * FROM user_profiles ORDER BY id ASC")
+    suspend fun getAllProfilesSnapshot(): List<UserProfileEntity>
+
+    @Query("SELECT COUNT(*) FROM user_profiles")
+    suspend fun getProfileCount(): Int
+
+    @Query("SELECT * FROM user_profiles WHERE id = :profileId LIMIT 1")
+    suspend fun getProfileById(profileId: Long): UserProfileEntity?
+
+    @Query("SELECT * FROM user_profiles WHERE id = :profileId LIMIT 1")
+    fun observeProfileById(profileId: Long): Flow<UserProfileEntity?>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertProfile(profile: UserProfileEntity): Long
 
     @Update
     suspend fun updateProfile(profile: UserProfileEntity)
+
+    @Query("DELETE FROM user_profiles WHERE id = :profileId")
+    suspend fun deleteProfileById(profileId: Long)
 
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun upsertAiPreference(preference: AiPreferenceEntity)
@@ -159,6 +179,9 @@ interface FitnessDao {
     @Query("SELECT * FROM step_records WHERE profileId = :profileId AND dayKey = :dayKey LIMIT 1")
     suspend fun getStepsForDaySnapshot(profileId: Long, dayKey: String): StepRecordEntity?
 
+    @Query("SELECT * FROM step_records WHERE profileId = :profileId ORDER BY dayKey DESC")
+    suspend fun getAllStepsSnapshot(profileId: Long): List<StepRecordEntity>
+
     @Query("SELECT * FROM exercise_records WHERE profileId = :profileId ORDER BY loggedAtEpochMs DESC")
     suspend fun getExercisesSnapshot(profileId: Long): List<ExerciseRecordEntity>
 
@@ -183,6 +206,9 @@ interface DietDao {
     @Query("SELECT * FROM diet_records WHERE profileId = :profileId ORDER BY loggedAtEpochMs DESC")
     fun observeDietRecords(profileId: Long): Flow<List<DietRecordEntity>>
 
+    @Query("SELECT * FROM diet_records WHERE profileId = :profileId ORDER BY loggedAtEpochMs DESC")
+    suspend fun getDietRecordsSnapshot(profileId: Long): List<DietRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertDietRecord(record: DietRecordEntity): Long
 
@@ -201,6 +227,9 @@ interface MedicalCareDao {
     @Query("SELECT * FROM medicines WHERE profileId = :profileId ORDER BY id DESC")
     suspend fun getMedicinesSnapshot(profileId: Long): List<MedicineEntity>
 
+    @Query("SELECT * FROM medicines WHERE id = :id LIMIT 1")
+    suspend fun getMedicineById(id: Long): MedicineEntity?
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertMedicine(medicine: MedicineEntity): Long
 
@@ -215,6 +244,9 @@ interface MedicalCareDao {
 
     @Query("SELECT * FROM medicine_intakes WHERE profileId = :profileId ORDER BY takenAtEpochMs DESC LIMIT 30")
     fun observeRecentIntakes(profileId: Long): Flow<List<MedicineIntakeEntity>>
+
+    @Query("SELECT * FROM medicine_intakes WHERE profileId = :profileId AND dayKey >= :startDayKey ORDER BY takenAtEpochMs DESC")
+    fun observeIntakesSince(profileId: Long, startDayKey: String): Flow<List<MedicineIntakeEntity>>
 
     @Query("SELECT * FROM medicine_intakes WHERE profileId = :profileId ORDER BY takenAtEpochMs DESC")
     suspend fun getIntakesSnapshot(profileId: Long): List<MedicineIntakeEntity>
@@ -255,6 +287,9 @@ interface BeautyCareDao {
     @Query("SELECT * FROM beauty_care_records WHERE profileId = :profileId ORDER BY completedAtEpochMs DESC")
     fun observeBeautyRecords(profileId: Long): Flow<List<BeautyCareRecordEntity>>
 
+    @Query("SELECT * FROM beauty_care_records WHERE profileId = :profileId ORDER BY completedAtEpochMs DESC")
+    suspend fun getBeautyRecordsSnapshot(profileId: Long): List<BeautyCareRecordEntity>
+
     @Insert(onConflict = OnConflictStrategy.REPLACE)
     suspend fun insertBeautyRecord(record: BeautyCareRecordEntity): Long
 
@@ -269,6 +304,9 @@ interface BeautyCareDao {
 interface DigitalWellbeingDao {
     @Query("SELECT * FROM digital_wellbeing_records WHERE profileId = :profileId ORDER BY dayKey DESC")
     fun observeWellbeingRecords(profileId: Long): Flow<List<DigitalWellbeingRecordEntity>>
+
+    @Query("SELECT * FROM digital_wellbeing_records WHERE profileId = :profileId ORDER BY dayKey DESC")
+    suspend fun getWellbeingRecordsSnapshot(profileId: Long): List<DigitalWellbeingRecordEntity>
 
     @Query("SELECT * FROM digital_wellbeing_records WHERE profileId = :profileId AND dayKey = :dayKey LIMIT 1")
     fun observeWellbeingForDay(profileId: Long, dayKey: String): Flow<DigitalWellbeingRecordEntity?>
@@ -354,3 +392,37 @@ interface ConnectedFitnessDao {
     @Query("DELETE FROM health_vital_metrics")
     suspend fun deleteAllVitalMetrics()
 }
+
+@Dao
+interface NutritionDao {
+    @Query("SELECT * FROM nutrition_preferences WHERE profileId = :profileId LIMIT 1")
+    fun observePreference(profileId: Long): Flow<NutritionPreferenceEntity?>
+
+    @Query("SELECT * FROM nutrition_preferences WHERE profileId = :profileId LIMIT 1")
+    suspend fun getPreferenceSnapshot(profileId: Long): NutritionPreferenceEntity?
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPreference(preference: NutritionPreferenceEntity): Long
+
+    @Query("DELETE FROM nutrition_preferences")
+    suspend fun deleteAllPreferences()
+
+    @Query("SELECT * FROM nutrition_plans WHERE profileId = :profileId ORDER BY createdAtEpochMs DESC LIMIT 1")
+    fun observeLatestPlan(profileId: Long): Flow<NutritionPlanEntity?>
+
+    @Query("SELECT * FROM nutrition_plans WHERE profileId = :profileId ORDER BY createdAtEpochMs DESC")
+    fun observePlans(profileId: Long): Flow<List<NutritionPlanEntity>>
+
+    @Query("SELECT * FROM nutrition_plans WHERE profileId = :profileId ORDER BY createdAtEpochMs DESC")
+    suspend fun getPlansSnapshot(profileId: Long): List<NutritionPlanEntity>
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun insertPlan(plan: NutritionPlanEntity): Long
+
+    @Query("DELETE FROM nutrition_plans WHERE id = :id")
+    suspend fun deletePlan(id: Long)
+
+    @Query("DELETE FROM nutrition_plans")
+    suspend fun deleteAllPlans()
+}
+

@@ -13,6 +13,8 @@ import androidx.health.connect.client.records.DistanceRecord
 import androidx.health.connect.client.records.ExerciseSessionRecord
 import androidx.health.connect.client.records.HeartRateRecord
 import androidx.health.connect.client.records.HydrationRecord
+import androidx.health.connect.client.records.MealType
+import androidx.health.connect.client.records.NutritionRecord
 import androidx.health.connect.client.records.SleepSessionRecord
 import androidx.health.connect.client.records.StepsRecord
 import androidx.health.connect.client.records.TotalCaloriesBurnedRecord
@@ -26,23 +28,83 @@ import java.time.Instant
 import java.time.LocalDate
 import java.time.ZoneId
 import java.time.temporal.ChronoUnit
+import kotlin.math.roundToInt
 
 class HealthConnectManager(private val context: Context) {
 
     companion object {
         const val HEALTH_CONNECT_PACKAGE = "com.google.android.apps.healthdata"
 
+        val PERMISSION_STEPS = HealthPermission.getReadPermission(StepsRecord::class)
+        val PERMISSION_DISTANCE = HealthPermission.getReadPermission(DistanceRecord::class)
+        val PERMISSION_TOTAL_CALORIES = HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
+        val PERMISSION_ACTIVE_CALORIES = HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
+        val PERMISSION_EXERCISE = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
+        val PERMISSION_SLEEP = HealthPermission.getReadPermission(SleepSessionRecord::class)
+        val PERMISSION_HEART_RATE = HealthPermission.getReadPermission(HeartRateRecord::class)
+        val PERMISSION_HYDRATION = HealthPermission.getReadPermission(HydrationRecord::class)
+        val PERMISSION_NUTRITION = HealthPermission.getReadPermission(NutritionRecord::class)
+        val PERMISSION_WEIGHT = HealthPermission.getReadPermission(WeightRecord::class)
+
         val REQUIRED_READ_PERMISSIONS: Set<String> = setOf(
-            HealthPermission.getReadPermission(StepsRecord::class),
-            HealthPermission.getReadPermission(DistanceRecord::class),
-            HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class),
-            HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class),
-            HealthPermission.getReadPermission(ExerciseSessionRecord::class),
-            HealthPermission.getReadPermission(SleepSessionRecord::class),
-            HealthPermission.getReadPermission(HeartRateRecord::class),
-            HealthPermission.getReadPermission(HydrationRecord::class),
-            HealthPermission.getReadPermission(WeightRecord::class)
+            PERMISSION_STEPS,
+            PERMISSION_DISTANCE,
+            PERMISSION_TOTAL_CALORIES,
+            PERMISSION_ACTIVE_CALORIES,
+            PERMISSION_EXERCISE,
+            PERMISSION_SLEEP,
+            PERMISSION_HEART_RATE,
+            PERMISSION_HYDRATION,
+            PERMISSION_NUTRITION,
+            PERMISSION_WEIGHT
         )
+
+        fun permissionsForCategory(category: HealthConnectDataCategory): Set<String> = when (category) {
+            HealthConnectDataCategory.STEPS_AND_ACTIVITY ->
+                setOf(PERMISSION_STEPS, PERMISSION_DISTANCE, PERMISSION_ACTIVE_CALORIES, PERMISSION_TOTAL_CALORIES)
+            HealthConnectDataCategory.WORKOUTS -> setOf(PERMISSION_EXERCISE)
+            HealthConnectDataCategory.SLEEP -> setOf(PERMISSION_SLEEP)
+            HealthConnectDataCategory.HEART_RATE -> setOf(PERMISSION_HEART_RATE)
+            HealthConnectDataCategory.HYDRATION -> setOf(PERMISSION_HYDRATION)
+            HealthConnectDataCategory.NUTRITION -> setOf(PERMISSION_NUTRITION)
+            HealthConnectDataCategory.WEIGHT -> setOf(PERMISSION_WEIGHT)
+        }
+
+        fun permissionsForCategories(categories: Set<HealthConnectDataCategory>): Set<String> =
+            categories.flatMap { permissionsForCategory(it) }.toSet()
+
+        fun isCategoryOsGranted(
+            category: HealthConnectDataCategory,
+            grantedPermissions: Set<String>
+        ): Boolean = permissionsForCategory(category).any { it in grantedPermissions }
+
+        fun mapNutritionRecordToImported(rec: NutritionRecord): ImportedNutrition? {
+            val kcal = rec.energy?.inKilocalories?.roundToInt() ?: 0
+            val protein = rec.protein?.inGrams?.roundToInt() ?: 0
+            val carbs = rec.totalCarbohydrate?.inGrams?.roundToInt() ?: 0
+            val fat = rec.totalFat?.inGrams?.roundToInt() ?: 0
+            if (kcal <= 0 && protein <= 0 && carbs <= 0 && fat <= 0) return null
+
+            val pkg = rec.metadata.dataOrigin.packageName
+            val mealTypeLabel = when (rec.mealType) {
+                MealType.MEAL_TYPE_BREAKFAST -> "Breakfast"
+                MealType.MEAL_TYPE_LUNCH -> "Lunch"
+                MealType.MEAL_TYPE_DINNER -> "Dinner"
+                else -> "Snack"
+            }
+            val (sourceName, _) = FitnessSourceCatalog.resolveSourceInfo(pkg)
+            val baseName = rec.name?.trim()?.takeIf { it.isNotBlank() } ?: "$mealTypeLabel entry"
+            return ImportedNutrition(
+                mealType = mealTypeLabel,
+                foodSummary = "⌚ $baseName [Health Connect • $sourceName]",
+                calories = kcal.coerceAtLeast(0),
+                proteinGrams = protein.coerceAtLeast(0),
+                carbsGrams = carbs.coerceAtLeast(0),
+                fatGrams = fat.coerceAtLeast(0),
+                loggedAtEpochMs = rec.startTime.toEpochMilli(),
+                sourceId = pkg.ifBlank { "health_connect" }
+            )
+        }
     }
 
     fun checkAvailability(): HealthConnectAvailability {
@@ -87,9 +149,15 @@ class HealthConnectManager(private val context: Context) {
         }.getOrDefault(emptySet())
     }
 
-    suspend fun readRecentMetrics(daysBack: Int = 7): Result<HealthSyncPayload> {
+    suspend fun readRecentMetrics(
+        daysBack: Int = 7,
+        enabledCategories: Set<HealthConnectDataCategory> = HealthConnectDataCategory.entries.toSet()
+    ): Result<HealthSyncPayload> {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.O) {
             return Result.failure(IllegalStateException("Health Connect requires Android 8.0 or newer."))
+        }
+        if (enabledCategories.isEmpty()) {
+            return Result.failure(IllegalStateException("Enable at least one Health Connect import category first."))
         }
         val status = checkAvailability()
         if (status != HealthConnectAvailability.AVAILABLE) {
@@ -99,17 +167,21 @@ class HealthConnectManager(private val context: Context) {
                 )
             )
         }
-        return readRecentMetricsApi26(daysBack)
+        return readRecentMetricsApi26(daysBack, enabledCategories)
     }
 
     @RequiresApi(Build.VERSION_CODES.O)
-    private suspend fun readRecentMetricsApi26(daysBack: Int): Result<HealthSyncPayload> {
+    private suspend fun readRecentMetricsApi26(
+        daysBack: Int,
+        enabledCategories: Set<HealthConnectDataCategory>
+    ): Result<HealthSyncPayload> {
         return try {
             val client = HealthConnectClient.getOrCreate(context)
             val granted = client.permissionController.getGrantedPermissions()
-            if (granted.intersect(REQUIRED_READ_PERMISSIONS).isEmpty()) {
+            val requestedAllowed = permissionsForCategories(enabledCategories)
+            if (granted.intersect(requestedAllowed).isEmpty()) {
                 return Result.failure(
-                    SecurityException("Please grant Health Connect read permissions first.")
+                    SecurityException("Please grant Health Connect read permissions for at least one enabled category first.")
                 )
             }
 
@@ -120,15 +192,13 @@ class HealthConnectManager(private val context: Context) {
                 .atStartOfDay(zone)
                 .toInstant()
 
-            val stepsPerm = HealthPermission.getReadPermission(StepsRecord::class)
-            val distancePerm = HealthPermission.getReadPermission(DistanceRecord::class)
-            val activeCalPerm = HealthPermission.getReadPermission(ActiveCaloriesBurnedRecord::class)
-            val totalCalPerm = HealthPermission.getReadPermission(TotalCaloriesBurnedRecord::class)
-            val exercisePerm = HealthPermission.getReadPermission(ExerciseSessionRecord::class)
-            val sleepPerm = HealthPermission.getReadPermission(SleepSessionRecord::class)
-            val hrPerm = HealthPermission.getReadPermission(HeartRateRecord::class)
-            val hydrationPerm = HealthPermission.getReadPermission(HydrationRecord::class)
-            val weightPerm = HealthPermission.getReadPermission(WeightRecord::class)
+            val allowActivity = HealthConnectDataCategory.STEPS_AND_ACTIVITY in enabledCategories
+            val allowExercise = HealthConnectDataCategory.WORKOUTS in enabledCategories
+            val allowSleep = HealthConnectDataCategory.SLEEP in enabledCategories
+            val allowHr = HealthConnectDataCategory.HEART_RATE in enabledCategories
+            val allowHydration = HealthConnectDataCategory.HYDRATION in enabledCategories
+            val allowNutrition = HealthConnectDataCategory.NUTRITION in enabledCategories
+            val allowWeight = HealthConnectDataCategory.WEIGHT in enabledCategories
 
             val sourceCounter = linkedMapOf<String, Int>()
             fun recordOrigin(pkg: String, count: Int = 1) {
@@ -140,67 +210,69 @@ class HealthConnectManager(private val context: Context) {
             val vitals = mutableListOf<ImportedVitalMetric>()
 
             // 1. Aggregate Steps, Distance, and Calories per day to prevent double-counting across apps
-            for (offset in 0 until daysBack) {
-                val date = today.minusDays(offset.toLong())
-                val dayStart = date.atStartOfDay(zone).toInstant()
-                val dayEnd = if (offset == 0) now else date.plusDays(1).atStartOfDay(zone).toInstant()
-                if (!dayEnd.isAfter(dayStart)) continue
+            if (allowActivity) {
+                for (offset in 0 until daysBack) {
+                    val date = today.minusDays(offset.toLong())
+                    val dayStart = date.atStartOfDay(zone).toInstant()
+                    val dayEnd = if (offset == 0) now else date.plusDays(1).atStartOfDay(zone).toInstant()
+                    if (!dayEnd.isAfter(dayStart)) continue
 
-                val dayKey = DateEpochUtils.todayDayKey(dayStart.toEpochMilli() + 43_200_000L)
-                val metricsToRequest = buildSet {
-                    if (stepsPerm in granted) add(StepsRecord.COUNT_TOTAL)
-                    if (distancePerm in granted) add(DistanceRecord.DISTANCE_TOTAL)
-                    if (activeCalPerm in granted) add(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)
-                    if (totalCalPerm in granted) add(TotalCaloriesBurnedRecord.ENERGY_TOTAL)
-                }
-                if (metricsToRequest.isNotEmpty()) {
-                    val agg = client.aggregate(
-                        AggregateRequest(
-                            metrics = metricsToRequest,
-                            timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd)
+                    val dayKey = DateEpochUtils.todayDayKey(dayStart.toEpochMilli() + 43_200_000L)
+                    val metricsToRequest = buildSet {
+                        if (PERMISSION_STEPS in granted) add(StepsRecord.COUNT_TOTAL)
+                        if (PERMISSION_DISTANCE in granted) add(DistanceRecord.DISTANCE_TOTAL)
+                        if (PERMISSION_ACTIVE_CALORIES in granted) add(ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL)
+                        if (PERMISSION_TOTAL_CALORIES in granted) add(TotalCaloriesBurnedRecord.ENERGY_TOTAL)
+                    }
+                    if (metricsToRequest.isNotEmpty()) {
+                        val agg = client.aggregate(
+                            AggregateRequest(
+                                metrics = metricsToRequest,
+                                timeRangeFilter = TimeRangeFilter.between(dayStart, dayEnd)
+                            )
                         )
-                    )
-                    val primaryOrigin = agg.dataOrigins.firstOrNull()?.packageName ?: "health_connect"
-                    agg.dataOrigins.forEach { recordOrigin(it.packageName, 1) }
+                        val primaryOrigin = agg.dataOrigins.firstOrNull()?.packageName ?: "health_connect"
+                        agg.dataOrigins.forEach { recordOrigin(it.packageName, 1) }
 
-                    val steps = agg[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
-                    val distMeters = agg[DistanceRecord.DISTANCE_TOTAL]?.inMeters?.toInt() ?: 0
-                    if (steps > 0 || distMeters > 0) {
-                        dailySteps += ImportedDailySteps(
-                            dayKey = dayKey,
-                            steps = steps,
-                            distanceMeters = distMeters,
-                            sourceId = primaryOrigin
-                        )
-                    }
-                    if (distMeters > 0) {
-                        vitals += ImportedVitalMetric(
-                            metricType = "DISTANCE",
-                            valuePrimary = distMeters.toDouble(),
-                            unit = "m",
-                            sourceId = primaryOrigin,
-                            dayKey = dayKey,
-                            recordedAtEpochMs = dayEnd.toEpochMilli()
-                        )
-                    }
-                    val activeKcal = agg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories
-                        ?: agg[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories
-                    if (activeKcal != null && activeKcal > 1.0) {
-                        vitals += ImportedVitalMetric(
-                            metricType = "ACTIVE_CALORIES",
-                            valuePrimary = activeKcal,
-                            unit = "kcal",
-                            sourceId = primaryOrigin,
-                            dayKey = dayKey,
-                            recordedAtEpochMs = dayEnd.toEpochMilli()
-                        )
+                        val steps = agg[StepsRecord.COUNT_TOTAL]?.toInt() ?: 0
+                        val distMeters = agg[DistanceRecord.DISTANCE_TOTAL]?.inMeters?.toInt() ?: 0
+                        if (steps > 0 || distMeters > 0) {
+                            dailySteps += ImportedDailySteps(
+                                dayKey = dayKey,
+                                steps = steps,
+                                distanceMeters = distMeters,
+                                sourceId = primaryOrigin
+                            )
+                        }
+                        if (distMeters > 0) {
+                            vitals += ImportedVitalMetric(
+                                metricType = "DISTANCE",
+                                valuePrimary = distMeters.toDouble(),
+                                unit = "m",
+                                sourceId = primaryOrigin,
+                                dayKey = dayKey,
+                                recordedAtEpochMs = dayEnd.toEpochMilli()
+                            )
+                        }
+                        val activeKcal = agg[ActiveCaloriesBurnedRecord.ACTIVE_CALORIES_TOTAL]?.inKilocalories
+                            ?: agg[TotalCaloriesBurnedRecord.ENERGY_TOTAL]?.inKilocalories
+                        if (activeKcal != null && activeKcal > 1.0) {
+                            vitals += ImportedVitalMetric(
+                                metricType = "ACTIVE_CALORIES",
+                                valuePrimary = activeKcal,
+                                unit = "kcal",
+                                sourceId = primaryOrigin,
+                                dayKey = dayKey,
+                                recordedAtEpochMs = dayEnd.toEpochMilli()
+                            )
+                        }
                     }
                 }
             }
 
             // 2. Paginated Exercise Sessions
             val workouts = mutableListOf<ImportedWorkout>()
-            if (exercisePerm in granted) {
+            if (allowExercise && PERMISSION_EXERCISE in granted) {
                 readAllPages(client, ExerciseSessionRecord::class, rangeStart, now).forEach { rec ->
                     val pkg = rec.metadata.dataOrigin.packageName
                     recordOrigin(pkg)
@@ -223,7 +295,7 @@ class HealthConnectManager(private val context: Context) {
 
             // 3. Paginated Sleep Sessions
             val sleeps = mutableListOf<ImportedSleep>()
-            if (sleepPerm in granted) {
+            if (allowSleep && PERMISSION_SLEEP in granted) {
                 readAllPages(client, SleepSessionRecord::class, rangeStart, now).forEach { rec ->
                     val pkg = rec.metadata.dataOrigin.packageName
                     recordOrigin(pkg)
@@ -245,7 +317,7 @@ class HealthConnectManager(private val context: Context) {
             }
 
             // 4. Paginated Heart Rate Records (average sample per record)
-            if (hrPerm in granted) {
+            if (allowHr && PERMISSION_HEART_RATE in granted) {
                 readAllPages(client, HeartRateRecord::class, rangeStart, now).forEach { rec ->
                     if (rec.samples.isNotEmpty()) {
                         val pkg = rec.metadata.dataOrigin.packageName
@@ -266,7 +338,7 @@ class HealthConnectManager(private val context: Context) {
 
             // 5. Paginated Hydration Records
             val waters = mutableListOf<ImportedWater>()
-            if (hydrationPerm in granted) {
+            if (allowHydration && PERMISSION_HYDRATION in granted) {
                 readAllPages(client, HydrationRecord::class, rangeStart, now).forEach { rec ->
                     val ml = rec.volume.inMilliliters.toInt()
                     if (ml > 0) {
@@ -284,10 +356,21 @@ class HealthConnectManager(private val context: Context) {
                 }
             }
 
-            // 6. Paginated Weight Records
+            // 6. Paginated Nutrition Records
+            val nutritionList = mutableListOf<ImportedNutrition>()
+            if (allowNutrition && PERMISSION_NUTRITION in granted) {
+                readAllPages(client, NutritionRecord::class, rangeStart, now).forEach { rec ->
+                    mapNutritionRecordToImported(rec)?.let { importedMeal ->
+                        recordOrigin(importedMeal.sourceId)
+                        nutritionList += importedMeal
+                    }
+                }
+            }
+
+            // 7. Paginated Weight Records
             var latestWeight: Float? = null
             var latestWeightTs = 0L
-            if (weightPerm in granted) {
+            if (allowWeight && PERMISSION_WEIGHT in granted) {
                 readAllPages(client, WeightRecord::class, rangeStart, now).forEach { rec ->
                     val kg = rec.weight.inKilograms.toFloat()
                     if (kg > 10f) {
@@ -328,6 +411,7 @@ class HealthConnectManager(private val context: Context) {
                     workouts = workouts,
                     sleepSessions = sleeps,
                     waterEntries = waters,
+                    nutritionEntries = nutritionList,
                     vitalMetrics = vitals,
                     latestWeightKg = latestWeight,
                     sources = sources

@@ -65,15 +65,15 @@ private fun HealthPermissionsRationaleContent(onClose: () -> Unit) {
                         style = MaterialTheme.typography.titleMedium
                     )
                     Text(
-                        text = "• Steps, distance, calories, workouts, sleep, heart rate, hydration, and weight are read solely so your Fitbit, Google Fit, Samsung Health, Garmin, Oura, or Strava data appears inside your LifeWeave wellness trackers.",
+                        text = "• Steps, distance, calories, workouts, sleep, heart rate, hydration, nutrition meals, and weight are read solely so your Fitbit, Google Fit, Samsung Health, Garmin, Oura, or diet app data appears inside your LifeWeave wellness & nutrition trackers.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "• All synced fitness metrics stay stored privately on your device inside LifeWeave's local vault. Zero fitness records are sold, shared with advertisers, or uploaded to third-party servers.",
+                        text = "• All synced fitness & nutrition records stay stored privately on your device inside LifeWeave's local vault. Zero records are sold, shared with advertisers, or uploaded to third-party servers.",
                         style = MaterialTheme.typography.bodyMedium
                     )
                     Text(
-                        text = "• You can revoke any permission or disconnect any source at any time.",
+                        text = "• You control which categories are enabled and can grant or revoke any permission at any time without affecting manual tracking.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

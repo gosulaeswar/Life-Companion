@@ -1,0 +1,206 @@
+{
+  "entities": {
+    "UserAccount": {
+      "title": "UserAccount",
+      "description": "Authenticated user account and Family Circle subscription eligibility record.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "emailLower": { "type": "string" },
+        "displayName": { "type": "string" },
+        "subscriptionTier": { "type": "string", "enum": ["free", "plus", "family"] },
+        "eligibleForFiveProfiles": { "type": "boolean" },
+        "activeFamilyId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "Clients must submit FieldValue.serverTimestamp()." },
+        "updatedAt": { "type": "string", "format": "date-time", "description": "Clients must submit FieldValue.serverTimestamp()." }
+      },
+      "required": ["uid", "emailLower", "displayName", "subscriptionTier", "eligibleForFiveProfiles", "createdAt", "updatedAt"]
+    },
+    "FamilyCircle": {
+      "title": "FamilyCircle",
+      "description": "LifeWeave Family Circle root enforcing up to 5 profiles for eligible subscriptions and RBAC role mapping.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "familyName": { "type": "string" },
+        "subscriptionTier": { "type": "string", "enum": ["free", "family"] },
+        "eligibleForFiveProfiles": { "type": "boolean" },
+        "maxProfiles": { "type": "integer" },
+        "activeProfileCount": { "type": "integer" },
+        "memberUids": { "type": "array" },
+        "memberRoles": { "type": "object" },
+        "lastAcceptedInviteId": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "familyName", "subscriptionTier", "eligibleForFiveProfiles", "maxProfiles", "activeProfileCount", "memberUids", "memberRoles", "createdAt", "updatedAt"]
+    },
+    "FamilyMember": {
+      "title": "FamilyMember",
+      "description": "Circle member role and explicit consent-based sharing switches.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "familyId": { "type": "string" },
+        "displayName": { "type": "string" },
+        "relationLabel": { "type": "string" },
+        "role": { "type": "string", "enum": ["OWNER", "CAREGIVER", "MEMBER", "DEPENDENT_VIEW"] },
+        "memberUids": { "type": "array" },
+        "shareHydration": { "type": "boolean" },
+        "shareFitnessSleep": { "type": "boolean" },
+        "shareNutrition": { "type": "boolean" },
+        "shareMedicines": { "type": "boolean" },
+        "shareAppointments": { "type": "boolean" },
+        "shareCycle": { "type": "boolean" },
+        "allowCaregiverReminders": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "familyId", "displayName", "relationLabel", "role", "memberUids", "shareHydration", "shareFitnessSleep", "shareNutrition", "shareMedicines", "shareAppointments", "shareCycle", "allowCaregiverReminders", "createdAt", "updatedAt"]
+    },
+    "FamilyProfileSlot": {
+      "title": "FamilyProfileSlot",
+      "description": "Individual wellness profile slot (slot_1..slot_5) bounded by subscription eligibility.",
+      "type": "object",
+      "properties": {
+        "slotIndex": { "type": "integer" },
+        "familyId": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "linkedMemberUid": { "type": "string" },
+        "displayName": { "type": "string" },
+        "relationLabel": { "type": "string" },
+        "age": { "type": "integer" },
+        "genderIdentity": { "type": "string" },
+        "dailyWaterGoalMl": { "type": "integer" },
+        "managedByCaregiver": { "type": "boolean" },
+        "memberUids": { "type": "array" },
+        "shareHydration": { "type": "boolean" },
+        "shareFitnessSleep": { "type": "boolean" },
+        "shareNutrition": { "type": "boolean" },
+        "shareMedicines": { "type": "boolean" },
+        "shareAppointments": { "type": "boolean" },
+        "shareCycle": { "type": "boolean" },
+        "allowCaregiverReminders": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["slotIndex", "familyId", "ownerUid", "displayName", "relationLabel", "age", "genderIdentity", "dailyWaterGoalMl", "managedByCaregiver", "memberUids", "shareHydration", "shareFitnessSleep", "shareNutrition", "shareMedicines", "shareAppointments", "shareCycle", "allowCaregiverReminders", "createdAt", "updatedAt"]
+    },
+    "FamilyInvitation": {
+      "title": "FamilyInvitation",
+      "description": "Role-scoped invitation for a verified Google user to join an eligible Family Circle.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "familyName": { "type": "string" },
+        "inviterUid": { "type": "string" },
+        "inviterName": { "type": "string" },
+        "inviteeEmailLower": { "type": "string" },
+        "acceptedByUid": { "type": "string" },
+        "assignedRole": { "type": "string", "enum": ["CAREGIVER", "MEMBER", "DEPENDENT_VIEW"] },
+        "status": { "type": "string", "enum": ["PENDING", "ACCEPTED", "DECLINED", "REVOKED"] },
+        "inviteNote": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "familyName", "inviterUid", "inviterName", "inviteeEmailLower", "assignedRole", "status", "inviteNote", "createdAt", "updatedAt"]
+    },
+    "CaregiverReminder": {
+      "title": "CaregiverReminder",
+      "description": "Caregiver-assigned wellness reminder for a consenting family member or managed dependent profile.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "createdByName": { "type": "string" },
+        "targetProfileSlotId": { "type": "string" },
+        "targetMemberUid": { "type": "string" },
+        "targetDisplayName": { "type": "string" },
+        "title": { "type": "string" },
+        "category": { "type": "string", "enum": ["HYDRATION", "MEDICINE", "APPOINTMENT", "WELLNESS"] },
+        "scheduleTime24h": { "type": "string" },
+        "message": { "type": "string" },
+        "status": { "type": "string", "enum": ["ACTIVE", "COMPLETED", "PAUSED"] },
+        "memberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "createdByUid", "createdByName", "targetProfileSlotId", "targetMemberUid", "targetDisplayName", "title", "category", "scheduleTime24h", "message", "status", "memberUids", "createdAt", "updatedAt"]
+    },
+    "SharedAppointment": {
+      "title": "SharedAppointment",
+      "description": "Consent-gated shared doctor consultation or follow-up appointment inside a Family Circle.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "createdByUid": { "type": "string" },
+        "patientProfileSlotId": { "type": "string" },
+        "patientMemberUid": { "type": "string" },
+        "patientName": { "type": "string" },
+        "doctorName": { "type": "string" },
+        "specialty": { "type": "string" },
+        "clinicOrHospital": { "type": "string" },
+        "scheduledEpochMs": { "type": "integer" },
+        "notes": { "type": "string" },
+        "status": { "type": "string", "enum": ["SCHEDULED", "COMPLETED", "CANCELLED"] },
+        "consentGranted": { "type": "boolean" },
+        "visibleMemberUids": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "createdByUid", "patientProfileSlotId", "patientMemberUid", "patientName", "doctorName", "specialty", "clinicOrHospital", "scheduledEpochMs", "notes", "status", "consentGranted", "visibleMemberUids", "createdAt", "updatedAt"]
+    },
+    "SharedWellnessSnapshot": {
+      "title": "SharedWellnessSnapshot",
+      "description": "Explicit consent-gated per-profile wellness summary shared with the Family Circle.",
+      "type": "object",
+      "properties": {
+        "familyId": { "type": "string" },
+        "profileSlotId": { "type": "string" },
+        "ownerUid": { "type": "string" },
+        "profileName": { "type": "string" },
+        "category": { "type": "string", "enum": ["HYDRATION", "FITNESS_SLEEP", "NUTRITION", "MEDICINES", "CYCLE"] },
+        "summaryLine": { "type": "string" },
+        "primaryMetricLabel": { "type": "string" },
+        "consentEnabled": { "type": "boolean" },
+        "memberUids": { "type": "array" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["familyId", "profileSlotId", "ownerUid", "profileName", "category", "summaryLine", "primaryMetricLabel", "consentEnabled", "memberUids", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/UserAccount" },
+      "description": "Private authenticated user account and subscription entitlement document."
+    },
+    "/families/{familyId}": {
+      "schema": { "$ref": "#/entities/FamilyCircle" },
+      "description": "Family Circle root document with subscription capacity (max 5) and member roles."
+    },
+    "/families/{familyId}/members/{memberUid}": {
+      "schema": { "$ref": "#/entities/FamilyMember" },
+      "description": "Authenticated circle member metadata and explicit consent switches."
+    },
+    "/families/{familyId}/profiles/{profileSlotId}": {
+      "schema": { "$ref": "#/entities/FamilyProfileSlot" },
+      "description": "Individual wellness profiles (slot_1..slot_5) enforced by subscription tier."
+    },
+    "/familyInvitations/{inviteId}": {
+      "schema": { "$ref": "#/entities/FamilyInvitation" },
+      "description": "Top-level collection for role-scoped Family Circle invitations."
+    },
+    "/families/{familyId}/caregiverReminders/{reminderId}": {
+      "schema": { "$ref": "#/entities/CaregiverReminder" },
+      "description": "Caregiver reminders scoped by family role and target consent."
+    },
+    "/families/{familyId}/appointments/{appointmentId}": {
+      "schema": { "$ref": "#/entities/SharedAppointment" },
+      "description": "Shared family doctor appointments gated by role and explicit shareAppointments consent."
+    },
+    "/families/{familyId}/sharedWellnessSnapshots/{snapshotId}": {
+      "schema": { "$ref": "#/entities/SharedWellnessSnapshot" },
+      "description": "Individual wellness record snapshots shared strictly when explicit category consent is enabled."
+    }
+  }
+}

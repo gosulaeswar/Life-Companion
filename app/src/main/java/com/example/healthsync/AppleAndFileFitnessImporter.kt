@@ -282,6 +282,7 @@ class AppleAndFileFitnessImporter {
         val dailySteps = mutableListOf<ImportedDailySteps>()
         val workouts = mutableListOf<ImportedWorkout>()
         val vitals = mutableListOf<ImportedVitalMetric>()
+        val nutritionEntries = mutableListOf<ImportedNutrition>()
 
         val directSteps = root.optInt("steps", 0)
         if (directSteps > 0) {
@@ -340,12 +341,27 @@ class AppleAndFileFitnessImporter {
                         sourceId = "fitness_file_import"
                     )
                 }
+                val foodName = obj.optString("food", obj.optString("mealName", ""))
+                val foodCals = obj.optInt("intakeCalories", 0)
+                if (foodName.isNotBlank() && foodCals > 0) {
+                    nutritionEntries += ImportedNutrition(
+                        mealType = obj.optString("mealType", "Snack").ifBlank { "Snack" },
+                        foodSummary = "📁 $foodName",
+                        calories = foodCals,
+                        proteinGrams = obj.optInt("proteinGrams", 0),
+                        carbsGrams = obj.optInt("carbsGrams", 0),
+                        fatGrams = obj.optInt("fatGrams", 0),
+                        loggedAtEpochMs = System.currentTimeMillis(),
+                        sourceId = "fitness_file_import"
+                    )
+                }
             }
         }
-        val count = dailySteps.size + workouts.size + vitals.size
+        val count = dailySteps.size + workouts.size + vitals.size + nutritionEntries.size
         return HealthSyncPayload(
             dailySteps = dailySteps,
             workouts = workouts,
+            nutritionEntries = nutritionEntries,
             vitalMetrics = vitals,
             sources = if (count > 0) {
                 listOf(

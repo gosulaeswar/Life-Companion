@@ -78,6 +78,27 @@ data class AiDiagnosticReport(
     val recommendation: String
 )
 
+data class AiHealthIntelligenceReport(
+    val timeframe: String,
+    val headline: String,
+    val recordedFactsSummary: String,
+    val observedChanges: List<String>,
+    val personalizedSuggestions: List<String>,
+    val dailyPlanHighlights: List<String>,
+    val uncertaintyAndCoverageNote: String,
+    val disclaimer: String,
+    val isFromCloudAi: Boolean = true
+)
+
+data class AiReportExplanation(
+    val title: String,
+    val plainLanguageSummary: String,
+    val keyObservations: List<String>,
+    val questionsForDoctor: List<String>,
+    val disclaimer: String,
+    val isFromCloudAi: Boolean = true
+)
+
 class LifeWeaveAiService(context: Context? = null) {
     private val appContext = context?.applicationContext
 
@@ -147,6 +168,35 @@ class LifeWeaveAiService(context: Context? = null) {
         )
     )
 
+    private val healthIntelligenceSchema = Schema.obj(
+        properties = mapOf(
+            "headline" to Schema.string(
+                description = "One warm, concise headline summarizing the authorized recorded period."
+            ),
+            "recordedFactsSummary" to Schema.string(
+                description = "Concise summary stating ONLY recorded user metrics from context, explicitly noting unlogged or privacy-excluded modules."
+            ),
+            "observedChanges" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 5 bullet observations comparing current vs previous period strictly based on recorded values."
+            ),
+            "personalizedSuggestions" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 4 gentle, non-diagnostic AI wellness suggestions clearly phrased as optional suggestions."
+            ),
+            "dailyPlanHighlights" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 3 actionable morning/midday/evening wellness steps tied to missed routines or incomplete goals."
+            ),
+            "uncertaintyAndCoverageNote" to Schema.string(
+                description = "Explicit statement of sparse data, missing logs, or privacy-excluded categories."
+            ),
+            "disclaimer" to Schema.string(
+                description = "Brief non-diagnostic wellness disclaimer stating AI suggestions are informational only."
+            )
+        )
+    )
+
     private val assistantModel by lazy {
         Firebase.ai.generativeModel(
             modelName = "gemini-3.8-flash",
@@ -163,6 +213,98 @@ class LifeWeaveAiService(context: Context? = null) {
             generationConfig = generationConfig {
                 responseMimeType = "application/json"
                 responseSchema = prescriptionSchema
+            }
+        )
+    }
+
+    private val healthIntelligenceModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = healthIntelligenceSchema
+            }
+        )
+    }
+
+    private val reportExplanationSchema = Schema.obj(
+        properties = mapOf(
+            "plainLanguageSummary" to Schema.string(
+                description = "Clear, calm plain-language explanation of what this health report or prescription describes, without diagnosing or changing doses."
+            ),
+            "keyObservations" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 6 key items, values, or instructions strictly visible in the uploaded document or metadata."
+            ),
+            "questionsForDoctor" to Schema.array(
+                items = Schema.string(),
+                description = "2 to 4 helpful questions the patient can ask their healthcare professional."
+            ),
+            "disclaimer" to Schema.string(
+                description = "Explicit statement that this explanation is informational only and not a substitute for a qualified medical professional."
+            )
+        )
+    )
+
+    private val reportExplanationModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = reportExplanationSchema
+            }
+        )
+    }
+
+    private val indianNutritionSchema = Schema.obj(
+        properties = mapOf(
+            "planTitle" to Schema.string(
+                description = "Warm regional Indian nutrition plan title e.g. 'South Indian Balanced Day Plan'"
+            ),
+            "regionalNotes" to Schema.string(
+                description = "2-3 concise sentences explaining how this regional Indian plan supports the user's goal, macro targets, and hydration."
+            ),
+            "groceryHighlights" to Schema.array(
+                items = Schema.string(),
+                description = "3 to 6 practical Indian kitchen staples or fresh produce needed for this plan."
+            ),
+            "meals" to Schema.array(
+                items = Schema.obj(
+                    properties = mapOf(
+                        "mealType" to Schema.enumeration(
+                            values = listOf("Breakfast", "Snack", "Lunch", "Dinner"),
+                            description = "App logging category"
+                        ),
+                        "slotLabel" to Schema.string(
+                            description = "Display slot e.g. 'Breakfast', 'Mid-Morning', 'Lunch', 'Evening Snack', 'Dinner'"
+                        ),
+                        "dishName" to Schema.string(
+                            description = "Authentic Indian dish name matching the requested region and diet preference"
+                        ),
+                        "portionLabel" to Schema.string(
+                            description = "Practical Indian household portion e.g. '2 phulkas + 1 katori dal + cucumber salad'"
+                        ),
+                        "calories" to Schema.integer(description = "Estimated kcal for this portion"),
+                        "proteinGrams" to Schema.integer(description = "Estimated protein in grams"),
+                        "carbsGrams" to Schema.integer(description = "Estimated carbs in grams"),
+                        "fatGrams" to Schema.integer(description = "Estimated fat in grams"),
+                        "prepTip" to Schema.string(description = "Quick kitchen or nutrition tip (1 short sentence)")
+                    )
+                ),
+                description = "5 structured Indian meal slots (Breakfast, Mid-Morning, Lunch, Evening Snack, Dinner)."
+            ),
+            "disclaimer" to Schema.string(
+                description = "Informational Indian wellness nutrition disclaimer stating this is not medical nutrition therapy."
+            )
+        )
+    )
+
+    private val indianNutritionModel by lazy {
+        Firebase.ai.generativeModel(
+            modelName = "gemini-3.8-flash",
+            generationConfig = generationConfig {
+                responseMimeType = "application/json"
+                responseSchema = indianNutritionSchema
             }
         )
     }
@@ -221,7 +363,7 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("- digital_wellbeing: screen time cap & focus blocks")
                 appendLine("- reports_analytics: weekly trends")
                 appendLine()
-                appendLine("Current snapshot:")
+                appendLine("Current authorized wellness records & trends:")
                 appendLine(wellnessContextSummary)
                 appendLine()
                 appendLine("Rules:")
@@ -230,7 +372,8 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("3. Medicine mention -> LOG_MEDICINE.")
                 appendLine("4. Steps/exercise/sleep -> LOG_STEPS, LOG_EXERCISE, or LOG_SLEEP (hours*10).")
                 appendLine("5. Open module request -> OPEN_MODULE with moduleKey in secondaryText.")
-                appendLine("6. Question or tip -> actions=[] and answer concisely in ${languageOption.label}.")
+                appendLine("6. Question, summary, or wellness tip -> actions=[] and answer concisely in ${languageOption.label} using ONLY facts present in the authorized snapshot above.")
+                appendLine("7. STRICT SAFETY & PRIVACY RULES: NEVER invent measurements or guess missing data; clearly state when a category has no records or is excluded by privacy settings; clearly distinguish recorded numbers from gentle suggestions; NEVER diagnose medical conditions or change prescribed medication dosages.")
                 appendLine()
                 appendLine("User: \"$userMessage\"")
             }
@@ -286,6 +429,81 @@ class LifeWeaveAiService(context: Context? = null) {
             onStageUpdate = onStageUpdate,
             onPartialPreview = onPartialPreview
         )
+    }
+
+    suspend fun generatePersonalHealthIntelligence(
+        timeframeName: String,
+        languageOption: VoiceLanguageOption,
+        groundedWellnessContext: String,
+        onStageUpdate: (String) -> Unit = {},
+        onPartialPreview: (String) -> Unit = {}
+    ): Result<AiHealthIntelligenceReport> {
+        var appCheckPassed = false
+        val accumulatedJson = StringBuilder()
+        return try {
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Personal Health Intelligence cloud synthesis needs Firebase configuration bundled in the APK."
+                    )
+                )
+            }
+
+            if (appContext != null) {
+                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
+                    is AppCheckVerificationResult.Success -> appCheckPassed = true
+                    is AppCheckVerificationResult.Timeout -> return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    is AppCheckVerificationResult.Failure -> return Result.failure(IllegalStateException(check.diagnosticMessage))
+                }
+            }
+
+            val prompt = buildString {
+                appendLine("You are LifeWeave Personal Health Intelligence.")
+                appendLine("Generate a $timeframeName wellness intelligence report in ${languageOption.label} (${languageOption.tag}).")
+                appendLine()
+                appendLine("STRICT GROUNDING & SAFETY RULES:")
+                appendLine("1. Use ONLY the authorized recorded measurements below. NEVER invent or extrapolate numbers.")
+                appendLine("2. Separate recorded observations ('recordedFactsSummary' and 'observedChanges') from wellness ideas ('personalizedSuggestions' and 'dailyPlanHighlights').")
+                appendLine("3. NEVER provide medical diagnoses or recommend changing prescribed medicine dosages.")
+                appendLine("4. If data for a metric or prior baseline is unavailable or excluded by privacy settings, state that clearly in 'uncertaintyAndCoverageNote'.")
+                appendLine()
+                appendLine(groundedWellnessContext)
+            }
+
+            onStageUpdate("Synthesizing $timeframeName insights in ${languageOption.label}...")
+            withTimeout(60_000L) {
+                healthIntelligenceModel.generateContentStream(prompt).collect { chunk ->
+                    val chunkText = chunk.text.orEmpty()
+                    if (chunkText.isNotEmpty()) {
+                        accumulatedJson.append(chunkText)
+                        val preview = extractStreamingFieldPreview(accumulatedJson.toString(), "headline")
+                        if (preview.isNotBlank()) {
+                            onPartialPreview(preview)
+                        }
+                    }
+                }
+            }
+
+            val rawJson = accumulatedJson.toString()
+            if (rawJson.isBlank()) {
+                throw IllegalStateException("AI returned an empty intelligence report.")
+            }
+            Result.success(parseHealthIntelligenceJson(rawJson, timeframeName))
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Personal health intelligence stream timed out", e)
+            val detail = if (appCheckPassed) {
+                "AI synthesis timed out after 60s (App Check passed; received ${accumulatedJson.length} chars). Local insights below remain up to date."
+            } else {
+                "AI request timed out after 60 seconds while checking App Check."
+            }
+            Result.failure(IllegalStateException(detail))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Personal health intelligence synthesis failed", e)
+            Result.failure(e)
+        }
     }
 
     suspend fun extractPrescriptionFromUri(
@@ -370,6 +588,198 @@ class LifeWeaveAiService(context: Context? = null) {
             throw e
         } catch (e: Exception) {
             Log.e(TAG, "Prescription scan failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun explainHealthDocument(
+        title: String,
+        category: String,
+        providerOrLab: String,
+        notes: String,
+        fileBytes: ByteArray?,
+        mimeType: String,
+        languageOption: VoiceLanguageOption,
+        onStageUpdate: (String) -> Unit = {},
+        onPartialPreview: (String) -> Unit = {}
+    ): Result<AiReportExplanation> {
+        var appCheckPassed = false
+        val accumulatedJson = StringBuilder()
+        return try {
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Report AI Explainer needs Firebase configuration bundled in the APK."
+                    )
+                )
+            }
+
+            if (appContext != null) {
+                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
+                    is AppCheckVerificationResult.Success -> appCheckPassed = true
+                    is AppCheckVerificationResult.Timeout -> return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    is AppCheckVerificationResult.Failure -> return Result.failure(IllegalStateException(check.diagnosticMessage))
+                }
+            }
+
+            val imageBitmap: Bitmap? = if (fileBytes != null && mimeType.startsWith("image/", ignoreCase = true)) {
+                withContext(Dispatchers.IO) {
+                    decodeScaledBitmapFromBytes(fileBytes, maxDimension = 1280)
+                }
+            } else null
+
+            val promptText = buildString {
+                appendLine("You are explaining a personal health document in calm, plain ${languageOption.label} (${languageOption.tag}).")
+                appendLine("Document Title: $title")
+                appendLine("Category: $category")
+                if (providerOrLab.isNotBlank()) appendLine("Provider/Lab: $providerOrLab")
+                if (notes.isNotBlank()) appendLine("User Notes: $notes")
+                appendLine()
+                appendLine("STRICT SAFETY RULES:")
+                appendLine("1. Explain medical terms and lab values clearly for a layperson using ONLY details visible in the document or metadata above.")
+                appendLine("2. NEVER invent values, NEVER diagnose diseases, and NEVER suggest changing medication dosages or schedules.")
+                appendLine("3. Always state clearly in 'disclaimer' that this is informational only and NOT a substitute for a qualified medical professional.")
+            }
+
+            val inputContent = content {
+                if (imageBitmap != null) {
+                    image(imageBitmap)
+                } else if (fileBytes != null && mimeType.equals("application/pdf", ignoreCase = true)) {
+                    inlineData(fileBytes, "application/pdf")
+                }
+                text(promptText)
+            }
+
+            onStageUpdate("Analyzing $category in ${languageOption.label}...")
+            withTimeout(60_000L) {
+                reportExplanationModel.generateContentStream(inputContent).collect { chunk ->
+                    val chunkText = chunk.text.orEmpty()
+                    if (chunkText.isNotEmpty()) {
+                        accumulatedJson.append(chunkText)
+                        val preview = extractStreamingFieldPreview(accumulatedJson.toString(), "plainLanguageSummary")
+                        if (preview.isNotBlank()) {
+                            onPartialPreview(preview)
+                        }
+                    }
+                }
+            }
+
+            val rawJson = accumulatedJson.toString()
+            if (rawJson.isBlank()) {
+                throw IllegalStateException("AI returned an empty report explanation.")
+            }
+            Result.success(parseReportExplanationJson(rawJson, title))
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Report explanation stream timed out", e)
+            val detail = if (appCheckPassed) {
+                "Document explanation timed out after 60s (received ${accumulatedJson.length} chars)."
+            } else {
+                "Document explanation timed out while verifying App Check."
+            }
+            Result.failure(IllegalStateException(detail))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Document explanation failed", e)
+            Result.failure(e)
+        }
+    }
+
+    suspend fun generateIndianNutritionPlan(
+        regionLabel: String,
+        dietaryLabel: String,
+        goalLabel: String,
+        targetCalories: Int,
+        targetProteinGrams: Int,
+        targetCarbsGrams: Int,
+        targetFatGrams: Int,
+        alreadyLoggedTodaySummary: String,
+        avoidAllergens: List<String>,
+        languageOption: VoiceLanguageOption,
+        onStageUpdate: (String) -> Unit = {},
+        onPartialPreview: (String) -> Unit = {}
+    ): Result<com.example.domain.IndianMealPlanResult> {
+        var appCheckPassed = false
+        val accumulatedJson = StringBuilder()
+        return try {
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException("Cloud Indian Meal Planner needs Firebase config bundled in APK.")
+                )
+            }
+
+            if (appContext != null) {
+                when (val check = verifyAppCheckToken(appContext, timeoutMs = 15_000L)) {
+                    is AppCheckVerificationResult.Success -> appCheckPassed = true
+                    is AppCheckVerificationResult.Timeout -> return Result.failure(IllegalStateException(check.diagnosticMessage))
+                    is AppCheckVerificationResult.Failure -> return Result.failure(IllegalStateException(check.diagnosticMessage))
+                }
+            }
+
+            val allergenClause = if (avoidAllergens.isEmpty()) {
+                "No food allergies recorded in vault."
+            } else {
+                "CRITICAL: Strictly exclude these allergens and all dishes containing them: ${avoidAllergens.joinToString(", ")}."
+            }
+
+            val prompt = buildString {
+                appendLine("You are LifeWeave's Indian Home-Kitchen Nutrition Planner.")
+                appendLine("Create a practical, realistic 1-day meal plan in ${languageOption.label} (${languageOption.tag}).")
+                appendLine("Regional Preference: $regionLabel")
+                appendLine("Dietary Preference: $dietaryLabel")
+                appendLine("Wellness Goal: $goalLabel")
+                appendLine("Daily Targets: ~$targetCalories kcal, ${targetProteinGrams}g protein, ${targetCarbsGrams}g carbs, ${targetFatGrams}g fat.")
+                appendLine("Already Logged Today: $alreadyLoggedTodaySummary")
+                appendLine(allergenClause)
+                appendLine()
+                appendLine("RULES:")
+                appendLine("1. Suggest authentic everyday Indian dishes (use katori, phulka, idli, dosa, bowl, glass portions).")
+                appendLine("2. Strictly honor dietary preference ($dietaryLabel) and NEVER include excluded allergens.")
+                appendLine("3. Provide realistic macro estimates per slot and include high-protein Indian pairings where helpful.")
+                appendLine("4. Informational wellness guidance only — never diagnose disease or prescribe medical therapy.")
+            }
+
+            onStageUpdate("Planning $regionLabel meals in ${languageOption.label}...")
+            withTimeout(60_000L) {
+                indianNutritionModel.generateContentStream(prompt).collect { chunk ->
+                    val chunkText = chunk.text.orEmpty()
+                    if (chunkText.isNotEmpty()) {
+                        accumulatedJson.append(chunkText)
+                        val preview = extractStreamingFieldPreview(accumulatedJson.toString(), "planTitle")
+                        if (preview.isNotBlank()) {
+                            onPartialPreview(preview)
+                        }
+                    }
+                }
+            }
+
+            val rawJson = accumulatedJson.toString()
+            if (rawJson.isBlank()) {
+                throw IllegalStateException("AI returned an empty nutrition plan.")
+            }
+            Result.success(
+                parseIndianNutritionPlanJson(
+                    jsonString = rawJson,
+                    regionLabel = regionLabel,
+                    dietaryLabel = dietaryLabel,
+                    goalLabel = goalLabel,
+                    avoidedAllergens = avoidAllergens
+                )
+            )
+        } catch (e: TimeoutCancellationException) {
+            Log.e(TAG, "Indian nutrition plan stream timed out", e)
+            val detail = if (appCheckPassed) {
+                "Indian meal plan timed out after 60s (received ${accumulatedJson.length} chars)."
+            } else {
+                "Indian meal plan timed out while verifying App Check."
+            }
+            Result.failure(IllegalStateException(detail))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            Log.e(TAG, "Indian nutrition planner failed", e)
             Result.failure(e)
         }
     }
@@ -478,6 +888,19 @@ class LifeWeaveAiService(context: Context? = null) {
         }
     }
 
+    private fun decodeScaledBitmapFromBytes(bytes: ByteArray, maxDimension: Int): Bitmap? {
+        val boundsOpts = BitmapFactory.Options().apply { inJustDecodeBounds = true }
+        BitmapFactory.decodeByteArray(bytes, 0, bytes.size, boundsOpts)
+        val maxSide = max(boundsOpts.outWidth, boundsOpts.outHeight)
+        if (maxSide <= 0) return null
+        var sample = 1
+        while (maxSide / sample > maxDimension) {
+            sample *= 2
+        }
+        val decodeOpts = BitmapFactory.Options().apply { inSampleSize = sample }
+        return BitmapFactory.decodeByteArray(bytes, 0, bytes.size, decodeOpts)
+    }
+
     companion object {
         internal fun extractStreamingFieldPreview(partialJson: String, fieldName: String): String {
             val token = "\"$fieldName\""
@@ -564,6 +987,125 @@ class LifeWeaveAiService(context: Context? = null) {
                 followUpDaysFromToday = json.optInt("followUpDaysFromToday", 0).coerceAtLeast(0),
                 followUpNotes = json.optString("followUpNotes", "").trim(),
                 medicines = meds
+            )
+        }
+
+        fun parseHealthIntelligenceJson(
+            jsonString: String,
+            defaultTimeframe: String = "WEEKLY"
+        ): AiHealthIntelligenceReport {
+            val json = JSONObject(jsonString)
+            fun readStringArray(key: String): List<String> {
+                val arr = json.optJSONArray(key) ?: return emptyList()
+                return (0 until arr.length())
+                    .mapNotNull { idx -> arr.optString(idx)?.trim()?.takeIf { it.isNotEmpty() } }
+            }
+            return AiHealthIntelligenceReport(
+                timeframe = defaultTimeframe,
+                headline = json.optString("headline", "Personal Wellness Summary").ifBlank { "Personal Wellness Summary" },
+                recordedFactsSummary = json.optString("recordedFactsSummary", "").trim(),
+                observedChanges = readStringArray("observedChanges"),
+                personalizedSuggestions = readStringArray("personalizedSuggestions"),
+                dailyPlanHighlights = readStringArray("dailyPlanHighlights"),
+                uncertaintyAndCoverageNote = json.optString(
+                    "uncertaintyAndCoverageNote",
+                    "Based strictly on records logged and authorized on this device."
+                ).trim(),
+                disclaimer = json.optString(
+                    "disclaimer",
+                    "Informational wellness insights only—not a medical diagnosis."
+                ).trim(),
+                isFromCloudAi = true
+            )
+        }
+
+        fun parseReportExplanationJson(
+            jsonString: String,
+            docTitle: String
+        ): AiReportExplanation {
+            val json = JSONObject(jsonString)
+            fun readStringArray(key: String): List<String> {
+                val arr = json.optJSONArray(key) ?: return emptyList()
+                return (0 until arr.length())
+                    .mapNotNull { idx -> arr.optString(idx)?.trim()?.takeIf { it.isNotEmpty() } }
+            }
+            return AiReportExplanation(
+                title = docTitle,
+                plainLanguageSummary = json.optString(
+                    "plainLanguageSummary",
+                    "Document summarized for informational review."
+                ).trim(),
+                keyObservations = readStringArray("keyObservations"),
+                questionsForDoctor = readStringArray("questionsForDoctor"),
+                disclaimer = json.optString(
+                    "disclaimer",
+                    "Informational explanation only — not a substitute for a qualified medical professional."
+                ).trim(),
+                isFromCloudAi = true
+            )
+        }
+
+        fun parseIndianNutritionPlanJson(
+            jsonString: String,
+            regionLabel: String,
+            dietaryLabel: String,
+            goalLabel: String,
+            avoidedAllergens: List<String> = emptyList()
+        ): com.example.domain.IndianMealPlanResult {
+            val json = JSONObject(jsonString)
+            val mealsArray = json.optJSONArray("meals")
+            val slots = mutableListOf<com.example.domain.PlannedIndianMealSlot>()
+            if (mealsArray != null) {
+                for (i in 0 until mealsArray.length()) {
+                    val m = mealsArray.optJSONObject(i) ?: continue
+                    val dish = m.optString("dishName", "").trim()
+                    if (dish.isNotEmpty()) {
+                        val rawType = m.optString("mealType", "Lunch").ifBlank { "Lunch" }
+                        val normalizedType = when {
+                            rawType.equals("Breakfast", ignoreCase = true) -> "Breakfast"
+                            rawType.equals("Lunch", ignoreCase = true) -> "Lunch"
+                            rawType.equals("Dinner", ignoreCase = true) -> "Dinner"
+                            else -> "Snack"
+                        }
+                        slots += com.example.domain.PlannedIndianMealSlot(
+                            mealType = normalizedType,
+                            slotLabel = m.optString("slotLabel", normalizedType).ifBlank { normalizedType },
+                            dishName = dish,
+                            portionLabel = m.optString("portionLabel", "1 serving").ifBlank { "1 serving" },
+                            calories = m.optInt("calories", 300).coerceIn(30, 1500),
+                            proteinGrams = m.optInt("proteinGrams", 10).coerceIn(0, 120),
+                            carbsGrams = m.optInt("carbsGrams", 35).coerceIn(0, 250),
+                            fatGrams = m.optInt("fatGrams", 8).coerceIn(0, 100),
+                            prepTip = m.optString("prepTip", "").trim()
+                        )
+                    }
+                }
+            }
+            val groceryArr = json.optJSONArray("groceryHighlights")
+            val groceries = mutableListOf<String>()
+            if (groceryArr != null) {
+                for (i in 0 until groceryArr.length()) {
+                    groceryArr.optString(i)?.trim()?.takeIf { it.isNotEmpty() }?.let { groceries += it }
+                }
+            }
+            return com.example.domain.IndianMealPlanResult(
+                planTitle = json.optString("planTitle", "$regionLabel $goalLabel Plan").ifBlank { "$regionLabel Plan" },
+                regionLabel = regionLabel,
+                dietaryLabel = dietaryLabel,
+                goalLabel = goalLabel,
+                regionalNotes = json.optString("regionalNotes", "").trim(),
+                meals = slots,
+                totalCalories = slots.sumOf { it.calories },
+                totalProteinGrams = slots.sumOf { it.proteinGrams },
+                totalCarbsGrams = slots.sumOf { it.carbsGrams },
+                totalFatGrams = slots.sumOf { it.fatGrams },
+                groceryHighlights = groceries,
+                avoidedAllergens = avoidedAllergens,
+                disclaimer = json.optString(
+                    "disclaimer",
+                    com.example.domain.IndianNutritionEngine.STANDARD_NUTRITION_DISCLAIMER
+                ).trim(),
+                isFromCloudAi = true
             )
         }
     }
