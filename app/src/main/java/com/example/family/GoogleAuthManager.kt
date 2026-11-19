@@ -1,5 +1,6 @@
 package com.example.family
 
+import android.annotation.SuppressLint
 import android.content.Context
 import androidx.credentials.ClearCredentialStateRequest
 import androidx.credentials.CredentialManager
@@ -7,7 +8,6 @@ import androidx.credentials.CustomCredential
 import androidx.credentials.GetCredentialRequest
 import androidx.credentials.exceptions.GetCredentialCancellationException
 import androidx.credentials.exceptions.NoCredentialException
-import com.example.R
 import com.google.android.libraries.identity.googleid.GetGoogleIdOption
 import com.google.android.libraries.identity.googleid.GetSignInWithGoogleOption
 import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential
@@ -73,12 +73,25 @@ class GoogleAuthManager(
         )
     }
 
+    @SuppressLint("DiscouragedApi")
+    private fun resolveDefaultWebClientId(): String? {
+        val resId = appContext.resources.getIdentifier(
+            "default_web_client_id",
+            "string",
+            appContext.packageName
+        )
+        if (resId == 0) return null
+        return runCatching { appContext.getString(resId).trim() }
+            .getOrNull()
+            ?.takeIf { it.isNotEmpty() }
+    }
+
     suspend fun attemptSilentSignIn(activityContext: Context): Result<AuthenticatedUserSnapshot?> {
         if (firebaseAuth.currentUser != null) {
             return Result.success(currentUserSnapshot())
         }
+        val webClientId = resolveDefaultWebClientId() ?: return Result.success(null)
         return try {
-            val webClientId = appContext.getString(R.string.default_web_client_id)
             val googleIdOption = GetGoogleIdOption.Builder()
                 .setServerClientId(webClientId)
                 .setFilterByAuthorizedAccounts(true)
@@ -102,8 +115,13 @@ class GoogleAuthManager(
     }
 
     suspend fun signInWithGoogleInteractive(activityContext: Context): Result<AuthenticatedUserSnapshot> {
+        val webClientId = resolveDefaultWebClientId()
+            ?: return Result.failure(
+                IllegalStateException(
+                    "Google Sign-In is not configured in this build. Add google-services.json with a Web OAuth client to enable cloud sign-in."
+                )
+            )
         return try {
-            val webClientId = appContext.getString(R.string.default_web_client_id)
             val signInOption = GetSignInWithGoogleOption.Builder(webClientId).build()
             val request = GetCredentialRequest.Builder()
                 .addCredentialOption(signInOption)
