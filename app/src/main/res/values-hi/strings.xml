@@ -65,4 +65,25 @@
     <string name="permissions_setup_subtitle">बैकग्राउंड में पानी पीने और दवा लेने के नोटिफिकेशन, लॉक-स्क्रीन अलार्म पॉपअप व स्क्रीन-टाइम के लिए आवश्यक अनुमतियाँ दें।</string>
     <string name="permissions_grant_prompts_cta">नोटिफिकेशन व माइक अनुमति दें</string>
     <string name="permissions_continue_cta">प्रोफ़ाइल लॉगिन पर आगे बढ़ें</string>
+
+    <string name="privacy_export_encrypted">एन्क्रिप्टेड वॉल्ट निर्यात करें (LCENC1)</string>
+    <string name="privacy_restore_backup">बैकअप पुनर्स्थापित करें (JSON / एन्क्रिप्टेड)</string>
+    <string name="intel_screen_title">स्वास्थ्य बुद्धिमत्ता व रिपोर्ट</string>
+    <string name="intel_disclaimer">केवल सामान्य स्वास्थ्य जानकारी हेतु — यह योग्य चिकित्सक की सलाह का विकल्प नहीं है।</string>
+    <string name="intel_privacy_title">AI डेटा अनुमति</string>
+    <string name="vault_screen_title">व्यक्तिगत स्वास्थ्य रिकॉर्ड वॉल्ट</string>
+    <string name="vault_ai_disclaimer">केवल सामान्य जानकारी हेतु — यह चिकित्सीय निदान या योग्य डॉक्टर की सलाह का विकल्प नहीं है।</string>
+    <string name="vault_export_pdf">डॉक्टर-रेडी PDF निर्यात करें</string>
+    <string name="medical_refill_alert">दवा रीफिल या समाप्ति तिथि पर ध्यान दें</string>
+    <string name="nutrition_indian_planner_title">AI भारतीय पोषण योजनाकार</string>
+    <string name="nutrition_disclaimer">केवल सामान्य भारतीय आहार मार्गदर्शन हेतु — यह चिकित्सीय पोषण उपचार नहीं है। व्यक्तिगत एलर्जी के अनुसार सामग्री जांचें।</string>
+    <string name="hc_permissions_categories_title">Health Connect अनुमतियाँ व श्रेणियाँ</string>
+    <string name="hc_manual_preserved_note">आहार, जल, व्यायाम, नींद, दवा, वॉल्ट व चक्र की मैनुअल लॉगिंग हमेशा सक्रिय रहती है।</string>
+    <string name="family_circle_title">लाइफवीव फैमिली सर्कल</string>
+    <string name="family_circle_consent_note">पात्र प्लान पर 5 प्रोफ़ाइल तक, केयरगिवर रिमाइंडर, साझा अपॉइंटमेंट और सहमति-आधारित शेयरिंग के लिए Google खाते से साइन इन करें।</string>
+    <string name="routines_mood_title">दिनचर्या, मूड व प्रगति</string>
+    <string name="routines_mood_subtitle">वैकल्पिक आदतें, निजी विचार व तनाव-मुक्त उपलब्धियाँ</string>
+    <string name="subscription_screen_title">लाइफवीव प्लान व बिलिंग</string>
+    <string name="subscription_period_always_free">पीरियड व चक्र देखभाल हमेशा 100% निःशुल्क रहेगी — कभी किसी सब्सक्रिप्शन में बंद नहीं होगी।</string>
+    <string name="subscription_restore_cta">Google Play खरीदारी पुनर्स्थापित करें</string>
 </resources>

@@ -65,4 +65,25 @@
     <string name="permissions_setup_subtitle">ব্যাকগ্রাউন্ডে জল ও ওষুধের নোট, অ্যালার্ম পপআপ এবং স্ক্রিন-টাইম চালু রাখতে নিচের অনুমতিগুলো দিন।</string>
     <string name="permissions_grant_prompts_cta">নোটিফিকেশন ও মাইক অনুমতি দিন</string>
     <string name="permissions_continue_cta">লগইন / প্রোফাইলে এগিয়ে যান</string>
+
+    <string name="privacy_export_encrypted">এনক্রিপ্টেড ভল্ট রপ্তানি করুন (LCENC1)</string>
+    <string name="privacy_restore_backup">ব্যাকআপ পুনরুদ্ধার করুন (JSON / এনক্রিপ্টেড)</string>
+    <string name="intel_screen_title">স্বাস্থ্য বিশ্লেষণ ও রিপোর্ট</string>
+    <string name="intel_disclaimer">শুধুমাত্র সাধারণ স্বাস্থ্য তথ্যের জন্য — যোগ্য চিকিৎসকের পরামর্শের বিকল্প নয়।</string>
+    <string name="intel_privacy_title">AI ডেটা অনুমতি</string>
+    <string name="vault_screen_title">ব্যক্তিগত স্বাস্থ্য রেকর্ড ভল্ট</string>
+    <string name="vault_ai_disclaimer">শুধুমাত্র তথ্যগত ব্যাখ্যা — এটি চিকিৎসা নির্ণয় বা যোগ্য ডাক্তারের পরামর্শের বিকল্প নয়।</string>
+    <string name="vault_export_pdf">ডাক্তার-রেডি PDF রপ্তানি করুন</string>
+    <string name="medical_refill_alert">ওষুধ রিফিল বা মেয়াদ উত্তীর্ণের দিকে নজর দিন</string>
+    <string name="nutrition_indian_planner_title">AI ভারতীয় পুষ্টি পরিকল্পনাকারী</string>
+    <string name="nutrition_disclaimer">শুধুমাত্র সাধারণ ভারতীয় খাদ্য নির্দেশনার জন্য — চিকিৎসা পুষ্টি থেরাপি নয়। ব্যক্তিগত অ্যালার্জি অনুযায়ী উপাদান যাচাই করুন।</string>
+    <string name="hc_permissions_categories_title">Health Connect অনুমতি ও বিভাগ</string>
+    <string name="hc_manual_preserved_note">খাদ্য, জল, ব্যায়াম, ঘুম, ওষুধ, ভল্ট ও চক্রের ম্যানুয়াল লগিং সর্বদা সক্রিয় থাকে।</string>
+    <string name="family_circle_title">লাইফউইভ ফ্যামিলি সার্কেল</string>
+    <string name="family_circle_consent_note">যোগ্য প্ল্যানে ৫টি প্রোফাইল পর্যন্ত, কেয়ারগিভার রিমাইন্ডার, শেয়ার করা অ্যাপয়েন্টমেন্ট এবং সম্মতি-ভিত্তিক শেয়ারিংয়ের জন্য Google অ্যাকাউন্টে সাইন ইন করুন।</string>
+    <string name="routines_mood_title">দৈনন্দিন রুটিন, মুড ও অগ্রগতি</string>
+    <string name="routines_mood_subtitle">ঐচ্ছিক অভ্যাস, ব্যক্তিগত ভাবনা ও চাপমুক্ত মাইলফলক</string>
+    <string name="subscription_screen_title">লাইফউইভ প্ল্যান ও বিলিং</string>
+    <string name="subscription_period_always_free">পিরিয়ড ও চক্র যত্ন চিরকাল ১০০% বিনামূল্যে — কখনো কোনো সাবস্ক্রিপশনে সীমাবদ্ধ হবে না।</string>
+    <string name="subscription_restore_cta">Google Play কেনাকাটা পুনরুদ্ধার করুন</string>
 </resources>

@@ -65,4 +65,25 @@
     <string name="permissions_setup_subtitle">தண்ணீர், மருந்து குறிப்புகள், பின்னணி அலாரம் மற்றும் திரை-ஆஃப் பாப்அப் வேலை செய்ய கீழ்கண்ட அணுகல்களை அனுமதிக்கவும்.</string>
     <string name="permissions_grant_prompts_cta">அறிவிப்பு &amp; மைக் அனுமதி</string>
     <string name="permissions_continue_cta">உள்நுழைவுக்குத் தொடரவும்</string>
+
+    <string name="privacy_export_encrypted">மறைகுறியாக்கப்பட்ட வால்ட் ஏற்றுமதி (LCENC1)</string>
+    <string name="privacy_restore_backup">காப்புப்பிரதியை மீட்டமை (JSON / மறைகுறியாக்கம்)</string>
+    <string name="intel_screen_title">ஆரோக்கிய நுண்ணறிவு &amp; அறிக்கைகள்</string>
+    <string name="intel_disclaimer">தகவல் ஆரோக்கிய வழிகாட்டுதல் மட்டுமே — தகுதியான மருத்துவ ஆலோசனைக்கு மாற்றல்ல.</string>
+    <string name="intel_privacy_title">AI தரவு அனுமதி</string>
+    <string name="vault_screen_title">தனிப்பட்ட மருத்துவ பதிவுகள் வால்ட்</string>
+    <string name="vault_ai_disclaimer">தகவல் விளக்கம் மட்டுமே — இது மருத்துவ நோயறிதல் அல்லது தகுதியான மருத்துவரின் ஆலோசனைக்கு மாற்றல்ல.</string>
+    <string name="vault_export_pdf">மருத்துவர்-தயார் PDF ஏற்றுமதி</string>
+    <string name="medical_refill_alert">மருந்து நிரப்புதல் அல்லது காலாவதி கவனம் தேவை</string>
+    <string name="nutrition_indian_planner_title">AI இந்திய ஊட்டச்சத்து திட்டமிடுபவர்</string>
+    <string name="nutrition_disclaimer">தகவல் இந்திய உணவு வழிகாட்டுதல் மட்டுமே — மருத்துவ ஊட்டச்சத்து சிகிச்சை அல்ல. தனிப்பட்ட ஒவ்வாமைக்கு ஏற்ப பொருட்களைச் சரிபார்க்கவும்.</string>
+    <string name="hc_permissions_categories_title">Health Connect அனுமதிகள் &amp; வகைகள்</string>
+    <string name="hc_manual_preserved_note">உணவு, நீர், உடற்பயிற்சி, தூக்கம், மருத்துவம், வால்ட் &amp; சுழற்சியின் கைமுறை பதிவு எப்போதும் செயலில் இருக்கும்.</string>
+    <string name="family_circle_title">லைஃப்வீவ் குடும்ப வட்டம்</string>
+    <string name="family_circle_consent_note">தகுதியான திட்டங்களில் 5 சுயவிவரங்கள் வரை, பராமரிப்பாளர் நினைவூட்டல்கள், பகிர்ந்த சந்திப்புகள் மற்றும் வெளிப்படையான சம்மதப் பகிர்வுக்கு Google கணக்கில் உள்நுழையவும்.</string>
+    <string name="routines_mood_title">வழக்கங்கள், மனநிலை &amp; வளர்ச்சி</string>
+    <string name="routines_mood_subtitle">விருப்பப் பழக்கங்கள், தனிப்பட்ட குறிப்புகள் &amp; அழுத்தமில்லா மைல்கற்கள்</string>
+    <string name="subscription_screen_title">லைஃப்வீவ் திட்டங்கள் &amp; கட்டணம்</string>
+    <string name="subscription_period_always_free">மாதவிடாய் சுழற்சி பராமரிப்பு எப்போதும் 100% இலவசம் — எந்த சந்தாவிலும் பூட்டப்படாது.</string>
+    <string name="subscription_restore_cta">Google Play கொள்முதல்களை மீட்டமை</string>
 </resources>

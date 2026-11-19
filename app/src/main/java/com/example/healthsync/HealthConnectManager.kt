@@ -101,7 +101,11 @@ class HealthConnectManager(private val context: Context) {
                 proteinGrams = protein.coerceAtLeast(0),
                 carbsGrams = carbs.coerceAtLeast(0),
                 fatGrams = fat.coerceAtLeast(0),
-                loggedAtEpochMs = rec.startTime.toEpochMilli(),
+                loggedAtEpochMs = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                    rec.startTime.toEpochMilli()
+                } else {
+                    System.currentTimeMillis()
+                },
                 sourceId = pkg.ifBlank { "health_connect" }
             )
         }

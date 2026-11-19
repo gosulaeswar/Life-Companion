@@ -65,4 +65,25 @@
     <string name="permissions_setup_subtitle">బ్యాక్‌గ్రౌండ్‌లో నీరు, మందుల నోట్స్, అలారం పాప్అప్‌లు మరియు స్క్రీన్-టైమ్ పనిచేయడానికి ఈ అనుమతులు ఇవ్వండి.</string>
     <string name="permissions_grant_prompts_cta">నోటిఫికేషన్ &amp; మైక్ అనుమతి</string>
     <string name="permissions_continue_cta">లాగిన్ / ప్రొఫైల్‌కు కొనసాగండి</string>
+
+    <string name="privacy_export_encrypted">ఎన్‌క్రిప్ట్ చేసిన వాల్ట్ ఎగుమతి (LCENC1)</string>
+    <string name="privacy_restore_backup">బ్యాకప్ పునరుద్ధరించు (JSON / ఎన్‌క్రిప్ట్)</string>
+    <string name="intel_screen_title">ఆరోగ్య విశ్లేషణ &amp; నివేదికలు</string>
+    <string name="intel_disclaimer">సమాచార ఆరోగ్య మార్గదర్శనం మాత్రమే — అర్హతగల వైద్య సలహాకు ప్రత్యామ్నాయం కాదు.</string>
+    <string name="intel_privacy_title">AI డేటా అనుమతి</string>
+    <string name="vault_screen_title">వ్యక్తిగత ఆరోగ్య రికార్డుల వాల్ట్</string>
+    <string name="vault_ai_disclaimer">సమాచార వివరణ మాత్రమే — ఇది వైద్య నిర్ధారణ లేదా అర్హతగల వైద్యుని సలహాకు ప్రత్యామ్నాయం కాదు.</string>
+    <string name="vault_export_pdf">డాక్టర్-రెడీ PDF ఎగుమతి</string>
+    <string name="medical_refill_alert">మందుల రీఫిల్ లేదా గడువు తేదీని గమనించండి</string>
+    <string name="nutrition_indian_planner_title">AI భారతీయ పోషకాహార ప్లానర్</string>
+    <string name="nutrition_disclaimer">సాధారణ భారతీయ ఆహార మార్గదర్శనం మాత్రమే — వైద్య పోషకాహార చికిత్స కాదు. వ్యక్తిగత అలెర్జీల కోసం పదార్థాలను తనిఖీ చేయండి.</string>
+    <string name="hc_permissions_categories_title">Health Connect అనుమతులు &amp; వర్గాలు</string>
+    <string name="hc_manual_preserved_note">ఆహారం, నీరు, వ్యాయామం, నిద్ర, మందులు, వాల్ట్ &amp; సైకిల్ మాన్యువల్ నమోదు ఎల్లప్పుడూ అందుబాటులో ఉంటుంది.</string>
+    <string name="family_circle_title">లైఫ్‌వీవ్ ఫ్యామిలీ సర్కిల్</string>
+    <string name="family_circle_consent_note">అర్హతగల ప్లాన్‌లలో 5 ప్రొఫైల్‌ల వరకు, కేర్‌గివర్ రిమైండర్లు, షేర్డ్ అపాయింట్‌మెంట్లు మరియు సమ్మతి ఆధారిత షేరింగ్ కోసం Google ఖాతాతో సైన్ ఇన్ చేయండి.</string>
+    <string name="routines_mood_title">దినచర్యలు, మూడ్ &amp; పురోగతి</string>
+    <string name="routines_mood_subtitle">ఐచ్ఛిక అలవాట్లు, వ్యక్తిగత ఆలోచనలు &amp; ఒత్తిడి లేని మైలురాళ్ళు</string>
+    <string name="subscription_screen_title">లైఫ్‌వీవ్ ప్లాన్‌లు &amp; బిల్లింగ్</string>
+    <string name="subscription_period_always_free">పీరియడ్ &amp; సైకిల్ కేర్ ఎప్పటికీ 100% ఉచితం — ఏ సబ్‌స్క్రిప్షన్‌లోనూ లాక్ చేయబడదు.</string>
+    <string name="subscription_restore_cta">Google Play కొనుగోళ్లను పునరుద్ధరించండి</string>
 </resources>

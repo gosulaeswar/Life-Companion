@@ -41,7 +41,9 @@ import com.example.security.SupportedLanguage
 import com.example.ui.navigation.LifeWeaveDest
 import com.example.ui.screens.ModuleSubRoutes
 import com.example.ui.theme.ThemeMode
+import android.Manifest
 import android.app.AlarmManager
+import android.app.Application
 import android.app.NotificationManager
 import android.util.Base64
 import kotlinx.coroutines.flow.first
@@ -734,6 +736,9 @@ class Phase1StabilizationTest {
         soundManager.scheduleSnoozeAlarm(payload1, minutes = 10)
         soundManager.scheduleSnoozeAlarm(payload201, minutes = 15)
         assertTrue(shadowAlarmManager.scheduledAlarms.size >= 4)
+
+        Shadows.shadowOf(ApplicationProvider.getApplicationContext<Application>())
+            .grantPermissions(Manifest.permission.POST_NOTIFICATIONS)
 
         val posted1 = soundManager.postPopupAlarmNotification(
             channelId = soundManager.ensureCustomAlarmChannel(lowAlarm, soundManager.resolveReminderSoundUri(lowAlarm)),

@@ -8,6 +8,7 @@ import com.example.billing.EffectiveEntitlement
 import com.example.billing.SubscriptionRepository
 import com.example.data.local.entity.ConfigurablePricingPlanEntity
 import com.example.security.LocalPreferencesManager
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -30,7 +31,8 @@ data class SubscriptionUiState(
 
 class SubscriptionViewModel(
     private val subscriptionRepository: SubscriptionRepository,
-    private val preferencesManager: LocalPreferencesManager
+    private val preferencesManager: LocalPreferencesManager,
+    private val autoInitialize: Boolean = true
 ) : ViewModel() {
 
     private val selectedCycle = MutableStateFlow(BillingCycleFilter.ANNUAL)
@@ -39,8 +41,11 @@ class SubscriptionViewModel(
     private val errorBanner = MutableStateFlow<String?>(null)
 
     init {
-        viewModelScope.launch {
-            subscriptionRepository.initializeAndRefresh()
+        if (autoInitialize) {
+            viewModelScope.launch {
+                runCatching { subscriptionRepository.initializeAndRefresh() }
+                    .onFailure { if (it is CancellationException) throw it }
+            }
         }
         viewModelScope.launch {
             subscriptionRepository.purchaseUpdates.collectLatest { update ->

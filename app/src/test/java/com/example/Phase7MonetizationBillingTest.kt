@@ -617,7 +617,7 @@ class Phase7MonetizationBillingTest {
         assertTrue(freeAfterEdit.isEnabled)
 
         // Restore purchases restores Family plan via Play + Server validation
-        val viewModel = SubscriptionViewModel(repo, prefs)
+        val viewModel = SubscriptionViewModel(repo, prefs, autoInitialize = false)
         viewModel.selectBillingCycle(BillingCycleFilter.MONTHLY)
         val restored = repo.restorePurchases()
         assertTrue(restored.success)
@@ -722,7 +722,7 @@ class Phase7MonetizationBillingTest {
             firebaseAuthProvider = { null },
             allowRuntimeEndpointOverrides = false
         )
-        val viewModel = SubscriptionViewModel(repo, prefs)
+        val viewModel = SubscriptionViewModel(repo, prefs, autoInitialize = false)
 
         var activeTheme by mutableStateOf(ThemeMode.LIGHT)
         var capturedLightBgLum = 0f
