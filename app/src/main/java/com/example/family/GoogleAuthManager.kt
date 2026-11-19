@@ -23,9 +23,12 @@ import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
 
 import android.app.Activity
+import android.content.pm.PackageManager
+import android.os.Build
 import android.util.Log
 import com.google.firebase.auth.FirebaseAuthException
 import com.google.firebase.auth.OAuthProvider
+import java.security.MessageDigest
 
 private const val AUTH_TAG = "GoogleAuthManager"
 
@@ -145,12 +148,11 @@ class GoogleAuthManager(
             Result.failure(IllegalStateException("Sign-in cancelled.", e))
         } catch (e: Exception) {
             Log.e(AUTH_TAG, "Interactive Google Sign-In failed", e)
-            Result.failure(
-                IllegalStateException(
-                    e.message ?: "Unable to complete Google Sign-In on this device.",
-                    e
-                )
+            val friendly = formatAuthError(
+                providerDisplayName = "Google (Gmail)",
+                rawMsg = e.localizedMessage ?: e.message.orEmpty()
             )
+            Result.failure(IllegalStateException(friendly, e))
         }
     }
 
@@ -196,31 +198,66 @@ class GoogleAuthManager(
             throw e
         } catch (e: FirebaseAuthException) {
             Log.e(AUTH_TAG, "$providerDisplayName OAuth sign-in failed (${e.errorCode})", e)
-            val friendly = when (e.errorCode) {
-                "ERROR_OPERATION_NOT_ALLOWED" ->
-                    "$providerDisplayName sign-in is not yet enabled in your Firebase project. Enable $providerDisplayName in Firebase Console -> Authentication -> Sign-in method, or sign in with Google (Gmail)."
-                "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" ->
-                    "An account with this email already exists using another provider (such as Google). Please sign in with that provider."
-                "ERROR_WEB_CONTEXT_CANCELED" ->
-                    "$providerDisplayName sign-in was cancelled."
-                else ->
-                    e.localizedMessage ?: "Unable to sign in with $providerDisplayName right now."
-            }
+            val friendly = formatAuthError(
+                providerDisplayName = providerDisplayName,
+                rawMsg = e.localizedMessage ?: e.message.orEmpty(),
+                errorCode = e.errorCode
+            )
             Result.failure(IllegalStateException(friendly, e))
         } catch (e: Exception) {
             Log.e(AUTH_TAG, "$providerDisplayName OAuth sign-in failed", e)
-            val msg = e.localizedMessage?.trim().orEmpty()
-            val friendly = if (msg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
-                msg.contains("provider is disabled", ignoreCase = true)
-            ) {
-                "$providerDisplayName sign-in is not enabled yet in Firebase Console -> Authentication -> Sign-in method. Please use Google (Gmail) or enable $providerDisplayName."
-            } else if (msg.contains("cancel", ignoreCase = true)) {
-                "$providerDisplayName sign-in was cancelled."
-            } else {
-                msg.ifEmpty { "Unable to sign in with $providerDisplayName on this device." }
-            }
+            val friendly = formatAuthError(
+                providerDisplayName = providerDisplayName,
+                rawMsg = e.localizedMessage ?: e.message.orEmpty()
+            )
             Result.failure(IllegalStateException(friendly, e))
         }
+    }
+
+    private fun formatAuthError(
+        providerDisplayName: String,
+        rawMsg: String,
+        errorCode: String? = null
+    ): String {
+        val msg = rawMsg.trim()
+        if (msg.contains("package certificate hash", ignoreCase = true) ||
+            msg.contains("DEVELOPER_ERROR", ignoreCase = true) ||
+            msg.contains("sha-1", ignoreCase = true)
+        ) {
+            val sha1 = readInstalledSigningSha1()
+            val shaHint = if (!sha1.isNullOrBlank()) " Installed APK SHA-1: $sha1." else ""
+            return "App signature mismatch with Firebase.$shaHint Ensure debug.keystore.base64 is pushed to GitHub or add this SHA-1 in Firebase Console -> Project Settings -> Your Android App, or tap Continue Privately on This Device."
+        }
+        return when {
+            errorCode == "ERROR_OPERATION_NOT_ALLOWED" ||
+                msg.contains("OPERATION_NOT_ALLOWED", ignoreCase = true) ||
+                msg.contains("provider is disabled", ignoreCase = true) ->
+                "$providerDisplayName sign-in is not yet enabled in your Firebase project. Enable $providerDisplayName in Firebase Console -> Authentication -> Sign-in method, or sign in with Google (Gmail)."
+            errorCode == "ERROR_ACCOUNT_EXISTS_WITH_DIFFERENT_CREDENTIAL" ->
+                "An account with this email already exists using another provider (such as Google). Please sign in with that provider."
+            errorCode == "ERROR_WEB_CONTEXT_CANCELED" ||
+                msg.contains("cancel", ignoreCase = true) ->
+                "$providerDisplayName sign-in was cancelled."
+            else ->
+                msg.ifEmpty { "Unable to sign in with $providerDisplayName on this device." }
+        }
+    }
+
+    @Suppress("DEPRECATION")
+    private fun readInstalledSigningSha1(): String? {
+        return runCatching {
+            val pm = appContext.packageManager
+            val signatures = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+                val info = pm.getPackageInfo(appContext.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
+                val signingInfo = info.signingInfo ?: return null
+                if (signingInfo.hasMultipleSigners()) signingInfo.apkContentsSigners else signingInfo.signingCertificateHistory
+            } else {
+                pm.getPackageInfo(appContext.packageName, PackageManager.GET_SIGNATURES).signatures
+            }
+            val certBytes = signatures?.firstOrNull()?.toByteArray() ?: return null
+            val digest = MessageDigest.getInstance("SHA-1").digest(certBytes)
+            digest.joinToString(":") { b -> "%02X".format(b) }
+        }.getOrNull()
     }
 
     private suspend fun exchangeCredential(

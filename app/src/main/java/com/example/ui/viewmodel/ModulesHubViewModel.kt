@@ -81,6 +81,8 @@ import com.example.security.AiDataAuthorization
 import com.example.security.CategoryToneSetting
 import com.example.security.HealthConnectImportAuthorization
 import com.example.security.LocalPreferencesManager
+import com.example.security.PersonalAiKeyState
+import com.example.security.PersonalAiKeyStore
 import com.example.sleep.SleepMonitorLiveState
 import com.example.sleep.SleepMonitorStateStore
 import com.example.sleep.SleepMonitoringService
@@ -199,7 +201,10 @@ data class ModulesHubUiState(
     val sleepBedtimeHour: Int = 22,
     val sleepBedtimeMinute: Int = 30,
     val sleepWakeHour: Int = 7,
-    val sleepWakeMinute: Int = 0
+    val sleepWakeMinute: Int = 0,
+    val personalAiKeyState: PersonalAiKeyState = PersonalAiKeyState(),
+    val isTestingPersonalAiKey: Boolean = false,
+    val personalAiKeyFeedback: Pair<Boolean, String>? = null
 )
 
 private data class AiAndSyncOverlayState(
@@ -252,8 +257,12 @@ class ModulesHubViewModel(
     private val customAlarmRepository: CustomAlarmRepository,
     private val healthVaultRepository: HealthVaultRepository? = null,
     private val routineMoodRepository: RoutineMoodRepository? = null,
-    private val appAutoRefreshManager: AppAutoRefreshManager? = null
+    private val appAutoRefreshManager: AppAutoRefreshManager? = null,
+    private val personalAiKeyStore: PersonalAiKeyStore? = null
 ) : ViewModel() {
+
+    private val isTestingPersonalKeyFlow = MutableStateFlow(false)
+    private val personalKeyFeedbackFlow = MutableStateFlow<Pair<Boolean, String>?>(null)
 
     private val aiMessages = MutableStateFlow<List<LocalAiMessage>>(emptyList())
     private val selectedLanguageTag = MutableStateFlow("en-US")
@@ -680,7 +689,15 @@ class ModulesHubViewModel(
                     Triple(prefs, refreshState, sleepLive)
                 }
 
-                combine(dataSummaryFlow, aiFlow, autoRefreshAndSleepFlow) { base, overlay, syncSleep ->
+                val personalAiKeyOverlayFlow = combine(
+                    personalAiKeyStore?.keyState ?: flowOf(PersonalAiKeyState()),
+                    isTestingPersonalKeyFlow,
+                    personalKeyFeedbackFlow
+                ) { keyState, testing, feedback ->
+                    Triple(keyState, testing, feedback)
+                }
+
+                combine(dataSummaryFlow, aiFlow, autoRefreshAndSleepFlow, personalAiKeyOverlayFlow) { base, overlay, syncSleep, aiKeyOverlay ->
                     val isSnoozed = System.currentTimeMillis() < overlay.snoozedUntilMs
                     val prefs = syncSleep.first
                     val refreshState = syncSleep.second
@@ -701,6 +718,9 @@ class ModulesHubViewModel(
                         lastAiPrompt = overlay.lastAiPrompt,
                         aiDiagnosticReport = overlay.diagnosticReport,
                         isRunningDiagnostics = overlay.isRunningDiagnostics,
+                        personalAiKeyState = aiKeyOverlay.first,
+                        isTestingPersonalAiKey = aiKeyOverlay.second,
+                        personalAiKeyFeedback = aiKeyOverlay.third,
                         healthConnectAvailability = overlay.hcAvailability,
                         grantedHealthPermissions = overlay.grantedPerms,
                         isSyncingFitness = overlay.isSyncingFitness,
@@ -901,6 +921,49 @@ class ModulesHubViewModel(
 
     fun dismissDiagnostics() {
         diagnosticReportFlow.value = null
+    }
+
+    fun saveAndTestPersonalAiKey(rawKey: String) {
+        val store = personalAiKeyStore ?: return
+        val saved = store.savePersonalKey(rawKey)
+        saved.onFailure { err ->
+            personalKeyFeedbackFlow.value = false to (err.message ?: "Unable to save API key.")
+            return
+        }
+        testSavedPersonalAiKey()
+    }
+
+    fun testSavedPersonalAiKey() {
+        if (isTestingPersonalKeyFlow.value) return
+        viewModelScope.launch {
+            isTestingPersonalKeyFlow.value = true
+            personalKeyFeedbackFlow.value = null
+            try {
+                aiService.testPersonalApiKey().fold(
+                    onSuccess = { ping ->
+                        personalKeyFeedbackFlow.value = true to
+                            "Connected via ${ping.modelUsed} (${ping.latencyMs}ms). All AI features are now active!"
+                        diagnosticReportFlow.value = aiService.runDiagnostics()
+                    },
+                    onFailure = { err ->
+                        personalKeyFeedbackFlow.value = false to
+                            (err.localizedMessage ?: "Saved key could not connect to Gemini API.")
+                    }
+                )
+            } finally {
+                isTestingPersonalKeyFlow.value = false
+            }
+        }
+    }
+
+    fun removePersonalAiKey() {
+        personalAiKeyStore?.clearPersonalKey()
+        diagnosticReportFlow.value = null
+        personalKeyFeedbackFlow.value = true to "Personal API key removed. Switched back to Firebase AI Logic (Default)."
+    }
+
+    fun clearPersonalAiKeyFeedback() {
+        personalKeyFeedbackFlow.value = null
     }
 
     fun selectIntelligenceTimeframe(timeframe: IntelligenceTimeframe) {

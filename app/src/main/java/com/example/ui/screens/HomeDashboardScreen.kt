@@ -847,6 +847,21 @@ fun HomeDashboardScreen(
                                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                                                 )
                                             }
+                                            Surface(
+                                                modifier = Modifier
+                                                    .clip(CircleShape)
+                                                    .clickable { onOpenModuleKey("on_device_ai") }
+                                                    .testTag("home_ai_use_api_key_button"),
+                                                shape = CircleShape,
+                                                color = MaterialTheme.colorScheme.primaryContainer
+                                            ) {
+                                                Text(
+                                                    text = "🔑 Use My API Key",
+                                                    style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
+                                                    color = MaterialTheme.colorScheme.onPrimaryContainer,
+                                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
+                                                )
+                                            }
                                         }
                                     }
                                     if (latestAiReply.actionBadges.isNotEmpty()) {
@@ -857,12 +872,20 @@ fun HomeDashboardScreen(
                                             latestAiReply.actionBadges.forEach { badge ->
                                                 Surface(
                                                     shape = CircleShape,
-                                                    color = Color(0xFF2CE5B5).copy(alpha = 0.24f)
+                                                    color = if (latestAiReply.isError) {
+                                                        MaterialTheme.colorScheme.primaryContainer
+                                                    } else {
+                                                        Color(0xFF2CE5B5).copy(alpha = 0.24f)
+                                                    }
                                                 ) {
                                                     Text(
                                                         text = "✅ $badge",
                                                         style = MaterialTheme.typography.labelSmall,
-                                                        color = Color(0xFF9DF7DF),
+                                                        color = if (latestAiReply.isError) {
+                                                            MaterialTheme.colorScheme.onPrimaryContainer
+                                                        } else {
+                                                            Color(0xFF9DF7DF)
+                                                        },
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                                     )
                                                 }

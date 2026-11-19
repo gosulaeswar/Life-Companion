@@ -16,6 +16,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.TimeoutCancellationException
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
+import com.example.security.PersonalAiKeyStore
 import org.json.JSONObject
 import kotlin.math.max
 
@@ -99,8 +100,21 @@ data class AiReportExplanation(
     val isFromCloudAi: Boolean = true
 )
 
-class LifeWeaveAiService(context: Context? = null) {
+class LifeWeaveAiService(
+    context: Context? = null,
+    private val personalAiKeyStore: PersonalAiKeyStore? = null,
+    private val directGeminiClient: DirectGeminiRestClient = DirectGeminiRestClient()
+) {
     private val appContext = context?.applicationContext
+
+    private fun activePersonalApiKey(): String? =
+        personalAiKeyStore?.readPersonalKeyOrNull()?.takeIf { it.isNotBlank() }
+
+    suspend fun testPersonalApiKey(rawKey: String? = null): Result<DirectGeminiPingResult> {
+        val key = rawKey?.trim()?.takeIf { it.isNotEmpty() } ?: activePersonalApiKey()
+            ?: return Result.failure(IllegalStateException("No personal Gemini API key is saved on this device."))
+        return directGeminiClient.ping(key)
+    }
 
     private fun ensureFirebaseInitialized(): Boolean {
         val ctx = appContext ?: return false
@@ -352,23 +366,8 @@ class LifeWeaveAiService(context: Context? = null) {
         var appCheckPassed = false
         var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
+        val personalKey = activePersonalApiKey()
         return try {
-            onStageUpdate("Checking Firebase & App Check...")
-            if (appContext != null && !ensureFirebaseInitialized()) {
-                return Result.failure(
-                    IllegalStateException(
-                        "AI Voice needs Firebase configuration bundled in the APK (missing google-services.json). " +
-                            "Use AI Studio Preview or add GOOGLE_SERVICES_JSON to your GitHub Secrets and rebuild."
-                    )
-                )
-            }
-
-            if (appContext != null) {
-                val (passed, hint) = probeAppCheckNonBlocking()
-                appCheckPassed = passed
-                appCheckHint = hint
-            }
-
             val prompt = buildString {
                 appendLine("You are LifeWeave's friendly, voice-ready wellness assistant inside an Android health app.")
                 appendLine("Respond naturally in this language: ${languageOption.label} (${languageOption.tag}). Keep spoken replies concise (2-4 sentences).")
@@ -398,6 +397,36 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("7. STRICT SAFETY & PRIVACY RULES: NEVER invent measurements or guess missing data; clearly state when a category has no records or is excluded by privacy settings; clearly distinguish recorded numbers from gentle suggestions; NEVER diagnose medical conditions or change prescribed medication dosages.")
                 appendLine()
                 appendLine("User: \"$userMessage\"")
+            }
+
+            if (personalKey != null) {
+                onStageUpdate("Connecting via Personal Gemini API Key (${languageOption.label})...")
+                val rawJson = withTimeout(60_000L) {
+                    directGeminiClient.generateContent(
+                        apiKey = personalKey,
+                        promptText = prompt,
+                        responseSchema = DirectGeminiRestClient.assistantResponseSchema()
+                    ).getOrThrow()
+                }
+                val parsed = parseAssistantJson(rawJson)
+                onPartialPreview(parsed.replyText)
+                return Result.success(parsed)
+            }
+
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "AI Voice needs Firebase configuration or a Personal Gemini API Key. " +
+                            "Open Settings -> Cloud AI Connection to enter your own free Gemini API key."
+                    )
+                )
+            }
+
+            if (appContext != null) {
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             onStageUpdate("Streaming reply in ${languageOption.label}...")
@@ -463,22 +492,8 @@ class LifeWeaveAiService(context: Context? = null) {
         var appCheckPassed = false
         var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
+        val personalKey = activePersonalApiKey()
         return try {
-            onStageUpdate("Checking Firebase & App Check...")
-            if (appContext != null && !ensureFirebaseInitialized()) {
-                return Result.failure(
-                    IllegalStateException(
-                        "Personal Health Intelligence cloud synthesis needs Firebase configuration bundled in the APK."
-                    )
-                )
-            }
-
-            if (appContext != null) {
-                val (passed, hint) = probeAppCheckNonBlocking()
-                appCheckPassed = passed
-                appCheckHint = hint
-            }
-
             val prompt = buildString {
                 appendLine("You are LifeWeave Personal Health Intelligence.")
                 appendLine("Generate a $timeframeName wellness intelligence report in ${languageOption.label} (${languageOption.tag}).")
@@ -490,6 +505,35 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("4. If data for a metric or prior baseline is unavailable or excluded by privacy settings, state that clearly in 'uncertaintyAndCoverageNote'.")
                 appendLine()
                 appendLine(groundedWellnessContext)
+            }
+
+            if (personalKey != null) {
+                onStageUpdate("Synthesizing $timeframeName insights via Personal Gemini API Key...")
+                val rawJson = withTimeout(60_000L) {
+                    directGeminiClient.generateContent(
+                        apiKey = personalKey,
+                        promptText = prompt,
+                        responseSchema = DirectGeminiRestClient.healthIntelligenceResponseSchema()
+                    ).getOrThrow()
+                }
+                val parsed = parseHealthIntelligenceJson(rawJson, timeframeName)
+                onPartialPreview(parsed.headline)
+                return Result.success(parsed)
+            }
+
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Personal Health Intelligence needs Firebase config or a Personal Gemini API Key in Settings."
+                    )
+                )
+            }
+
+            if (appContext != null) {
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             onStageUpdate("Synthesizing $timeframeName insights in ${languageOption.label}...")
@@ -537,23 +581,8 @@ class LifeWeaveAiService(context: Context? = null) {
         var appCheckPassed = false
         var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
+        val personalKey = activePersonalApiKey()
         return try {
-            onStageUpdate("Checking Firebase & App Check...")
-            if (appContext != null && !ensureFirebaseInitialized()) {
-                return Result.failure(
-                    IllegalStateException(
-                        "Prescription Scanner needs Firebase configuration bundled in the APK (missing google-services.json). " +
-                            "Use AI Studio Preview or add GOOGLE_SERVICES_JSON to your GitHub Secrets and rebuild."
-                    )
-                )
-            }
-
-            if (appContext != null) {
-                val (passed, hint) = probeAppCheckNonBlocking()
-                appCheckPassed = passed
-                appCheckHint = hint
-            }
-
             onStageUpdate("Preparing prescription image...")
             val bitmap = withContext(Dispatchers.IO) {
                 decodeScaledBitmap(context, imageUri, maxDimension = 1280)
@@ -565,6 +594,37 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("Extract every medicine with its exact name, dosage strength, dosesPerDay (1-6), intervalHours (24 for once daily, 12 for twice daily, 8 for 3x daily, 6 for 4x daily), scheduleTime24h (e.g. '08:00'), and mealRelation ('Before Meal', 'After Meal', 'With Meal', or 'Anytime').")
                 appendLine("Also extract doctorName, specialty, clinicOrHospital, and followUpDaysFromToday if present (0 if not stated).")
                 appendLine("Do not invent medicines that are not visible in the image.")
+            }
+
+            if (personalKey != null) {
+                onStageUpdate("Extracting prescription via Personal Gemini API Key...")
+                val jpegPart = DirectGeminiRestClient.encodeBitmapAsJpegPart(bitmap)
+                val rawJson = withTimeout(60_000L) {
+                    directGeminiClient.generateContent(
+                        apiKey = personalKey,
+                        promptText = promptText,
+                        inlinePart = jpegPart,
+                        responseSchema = DirectGeminiRestClient.prescriptionResponseSchema()
+                    ).getOrThrow()
+                }
+                val parsed = parsePrescriptionJson(rawJson)
+                onPartialPreview(parsed.summary)
+                return Result.success(parsed)
+            }
+
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Prescription Scanner needs Firebase configuration or a Personal Gemini API Key in Settings."
+                    )
+                )
+            }
+
+            if (appContext != null) {
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             onStageUpdate("Streaming prescription extraction...")
@@ -620,22 +680,8 @@ class LifeWeaveAiService(context: Context? = null) {
         var appCheckPassed = false
         var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
+        val personalKey = activePersonalApiKey()
         return try {
-            onStageUpdate("Checking Firebase & App Check...")
-            if (appContext != null && !ensureFirebaseInitialized()) {
-                return Result.failure(
-                    IllegalStateException(
-                        "Report AI Explainer needs Firebase configuration bundled in the APK."
-                    )
-                )
-            }
-
-            if (appContext != null) {
-                val (passed, hint) = probeAppCheckNonBlocking()
-                appCheckPassed = passed
-                appCheckHint = hint
-            }
-
             val imageBitmap: Bitmap? = if (fileBytes != null && mimeType.startsWith("image/", ignoreCase = true)) {
                 withContext(Dispatchers.IO) {
                     decodeScaledBitmapFromBytes(fileBytes, maxDimension = 1280)
@@ -663,19 +709,54 @@ class LifeWeaveAiService(context: Context? = null) {
                 Log.w(TAG, "PDF size (${fileBytes.size} bytes) exceeds 19MB inline limit; analyzing metadata and notes.")
             }
 
+            val finalPromptText = if (!canAttachPdfInline && fileBytes != null && mimeType.equals("application/pdf", ignoreCase = true)) {
+                "$promptText\nNote: The attached PDF exceeds the 19 MB direct upload limit, so summarize conservatively from the provided title, category, provider, and notes only, and mention that uploading a smaller PDF or photo enables full page analysis."
+            } else {
+                promptText
+            }
+
+            if (personalKey != null) {
+                onStageUpdate("Analyzing $category via Personal Gemini API Key...")
+                val inlinePart = when {
+                    imageBitmap != null -> DirectGeminiRestClient.encodeBitmapAsJpegPart(imageBitmap)
+                    canAttachPdfInline -> DirectGeminiInlinePart("application/pdf", fileBytes!!)
+                    else -> null
+                }
+                val rawJson = withTimeout(60_000L) {
+                    directGeminiClient.generateContent(
+                        apiKey = personalKey,
+                        promptText = finalPromptText,
+                        inlinePart = inlinePart,
+                        responseSchema = DirectGeminiRestClient.reportExplanationResponseSchema()
+                    ).getOrThrow()
+                }
+                val parsed = parseReportExplanationJson(rawJson, title)
+                onPartialPreview(parsed.plainLanguageSummary)
+                return Result.success(parsed)
+            }
+
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException(
+                        "Report AI Explainer needs Firebase config or a Personal Gemini API Key in Settings."
+                    )
+                )
+            }
+
+            if (appContext != null) {
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
+            }
+
             val inputContent = content {
                 if (imageBitmap != null) {
                     image(imageBitmap)
                 } else if (canAttachPdfInline) {
                     inlineData(fileBytes!!, "application/pdf")
                 }
-                text(
-                    if (!canAttachPdfInline && fileBytes != null && mimeType.equals("application/pdf", ignoreCase = true)) {
-                        "$promptText\nNote: The attached PDF exceeds the 19 MB direct upload limit, so summarize conservatively from the provided title, category, provider, and notes only, and mention that uploading a smaller PDF or photo enables full page analysis."
-                    } else {
-                        promptText
-                    }
-                )
+                text(finalPromptText)
             }
 
             onStageUpdate("Analyzing $category in ${languageOption.label}...")
@@ -730,20 +811,8 @@ class LifeWeaveAiService(context: Context? = null) {
         var appCheckPassed = false
         var appCheckHint: String? = null
         val accumulatedJson = StringBuilder()
+        val personalKey = activePersonalApiKey()
         return try {
-            onStageUpdate("Checking Firebase & App Check...")
-            if (appContext != null && !ensureFirebaseInitialized()) {
-                return Result.failure(
-                    IllegalStateException("Cloud Indian Meal Planner needs Firebase config bundled in APK.")
-                )
-            }
-
-            if (appContext != null) {
-                val (passed, hint) = probeAppCheckNonBlocking()
-                appCheckPassed = passed
-                appCheckHint = hint
-            }
-
             val allergenClause = if (avoidAllergens.isEmpty()) {
                 "No food allergies recorded in vault."
             } else {
@@ -765,6 +834,39 @@ class LifeWeaveAiService(context: Context? = null) {
                 appendLine("2. Strictly honor dietary preference ($dietaryLabel) and NEVER include excluded allergens.")
                 appendLine("3. Provide realistic macro estimates per slot and include high-protein Indian pairings where helpful.")
                 appendLine("4. Informational wellness guidance only — never diagnose disease or prescribe medical therapy.")
+            }
+
+            if (personalKey != null) {
+                onStageUpdate("Planning $regionLabel meals via Personal Gemini API Key...")
+                val rawJson = withTimeout(60_000L) {
+                    directGeminiClient.generateContent(
+                        apiKey = personalKey,
+                        promptText = prompt,
+                        responseSchema = DirectGeminiRestClient.indianNutritionResponseSchema()
+                    ).getOrThrow()
+                }
+                val parsed = parseIndianNutritionPlanJson(
+                    jsonString = rawJson,
+                    regionLabel = regionLabel,
+                    dietaryLabel = dietaryLabel,
+                    goalLabel = goalLabel,
+                    avoidedAllergens = avoidAllergens
+                )
+                onPartialPreview(parsed.planTitle)
+                return Result.success(parsed)
+            }
+
+            onStageUpdate("Checking Firebase & App Check...")
+            if (appContext != null && !ensureFirebaseInitialized()) {
+                return Result.failure(
+                    IllegalStateException("Cloud Indian Meal Planner needs Firebase config or a Personal Gemini API Key in Settings.")
+                )
+            }
+
+            if (appContext != null) {
+                val (passed, hint) = probeAppCheckNonBlocking()
+                appCheckPassed = passed
+                appCheckHint = hint
             }
 
             onStageUpdate("Planning $regionLabel meals in ${languageOption.label}...")
@@ -811,6 +913,33 @@ class LifeWeaveAiService(context: Context? = null) {
     }
 
     suspend fun runDiagnostics(): AiDiagnosticReport {
+        val personalKey = activePersonalApiKey()
+        if (personalKey != null) {
+            return directGeminiClient.ping(personalKey).fold(
+                onSuccess = { ping ->
+                    AiDiagnosticReport(
+                        isHealthy = true,
+                        firebaseStatus = "Bypassed (Personal Gemini API Key active)",
+                        appCheckStatus = "Not required with Personal API Key",
+                        geminiStatus = "Connected via ${ping.modelUsed} (${ping.latencyMs}ms): ${ping.sampleText}",
+                        summary = "Personal Gemini API Key is connected and ready.",
+                        recommendation = "All cloud AI features (Voice, Prescription Scanner, Lab Explainer, Briefings, Meal Planner) are active on this device."
+                    )
+                },
+                onFailure = { err ->
+                    val msg = err.localizedMessage?.trim().orEmpty().ifEmpty { err.javaClass.simpleName }
+                    AiDiagnosticReport(
+                        isHealthy = false,
+                        firebaseStatus = "Bypassed (Personal Gemini API Key active)",
+                        appCheckStatus = "Not required with Personal API Key",
+                        geminiStatus = "Error: $msg",
+                        summary = "Personal Gemini API Key test failed.",
+                        recommendation = "Verify or replace your Personal Gemini API Key in Cloud AI Connection below, or remove it to return to Firebase AI Logic."
+                    )
+                }
+            )
+        }
+
         val ctx = appContext
         if (ctx != null && !ensureFirebaseInitialized()) {
             return AiDiagnosticReport(
@@ -819,7 +948,7 @@ class LifeWeaveAiService(context: Context? = null) {
                 appCheckStatus = "Skipped (Firebase uninitialized)",
                 geminiStatus = "Skipped",
                 summary = "Firebase config is missing from this APK.",
-                recommendation = "Ensure GOOGLE_SERVICES_JSON is set in GitHub Actions Secrets and rebuild the APK."
+                recommendation = "Enter your own free Personal Gemini API Key in Cloud AI Connection below to run AI without Firebase."
             )
         }
 
@@ -862,7 +991,7 @@ class LifeWeaveAiService(context: Context? = null) {
                 recommendation = if (appCheckHint == null) {
                     "You can now use Voice, Report Explainer, and Prescription Scanner."
                 } else {
-                    "Cloud AI succeeded! Optional: register your Debug Token below if you later enable strict App Check enforcement."
+                    "Cloud AI succeeded! You can also enter a Personal Gemini API Key below if needed."
                 }
             )
         } catch (e: TimeoutCancellationException) {
@@ -872,7 +1001,7 @@ class LifeWeaveAiService(context: Context? = null) {
                 appCheckStatus = appCheckDesc,
                 geminiStatus = "Stream timed out after 20s",
                 summary = "Gemini streaming did not respond within 20s.",
-                recommendation = appCheckHint ?: "Check mobile/Wi-Fi internet speed, disable VPN/private DNS, and retry."
+                recommendation = appCheckHint ?: "Check mobile/Wi-Fi internet speed, or enter your Personal Gemini API Key below."
             )
         } catch (e: CancellationException) {
             throw e
@@ -884,8 +1013,8 @@ class LifeWeaveAiService(context: Context? = null) {
                 firebaseStatus = firebaseStatus,
                 appCheckStatus = appCheckDesc,
                 geminiStatus = "Error: $err",
-                summary = "Gemini could not connect on this build.",
-                recommendation = appCheckHint ?: "Verify Firebase AI Logic is enabled for this project and retry."
+                summary = "Gemini could not connect via App Check on this sideloaded build.",
+                recommendation = "No debug token needed: enter your free Personal Gemini API Key in Cloud AI Connection below to activate AI immediately."
             )
         }
     }

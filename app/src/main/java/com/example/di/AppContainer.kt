@@ -33,6 +33,7 @@ import com.example.security.KeystoreVaultManager
 import com.example.security.LocalDefaultEntitlementPolicy
 import com.example.security.LocalPreferencesManager
 import com.example.security.OfflineLicenseVerifier
+import com.example.security.PersonalAiKeyStore
 import com.example.security.SubscriptionTier
 import com.example.sync.AppAutoRefreshManager
 import com.example.wellbeing.DeviceWellbeingManager
@@ -56,7 +57,8 @@ class AppContainer(context: Context) {
     val appleAndFileFitnessImporter = AppleAndFileFitnessImporter()
     val fitnessSyncRepository = FitnessSyncRepository(database)
 
-    val lifeWeaveAiService = LifeWeaveAiService(appContext)
+    val personalAiKeyStore = PersonalAiKeyStore(appContext, vaultManager)
+    val lifeWeaveAiService = LifeWeaveAiService(appContext, personalAiKeyStore)
     val voiceAssistantManager = VoiceAssistantManager(appContext)
     val deviceWellbeingManager = DeviceWellbeingManager(appContext)
 

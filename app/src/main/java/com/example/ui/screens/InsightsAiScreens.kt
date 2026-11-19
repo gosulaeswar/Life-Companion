@@ -535,6 +535,20 @@ fun OnDeviceAiScreen(
             }
         }
 
+        // Personal Gemini API Key (BYOK) — No App Check Debug Token Needed
+        item {
+            com.example.ui.components.PersonalAiKeyCard(
+                keyState = uiState.personalAiKeyState,
+                isTesting = uiState.isTestingPersonalAiKey,
+                feedback = uiState.personalAiKeyFeedback,
+                onSaveAndTest = viewModel::saveAndTestPersonalAiKey,
+                onTestSavedKey = viewModel::testSavedPersonalAiKey,
+                onRemoveKey = viewModel::removePersonalAiKey,
+                onDismissFeedback = viewModel::clearPersonalAiKeyFeedback,
+                initiallyExpanded = uiState.aiDiagnosticReport?.isHealthy == false && !uiState.personalAiKeyState.hasPersonalKey
+            )
+        }
+
         // App Check & AI Connection Diagnostics Card
         item {
             Card(

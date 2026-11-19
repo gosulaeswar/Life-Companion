@@ -72,6 +72,7 @@ fun configureAppCheck(context: Context, intent: Intent?) {
         }
 
         val debugToken = intent?.getStringExtra(DEBUG_TOKEN_EXTRA)?.trim()
+        val ciDebugToken = if (BuildConfig.DEBUG) BuildConfig.CI_APPCHECK_DEBUG_TOKEN.trim() else ""
         val metaPrefs = appContext.getSharedPreferences(META_PREFS_NAME, Context.MODE_PRIVATE)
         if (BuildConfig.DEBUG && !debugToken.isNullOrEmpty()) {
             val persistenceKey = FirebaseApp.getInstance().persistenceKey
@@ -87,7 +88,17 @@ fun configureAppCheck(context: Context, intent: Intent?) {
             metaPrefs.edit()
                 .putBoolean(META_HAS_INJECTED_TOKEN, true)
                 .commit()
-            Log.d(TAG, "App Check debug secret configured successfully.")
+            Log.d(TAG, "App Check debug secret configured successfully from launch Intent.")
+        } else if (BuildConfig.DEBUG && ciDebugToken.isNotEmpty() && !metaPrefs.getBoolean(META_HAS_INJECTED_TOKEN, false)) {
+            val persistenceKey = FirebaseApp.getInstance().persistenceKey
+            val prefs = appContext.getSharedPreferences(
+                "$DEBUG_STORE_PREFIX$persistenceKey",
+                Context.MODE_PRIVATE
+            )
+            prefs.edit()
+                .putString(DEBUG_SECRET_KEY, ciDebugToken)
+                .commit()
+            Log.d(TAG, "App Check debug secret configured from CI debug build token.")
         }
 
         val hasInjectedToken = metaPrefs.getBoolean(META_HAS_INJECTED_TOKEN, false)

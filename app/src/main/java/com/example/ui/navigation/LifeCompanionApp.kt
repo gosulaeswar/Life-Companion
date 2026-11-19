@@ -330,7 +330,8 @@ private fun MainShell(
                 customAlarmRepository = container.customAlarmRepository,
                 healthVaultRepository = container.healthVaultRepository,
                 routineMoodRepository = container.routineMoodRepository,
-                appAutoRefreshManager = container.appAutoRefreshManager
+                appAutoRefreshManager = container.appAutoRefreshManager,
+                personalAiKeyStore = container.personalAiKeyStore
             )
         }
     )
@@ -824,7 +825,9 @@ private fun MainShell(
                                     alertSoundManager = container.alertSoundManager,
                                     vaultManager = container.vaultManager,
                                     licenseVerifier = container.licenseVerifier,
-                                    subscriptionRepository = container.subscriptionRepository
+                                    subscriptionRepository = container.subscriptionRepository,
+                                    personalAiKeyStore = container.personalAiKeyStore,
+                                    aiService = container.lifeWeaveAiService
                                 )
                             }
                         )

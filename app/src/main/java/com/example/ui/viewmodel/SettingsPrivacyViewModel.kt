@@ -20,11 +20,14 @@ import com.example.notifications.AlertMetricsCalculator
 import com.example.notifications.AlertMetricsSummary
 import com.example.notifications.AlertSoundManager
 import com.example.notifications.BundledAlertTone
+import com.example.ai.LifeWeaveAiService
 import com.example.security.AlertToneSource
 import com.example.security.CategoryToneSetting
 import com.example.security.KeystoreVaultManager
 import com.example.security.LocalPreferencesManager
 import com.example.security.OfflineLicenseVerifier
+import com.example.security.PersonalAiKeyState
+import com.example.security.PersonalAiKeyStore
 import com.example.security.SupportedLanguage
 import com.example.security.UiPreferencesState
 import com.example.security.VaultSecurityStatus
@@ -65,7 +68,10 @@ data class SettingsPrivacyUiState(
     val statusMessage: String? = null,
     val pendingRestorePreview: BackupPreviewSummary? = null,
     val isRestoringOrExporting: Boolean = false,
-    val effectiveEntitlement: EffectiveEntitlement = EffectiveEntitlement()
+    val effectiveEntitlement: EffectiveEntitlement = EffectiveEntitlement(),
+    val personalAiKeyState: PersonalAiKeyState = PersonalAiKeyState(),
+    val isTestingPersonalAiKey: Boolean = false,
+    val personalAiKeyFeedback: Pair<Boolean, String>? = null
 )
 
 @OptIn(ExperimentalCoroutinesApi::class)
@@ -78,7 +84,9 @@ class SettingsPrivacyViewModel(
     private val alertSoundManager: AlertSoundManager,
     vaultManager: KeystoreVaultManager,
     licenseVerifier: OfflineLicenseVerifier,
-    private val subscriptionRepository: SubscriptionRepository? = null
+    private val subscriptionRepository: SubscriptionRepository? = null,
+    private val personalAiKeyStore: PersonalAiKeyStore? = null,
+    private val aiService: LifeWeaveAiService? = null
 ) : ViewModel() {
 
     private fun readPopupPermissions(): PopupPermissionsSnapshot = PopupPermissionsSnapshot(
@@ -102,8 +110,20 @@ class SettingsPrivacyViewModel(
         if (profile == null) flowOf(emptyList()) else customAlarmRepository.observeAlarms(profile.id)
     }
 
+    private val isTestingPersonalKeyFlow = MutableStateFlow(false)
+    private val personalKeyFeedbackFlow = MutableStateFlow<Pair<Boolean, String>?>(null)
+
     private val entitlementFlow = subscriptionRepository?.observeEffectiveEntitlement()
         ?: flowOf(EffectiveEntitlement())
+    private val personalAiKeyStateFlow = personalAiKeyStore?.keyState
+        ?: flowOf(PersonalAiKeyState())
+    private val personalAiOverlayFlow = combine(
+        personalAiKeyStateFlow,
+        isTestingPersonalKeyFlow,
+        personalKeyFeedbackFlow
+    ) { keyState, testing, feedback ->
+        Triple(keyState, testing, feedback)
+    }
 
     val uiState: StateFlow<SettingsPrivacyUiState> = combine(
         combine(
@@ -124,8 +144,9 @@ class SettingsPrivacyViewModel(
             entitlementFlow
         ) { metaArray ->
             metaArray
-        }
-    ) { mainList, meta ->
+        },
+        personalAiOverlayFlow
+    ) { mainList, meta, aiKeyOverlay ->
         val prefs = mainList[0] as UiPreferencesState
         val profile = mainList[1] as UserProfileEntity?
         @Suppress("UNCHECKED_CAST")
@@ -158,7 +179,10 @@ class SettingsPrivacyViewModel(
             statusMessage = msg,
             pendingRestorePreview = pendingRestore?.first,
             isRestoringOrExporting = busy,
-            effectiveEntitlement = entitlement
+            effectiveEntitlement = entitlement,
+            personalAiKeyState = aiKeyOverlay.first,
+            isTestingPersonalAiKey = aiKeyOverlay.second,
+            personalAiKeyFeedback = aiKeyOverlay.third
         )
     }.stateIn(
         scope = viewModelScope,
@@ -167,7 +191,8 @@ class SettingsPrivacyViewModel(
             vaultStatus = vaultStatus,
             publicKeyReady = publicKeyReady,
             canUseFullScreenPopup = popupPermissionsFlow.value.canUseFullScreenPopup,
-            popupPermissions = popupPermissionsFlow.value
+            popupPermissions = popupPermissionsFlow.value,
+            personalAiKeyState = personalAiKeyStore?.currentState() ?: PersonalAiKeyState()
         )
     )
 
@@ -614,12 +639,55 @@ class SettingsPrivacyViewModel(
         pendingRestoreState.value = null
     }
 
+    fun saveAndTestPersonalAiKey(rawKey: String) {
+        val store = personalAiKeyStore ?: return
+        val saveResult = store.savePersonalKey(rawKey)
+        saveResult.onFailure { err ->
+            personalKeyFeedbackFlow.value = false to (err.message ?: "Unable to save API key.")
+            return
+        }
+        testSavedPersonalAiKey()
+    }
+
+    fun testSavedPersonalAiKey() {
+        val service = aiService ?: return
+        if (isTestingPersonalKeyFlow.value) return
+        viewModelScope.launch {
+            isTestingPersonalKeyFlow.value = true
+            personalKeyFeedbackFlow.value = null
+            try {
+                service.testPersonalApiKey().fold(
+                    onSuccess = { ping ->
+                        personalKeyFeedbackFlow.value = true to
+                            "Connected via ${ping.modelUsed} (${ping.latencyMs}ms). All cloud AI features are now active without App Check debug tokens."
+                    },
+                    onFailure = { err ->
+                        personalKeyFeedbackFlow.value = false to
+                            (err.localizedMessage ?: "Saved key could not connect to Gemini API.")
+                    }
+                )
+            } finally {
+                isTestingPersonalKeyFlow.value = false
+            }
+        }
+    }
+
+    fun removePersonalAiKey() {
+        personalAiKeyStore?.clearPersonalKey()
+        personalKeyFeedbackFlow.value = true to "Personal API key removed. Switched back to Firebase AI Logic (Default)."
+    }
+
+    fun clearPersonalAiKeyFeedback() {
+        personalKeyFeedbackFlow.value = null
+    }
+
     fun deleteAllLocalData(onComplete: () -> Unit) {
         viewModelScope.launch {
             AlertCategory.entries.forEach { alertSoundManager.cancelReminder(it) }
             uiState.value.customAlarms.forEach { alertSoundManager.cancelCustomAlarm(it.id) }
+            personalAiKeyStore?.clearPersonalKey()
             privacyBackupRepository.deleteAllLocalData()
-            statusMessage.value = "All local records and preferences erased from this device."
+            statusMessage.value = "All local records, encrypted keys, and preferences erased from this device."
             onComplete()
         }
     }

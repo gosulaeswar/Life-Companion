@@ -63,6 +63,7 @@ import com.example.security.SupportedLanguage
 import com.example.ui.components.CategorySoundPickerCard
 import com.example.ui.components.CustomAlarmsSettingsCard
 import com.example.ui.components.ModuleStatusPill
+import com.example.ui.components.PersonalAiKeyCard
 import com.example.ui.components.PrivacyVaultBadge
 import com.example.ui.theme.ThemeMode
 import com.example.ui.viewmodel.SettingsPrivacyUiState
@@ -202,6 +203,18 @@ fun SettingsPrivacyScreen(
                     }
                 }
             }
+        }
+
+        item {
+            PersonalAiKeyCard(
+                keyState = uiState.personalAiKeyState,
+                isTesting = uiState.isTestingPersonalAiKey,
+                feedback = uiState.personalAiKeyFeedback,
+                onSaveAndTest = viewModel::saveAndTestPersonalAiKey,
+                onTestSavedKey = viewModel::testSavedPersonalAiKey,
+                onRemoveKey = viewModel::removePersonalAiKey,
+                onDismissFeedback = viewModel::clearPersonalAiKeyFeedback
+            )
         }
 
         item {
