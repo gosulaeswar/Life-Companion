@@ -53,12 +53,17 @@ import androidx.compose.runtime.setValue
 import kotlinx.coroutines.delay
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.example.ui.components.FloatingSpatialBottomDock
+import com.example.ui.components.FloatingSpatialNavRail
+import com.example.ui.components.SpatialNavItemSpec
+import com.example.ui.components.SpatialOrangeBlueBackdrop
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
@@ -146,25 +151,24 @@ fun LifeCompanionApp(container: AppContainer) {
 
     ProvideLocalizedLocale(language = sessionState.preferences.language) {
         LifeCompanionTheme(themeMode = sessionState.preferences.themeMode) {
-            AnimatedContent(
-                targetState = sessionState.launchDestination,
-                transitionSpec = {
-                    (fadeIn(animationSpec = tween(340)) + scaleIn(initialScale = 0.985f, animationSpec = tween(340))) togetherWith
-                        fadeOut(animationSpec = tween(220))
-                },
-                label = "app_launch_transition"
-            ) { destination ->
-                when (destination) {
-                    AppLaunchDestination.Loading -> {
-                        Box(
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .background(MaterialTheme.colorScheme.background),
-                            contentAlignment = Alignment.Center
-                        ) {
-                            CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+            SpatialOrangeBlueBackdrop(modifier = Modifier.fillMaxSize()) {
+                AnimatedContent(
+                    targetState = sessionState.launchDestination,
+                    transitionSpec = {
+                        (fadeIn(animationSpec = tween(340)) + scaleIn(initialScale = 0.985f, animationSpec = tween(340))) togetherWith
+                            fadeOut(animationSpec = tween(220))
+                    },
+                    label = "app_launch_transition"
+                ) { destination ->
+                    when (destination) {
+                        AppLaunchDestination.Loading -> {
+                            Box(
+                                modifier = Modifier.fillMaxSize(),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                CircularProgressIndicator(color = MaterialTheme.colorScheme.primary)
+                            }
                         }
-                    }
 
                     AppLaunchDestination.Onboarding -> {
                         val profileViewModel: ProfileSetupViewModel = viewModel(
@@ -294,6 +298,7 @@ fun LifeCompanionApp(container: AppContainer) {
                                 onDismissComplete = sessionViewModel::completePermissionsSetup
                             )
                         }
+                    }
                     }
                 }
             }
@@ -508,56 +513,29 @@ private fun MainShell(
     }
 
     BoxWithConstraints(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(MaterialTheme.colorScheme.background)
+        modifier = Modifier.fillMaxSize()
     ) {
         val useNavigationRail = maxWidth >= 600.dp
+        val spatialNavItems = tabs.map { tab ->
+            val selected = currentDestination?.hierarchy?.any {
+                it.hasRoute(tab.dest::class)
+            } == true
+            SpatialNavItemSpec(
+                label = stringResource(id = tab.labelRes),
+                selectedIcon = tab.selectedIcon,
+                unselectedIcon = tab.unselectedIcon,
+                selected = selected,
+                testTag = tab.testTag,
+                onClick = { navigateToTab(tab.dest) }
+            )
+        }
 
         Scaffold(
-            containerColor = MaterialTheme.colorScheme.background,
+            containerColor = Color.Transparent,
             contentWindowInsets = WindowInsets.safeDrawing,
             bottomBar = {
                 if (!useNavigationRail && isTopLevelRoute) {
-                    androidx.compose.foundation.layout.Column {
-                        HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-                        NavigationBar(
-                            containerColor = MaterialTheme.colorScheme.surface,
-                            tonalElevation = 4.dp
-                        ) {
-                            tabs.forEach { tab ->
-                                val selected = currentDestination?.hierarchy?.any {
-                                    it.hasRoute(tab.dest::class)
-                                } == true
-                                NavigationBarItem(
-                                    selected = selected,
-                                    onClick = { navigateToTab(tab.dest) },
-                                    icon = {
-                                        Icon(
-                                            imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                            contentDescription = stringResource(id = tab.labelRes)
-                                        )
-                                    },
-                                    label = {
-                                        Text(
-                                            text = stringResource(id = tab.labelRes),
-                                            maxLines = 1,
-                                            softWrap = false,
-                                            overflow = TextOverflow.Ellipsis
-                                        )
-                                    },
-                                    colors = NavigationBarItemDefaults.colors(
-                                        selectedIconColor = MaterialTheme.colorScheme.primary,
-                                        selectedTextColor = MaterialTheme.colorScheme.primary,
-                                        indicatorColor = MaterialTheme.colorScheme.primaryContainer,
-                                        unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
-                                        unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
-                                    ),
-                                    modifier = Modifier.testTag(tab.testTag)
-                                )
-                            }
-                        }
-                    }
+                    FloatingSpatialBottomDock(items = spatialNavItems)
                 }
             }
         ) { innerPadding ->
@@ -567,40 +545,7 @@ private fun MainShell(
                     .padding(innerPadding)
             ) {
                 if (useNavigationRail && isTopLevelRoute) {
-                    NavigationRail(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        modifier = Modifier.statusBarsPadding()
-                    ) {
-                        tabs.forEach { tab ->
-                            val selected = currentDestination?.hierarchy?.any {
-                                it.hasRoute(tab.dest::class)
-                            } == true
-                            NavigationRailItem(
-                                selected = selected,
-                                onClick = { navigateToTab(tab.dest) },
-                                icon = {
-                                    Icon(
-                                        imageVector = if (selected) tab.selectedIcon else tab.unselectedIcon,
-                                        contentDescription = stringResource(id = tab.labelRes)
-                                    )
-                                },
-                                label = {
-                                    Text(
-                                        text = stringResource(id = tab.labelRes),
-                                        maxLines = 1,
-                                        softWrap = false,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                },
-                                colors = NavigationRailItemDefaults.colors(
-                                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                                    selectedTextColor = MaterialTheme.colorScheme.primary,
-                                    indicatorColor = MaterialTheme.colorScheme.primaryContainer
-                                ),
-                                modifier = Modifier.testTag(tab.testTag)
-                            )
-                        }
-                    }
+                    FloatingSpatialNavRail(items = spatialNavItems)
                 }
 
                 NavHost(

@@ -45,13 +45,17 @@ jobs:
             fi
           fi
 
-      - name: Prepare optional billing endpoints (.env)
+      - name: Prepare optional secrets and billing endpoints (.env)
         env:
+          XAI_API_KEY: ${{ secrets.XAI_API_KEY }}
           BILLING_VERIFICATION_URL: ${{ vars.BILLING_VERIFICATION_URL || secrets.BILLING_VERIFICATION_URL }}
           BILLING_PRICING_CONFIG_URL: ${{ vars.BILLING_PRICING_CONFIG_URL || secrets.BILLING_PRICING_CONFIG_URL }}
         run: |
-          if [ -n "$BILLING_VERIFICATION_URL" ] || [ -n "$BILLING_PRICING_CONFIG_URL" ]; then
+          if [ -n "$XAI_API_KEY" ] || [ -n "$BILLING_VERIFICATION_URL" ] || [ -n "$BILLING_PRICING_CONFIG_URL" ]; then
             : > .env
+            if [ -n "$XAI_API_KEY" ]; then
+              printf 'XAI_API_KEY=%s\n' "$XAI_API_KEY" >> .env
+            fi
             if [ -n "$BILLING_VERIFICATION_URL" ]; then
               printf 'BILLING_VERIFICATION_URL=%s\n' "$BILLING_VERIFICATION_URL" >> .env
             fi

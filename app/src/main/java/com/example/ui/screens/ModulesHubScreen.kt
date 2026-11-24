@@ -40,6 +40,8 @@ import com.example.R
 import com.example.ui.components.ModuleStatusPill
 import com.example.ui.theme.AiStudioMidnight
 import com.example.ui.theme.HeroTealDeep
+import com.example.ui.theme.SpatialGrokAccent
+import com.example.ui.theme.SpatialHeroOrangeGlow
 import com.example.ui.viewmodel.ModulesHubUiState
 
 private data class ModuleTileSpec(
@@ -310,10 +312,11 @@ fun ModulesHubScreen(
                         modifier = Modifier
                             .matchParentSize()
                             .background(
-                                Brush.horizontalGradient(
+                                Brush.linearGradient(
                                     colors = listOf(
-                                        AiStudioMidnight.copy(alpha = 0.85f),
-                                        HeroTealDeep.copy(alpha = 0.55f)
+                                        AiStudioMidnight.copy(alpha = 0.90f),
+                                        HeroTealDeep.copy(alpha = 0.72f),
+                                        SpatialHeroOrangeGlow.copy(alpha = 0.42f)
                                     )
                                 )
                             )
@@ -330,7 +333,7 @@ fun ModulesHubScreen(
                             verticalArrangement = Arrangement.spacedBy(4.dp)
                         ) {
                             Text(
-                                text = "🎙️ AI Voice & Rx Studio",
+                                text = "🎙️ Grok AI Voice & Rx Studio",
                                 style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
                                 color = Color.White
                             )
@@ -342,13 +345,13 @@ fun ModulesHubScreen(
                         }
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFF2CE5B5).copy(alpha = 0.24f),
-                            border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.5f))
+                            color = SpatialGrokAccent.copy(alpha = 0.28f),
+                            border = BorderStroke(1.dp, SpatialGrokAccent.copy(alpha = 0.62f))
                         ) {
                             Text(
                                 text = "Open →",
                                 style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF9DF7DF),
+                                color = Color(0xFFFFE5CC),
                                 modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                             )
                         }

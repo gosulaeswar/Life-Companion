@@ -60,15 +60,8 @@ import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.unit.dp
-import android.content.ClipData
-import android.content.ClipboardManager
-import android.content.Context
-import android.widget.Toast
 import androidx.core.content.ContextCompat
-import com.example.BuildConfig
 import com.example.ai.SupportedVoiceLanguages
-import com.example.ai.readOrCreateDebugAppCheckToken
-import com.example.ai.saveCustomDebugAppCheckToken
 import com.example.domain.IntelligenceTimeframe
 import com.example.ui.components.MoodTrendChartCard
 import com.example.ui.components.RoutineAdherenceRingCard
@@ -535,7 +528,7 @@ fun OnDeviceAiScreen(
             }
         }
 
-        // Personal Gemini API Key (BYOK) — No App Check Debug Token Needed
+        // Personal xAI Grok API Key (BYOK) — Encrypted On-Device Storage
         item {
             com.example.ui.components.PersonalAiKeyCard(
                 keyState = uiState.personalAiKeyState,
@@ -549,13 +542,13 @@ fun OnDeviceAiScreen(
             )
         }
 
-        // App Check & AI Connection Diagnostics Card
+        // xAI Grok Connection Diagnostics Card
         item {
             Card(
                 modifier = Modifier.widthIn(max = 600.dp).fillMaxWidth(),
-                shape = RoundedCornerShape(20.dp),
+                shape = RoundedCornerShape(24.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outlineVariant)
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.secondary.copy(alpha = 0.30f))
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(
@@ -564,9 +557,9 @@ fun OnDeviceAiScreen(
                         verticalAlignment = Alignment.CenterVertically
                     ) {
                         Column(modifier = Modifier.weight(1f)) {
-                            Text("🩺 AI & App Check Diagnostics", style = MaterialTheme.typography.titleSmall)
+                            Text("🩺 xAI Grok Connection Diagnostics", style = MaterialTheme.typography.titleSmall)
                             Text(
-                                "Verify Firebase config, App Check attestation, and Gemini streaming on this device.",
+                                "Verify your xAI Grok key, endpoint reachability, and model availability on this device.",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
@@ -584,7 +577,7 @@ fun OnDeviceAiScreen(
                         Surface(
                             shape = RoundedCornerShape(14.dp),
                             color = if (diag.isHealthy) {
-                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.5f)
+                                MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.65f)
                             } else {
                                 MaterialTheme.colorScheme.errorContainer
                             }
@@ -599,96 +592,10 @@ fun OnDeviceAiScreen(
                                     color = if (diag.isHealthy) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                                 )
                                 Text(
-                                    text = "Firebase: ${diag.firebaseStatus}\nApp Check: ${diag.appCheckStatus}\nGemini: ${diag.geminiStatus}\nNext step: ${diag.recommendation}",
+                                    text = "Provider: ${diag.providerStatus}\nAuth: ${diag.authStatus}\nGrok: ${diag.grokStatus}\nNext step: ${diag.recommendation}",
                                     style = MaterialTheme.typography.bodySmall,
                                     color = if (diag.isHealthy) MaterialTheme.colorScheme.onPrimaryContainer else MaterialTheme.colorScheme.onErrorContainer
                                 )
-                            }
-                        }
-                    }
-
-                    if (BuildConfig.DEBUG) {
-                        var currentDebugToken by remember(context) {
-                            mutableStateOf(readOrCreateDebugAppCheckToken(context).orEmpty())
-                        }
-                        var showCustomTokenInput by remember { mutableStateOf(false) }
-                        var customTokenDraft by remember { mutableStateOf("") }
-                        if (currentDebugToken.isNotBlank()) {
-                            Surface(
-                                shape = RoundedCornerShape(12.dp),
-                                color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f)
-                            ) {
-                                Column(
-                                    modifier = Modifier.fillMaxWidth().padding(10.dp),
-                                    verticalArrangement = Arrangement.spacedBy(8.dp)
-                                ) {
-                                    Row(
-                                        modifier = Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Text(
-                                                text = "Debug App Check Token (sideloaded APK)",
-                                                style = MaterialTheme.typography.labelSmall,
-                                                color = MaterialTheme.colorScheme.primary
-                                            )
-                                            Text(
-                                                text = currentDebugToken,
-                                                style = MaterialTheme.typography.bodySmall,
-                                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                                            )
-                                        }
-                                        TextButton(
-                                            onClick = {
-                                                val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as? ClipboardManager
-                                                cm?.setPrimaryClip(ClipData.newPlainText("App Check Debug Token", currentDebugToken))
-                                                Toast.makeText(context, "Debug token copied", Toast.LENGTH_SHORT).show()
-                                            },
-                                            modifier = Modifier.testTag("ai_copy_debug_token_button")
-                                        ) {
-                                            Text("Copy")
-                                        }
-                                    }
-
-                                    TextButton(
-                                        onClick = { showCustomTokenInput = !showCustomTokenInput },
-                                        modifier = Modifier.testTag("ai_toggle_paste_debug_token_button")
-                                    ) {
-                                        Text(
-                                            if (showCustomTokenInput) "Hide custom token input"
-                                            else "Paste an already-registered Firebase debug token"
-                                        )
-                                    }
-
-                                    if (showCustomTokenInput) {
-                                        OutlinedTextField(
-                                            value = customTokenDraft,
-                                            onValueChange = { customTokenDraft = it },
-                                            label = { Text("Registered Debug Token (UUID)") },
-                                            singleLine = true,
-                                            modifier = Modifier
-                                                .fillMaxWidth()
-                                                .testTag("ai_custom_debug_token_input")
-                                        )
-                                        FilledTonalButton(
-                                            onClick = {
-                                                val saved = saveCustomDebugAppCheckToken(context, customTokenDraft)
-                                                if (saved) {
-                                                    currentDebugToken = customTokenDraft.trim()
-                                                    customTokenDraft = ""
-                                                    showCustomTokenInput = false
-                                                    Toast.makeText(context, "Debug token saved — tap Run Test", Toast.LENGTH_SHORT).show()
-                                                } else {
-                                                    Toast.makeText(context, "Enter a valid debug token (8+ chars)", Toast.LENGTH_SHORT).show()
-                                                }
-                                            },
-                                            modifier = Modifier.testTag("ai_save_debug_token_button")
-                                        ) {
-                                            Text("Save & Apply Token")
-                                        }
-                                    }
-                                }
                             }
                         }
                     }

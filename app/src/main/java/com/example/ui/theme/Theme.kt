@@ -10,7 +10,9 @@ import androidx.compose.material3.Shapes
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.SideEffect
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.dp
@@ -22,30 +24,32 @@ enum class ThemeMode(val label: String) {
     DARK("Dark")
 }
 
+val LocalIsSpatialDarkTheme = compositionLocalOf { false }
+
 private val LightColorScheme = lightColorScheme(
-    primary = BotanicalSagePrimary,
+    primary = SolarOrangePrimary,
     onPrimary = Color.White,
-    primaryContainer = BotanicalSageContainer,
-    onPrimaryContainer = OnBotanicalSageContainer,
-    secondary = MineralTealSecondary,
+    primaryContainer = SolarOrangeContainer,
+    onPrimaryContainer = OnSolarOrangeContainer,
+    secondary = CobaltBlueSecondary,
     onSecondary = Color.White,
-    secondaryContainer = MineralTealContainer,
-    onSecondaryContainer = OnMineralTealContainer,
-    tertiary = TerracottaRoseTertiary,
+    secondaryContainer = CobaltBlueContainer,
+    onSecondaryContainer = OnCobaltBlueContainer,
+    tertiary = ElectricAzureTertiary,
     onTertiary = Color.White,
-    tertiaryContainer = TerracottaRoseContainer,
-    onTertiaryContainer = OnTerracottaRoseContainer,
-    background = WarmLinenBackground,
-    onBackground = DeepForestInk,
-    surface = SoftAlabasterSurface,
-    onSurface = DeepForestInk,
-    surfaceVariant = OatSurfaceVariant,
-    onSurfaceVariant = MutedPineInk,
-    outline = SandOutline,
-    outlineVariant = CardHairlineLight,
-    surfaceContainerLowest = Color.White,
-    surfaceContainerLow = Color(0xFFF8FBFA),
-    surfaceContainer = Color(0xFFF1F6F5),
+    tertiaryContainer = ElectricAzureContainer,
+    onTertiaryContainer = OnElectricAzureContainer,
+    background = SpatialLightBase,
+    onBackground = DeepCobaltInk,
+    surface = SpatialGlassLight,
+    onSurface = DeepCobaltInk,
+    surfaceVariant = SpatialGlassVariantLight,
+    onSurfaceVariant = MutedSlateBlueInk,
+    outline = SpatialGlassOutlineLight,
+    outlineVariant = SpatialGlassOutlineLight.copy(alpha = 0.72f),
+    surfaceContainerLowest = Color(0xF5FFFFFF),
+    surfaceContainerLow = Color(0xE0F6FAFF),
+    surfaceContainer = Color(0xD8ECF3FF),
     error = ErrorCoralLight,
     onError = Color.White,
     errorContainer = Color(0xFFFEE4E2),
@@ -53,29 +57,29 @@ private val LightColorScheme = lightColorScheme(
 )
 
 private val DarkColorScheme = darkColorScheme(
-    primary = SoftSagePrimary,
-    onPrimary = Color(0xFF042920),
-    primaryContainer = DarkSageContainer,
-    onPrimaryContainer = OnDarkSageContainer,
-    secondary = MistAquaSecondary,
-    onSecondary = Color(0xFF032838),
-    secondaryContainer = DarkTealContainer,
-    onSecondaryContainer = OnDarkTealContainer,
-    tertiary = WarmCoralTertiary,
-    onTertiary = Color(0xFF47120D),
-    tertiaryContainer = DarkTerracottaContainer,
-    onTertiaryContainer = OnDarkTerracottaContainer,
-    background = DeepPineBackground,
-    onBackground = WarmIvoryInk,
-    surface = MutedMossSurface,
-    onSurface = WarmIvoryInk,
-    surfaceVariant = SlateOliveSurfaceVariant,
-    onSurfaceVariant = SoftSageMutedInk,
-    outline = PineOutline,
-    outlineVariant = SlateOliveSurfaceVariant,
-    surfaceContainerLowest = Color(0xFF08100E),
-    surfaceContainerLow = Color(0xFF0F1B18),
-    surfaceContainer = Color(0xFF152420),
+    primary = RadiantOrangePrimary,
+    onPrimary = Color(0xFF3A1200),
+    primaryContainer = DarkOrangeContainer,
+    onPrimaryContainer = OnDarkOrangeContainer,
+    secondary = LuminousBlueSecondary,
+    onSecondary = Color(0xFF061B42),
+    secondaryContainer = DarkCobaltContainer,
+    onSecondaryContainer = OnDarkCobaltContainer,
+    tertiary = SunsetAmberTertiary,
+    onTertiary = Color(0xFF3C2300),
+    tertiaryContainer = DarkAmberContainer,
+    onTertiaryContainer = OnDarkAmberContainer,
+    background = SpatialDarkBase,
+    onBackground = SpatialSnowInk,
+    surface = SpatialGlassDark,
+    onSurface = SpatialSnowInk,
+    surfaceVariant = SpatialGlassVariantDark,
+    onSurfaceVariant = SpatialMistInk,
+    outline = SpatialGlassOutlineDark,
+    outlineVariant = SpatialGlassOutlineDark.copy(alpha = 0.78f),
+    surfaceContainerLowest = Color(0xD908132B),
+    surfaceContainerLow = Color(0xCC0D1B38),
+    surfaceContainer = Color(0xC8132447),
     error = ErrorCoralDark,
     onError = Color(0xFF690005),
     errorContainer = Color(0xFF6B1D18),
@@ -83,11 +87,11 @@ private val DarkColorScheme = darkColorScheme(
 )
 
 val LifeCompanionShapes = Shapes(
-    extraSmall = RoundedCornerShape(8.dp),
-    small = RoundedCornerShape(12.dp),
-    medium = RoundedCornerShape(20.dp),
+    extraSmall = RoundedCornerShape(10.dp),
+    small = RoundedCornerShape(14.dp),
+    medium = RoundedCornerShape(22.dp),
     large = RoundedCornerShape(28.dp),
-    extraLarge = RoundedCornerShape(32.dp)
+    extraLarge = RoundedCornerShape(34.dp)
 )
 
 @Composable
@@ -114,12 +118,14 @@ fun LifeCompanionTheme(
         }
     }
 
-    MaterialTheme(
-        colorScheme = colorScheme,
-        typography = LifeCompanionTypography,
-        shapes = LifeCompanionShapes,
-        content = content
-    )
+    CompositionLocalProvider(LocalIsSpatialDarkTheme provides darkTheme) {
+        MaterialTheme(
+            colorScheme = colorScheme,
+            typography = LifeCompanionTypography,
+            shapes = LifeCompanionShapes,
+            content = content
+        )
+    }
 }
 
 private tailrec fun Context.findActivityWindow(): android.view.Window? = when (this) {

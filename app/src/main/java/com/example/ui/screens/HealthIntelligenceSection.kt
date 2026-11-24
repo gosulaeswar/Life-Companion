@@ -55,9 +55,12 @@ import com.example.domain.TrendMetricComparison
 import com.example.security.AiDataAuthorization
 import com.example.ui.theme.AmberNotice
 import com.example.ui.theme.FertileLeafGreen
-import com.example.ui.theme.HeroForestDark
-import com.example.ui.theme.HeroTealDeep
 import com.example.ui.theme.JetBrainsMonoMetricFont
+import com.example.ui.theme.SolarOrangePrimary
+import com.example.ui.theme.SpatialGrokAccent
+import com.example.ui.theme.SpatialHeroBlueDeep
+import com.example.ui.theme.SpatialHeroCobalt
+import com.example.ui.theme.SpatialHeroOrangeGlow
 import com.example.ui.viewmodel.AiTaskStatus
 import com.example.ui.viewmodel.ModulesHubUiState
 
@@ -91,13 +94,17 @@ fun PersonalHealthIntelligenceCard(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            // Gradient Botanical Studio Header
+            // Spatial Cobalt & Solar Orange Studio Header
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
                     .background(
                         Brush.linearGradient(
-                            colors = listOf(HeroForestDark, HeroTealDeep)
+                            colors = listOf(
+                                SpatialHeroBlueDeep,
+                                SpatialHeroCobalt,
+                                SpatialHeroOrangeGlow.copy(alpha = 0.65f)
+                            )
                         )
                     )
                     .padding(18.dp),
@@ -117,7 +124,7 @@ fun PersonalHealthIntelligenceCard(
                         Text(
                             text = "Grounded in your recorded wellness history",
                             style = MaterialTheme.typography.bodySmall,
-                            color = Color(0xFF9DF7DF)
+                            color = Color(0xFFFFDFC0)
                         )
                     }
                     Surface(
@@ -152,15 +159,15 @@ fun PersonalHealthIntelligenceCard(
                             onClick = { onSelectTimeframe(option) },
                             label = { Text("${option.label} (${option.badgeText})") },
                             colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = Color(0xFF2CE5B5),
-                                selectedLabelColor = Color(0xFF042920),
+                                selectedContainerColor = SolarOrangePrimary,
+                                selectedLabelColor = Color.White,
                                 containerColor = Color.White.copy(alpha = 0.14f),
                                 labelColor = Color.White
                             ),
                             border = FilterChipDefaults.filterChipBorder(
                                 enabled = true,
                                 selected = selected,
-                                borderColor = Color.White.copy(alpha = 0.25f)
+                                borderColor = Color.White.copy(alpha = 0.28f)
                             ),
                             modifier = Modifier.testTag(tag)
                         )
@@ -177,8 +184,8 @@ fun PersonalHealthIntelligenceCard(
                         onClick = { onGenerateAiInsights(timeframe) },
                         enabled = !isBusy,
                         colors = ButtonDefaults.buttonColors(
-                            containerColor = Color(0xFF2CE5B5),
-                            contentColor = Color(0xFF042920)
+                            containerColor = SpatialGrokAccent,
+                            contentColor = Color.White
                         ),
                         modifier = Modifier.testTag("intel_generate_ai_button")
                     ) {
@@ -188,7 +195,7 @@ fun PersonalHealthIntelligenceCard(
                             modifier = Modifier.size(18.dp)
                         )
                         Text(
-                            text = if (cloudReport != null) " Refresh AI Synthesis" else " Synthesize with AI",
+                            text = if (cloudReport != null) " Refresh Grok Synthesis" else " Synthesize with Grok",
                             fontWeight = FontWeight.SemiBold
                         )
                     }
@@ -230,7 +237,7 @@ fun PersonalHealthIntelligenceCard(
                         }
                     ) {
                         Text(
-                            text = if (activeReport.isFromCloudAi) "✨ Gemini Cloud Synthesis" else "📱 On-Device Grounded Analysis",
+                            text = if (activeReport.isFromCloudAi) "✨ Grok Cloud Synthesis" else "📱 On-Device Grounded Analysis",
                             style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                             color = if (activeReport.isFromCloudAi) {
                                 MaterialTheme.colorScheme.onPrimaryContainer

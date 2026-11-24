@@ -111,6 +111,7 @@ fun FamilyCircleRoute(
     val context = LocalContext.current
 
     Scaffold(
+        containerColor = androidx.compose.ui.graphics.Color.Transparent,
         topBar = {
             TopAppBar(
                 title = { Text(stringResource(id = R.string.family_circle_title)) },

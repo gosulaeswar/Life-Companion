@@ -3,9 +3,9 @@ package com.example
 import android.content.Context
 import androidx.test.core.app.ApplicationProvider
 import com.example.ai.AiActionType
-import com.example.ai.DirectGeminiHttpResponse
-import com.example.ai.DirectGeminiInlinePart
-import com.example.ai.DirectGeminiRestClient
+import com.example.ai.GrokApiClient
+import com.example.ai.GrokHttpResponse
+import com.example.ai.GrokInlinePart
 import com.example.ai.LifeWeaveAiService
 import com.example.ai.SupportedVoiceLanguages
 import com.example.security.KeystoreVaultManager
@@ -35,8 +35,26 @@ class Phase10PersonalAiKeyTest {
         return KeystoreVaultManager(testKeyProvider = { secretKey })
     }
 
+    private fun grokOkBody(assistantText: String): String =
+        JSONObject()
+            .put("id", "chatcmpl-test-123")
+            .put(
+                "choices",
+                JSONArray().put(
+                    JSONObject()
+                        .put("index", 0)
+                        .put(
+                            "message",
+                            JSONObject()
+                                .put("role", "assistant")
+                                .put("content", assistantText)
+                        )
+                )
+            )
+            .toString()
+
     @Test
-    fun personalAiKeyStore_encryptsMasksValidatesAndClearsSafely() {
+    fun personalAiKeyStore_encryptsMasksValidatesAndClearsGrokKeysSafely() {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val store = PersonalAiKeyStore(context, createTestVaultManager())
         store.clearPersonalKey()
@@ -44,14 +62,14 @@ class Phase10PersonalAiKeyTest {
         // Validation guards
         assertTrue(store.savePersonalKey("").isFailure)
         assertTrue(store.savePersonalKey("short_key").isFailure)
-        assertTrue(store.savePersonalKey("AIzaSyA12345 678901234567890").isFailure)
+        assertTrue(store.savePersonalKey("xai-12345 678901234567890").isFailure)
         assertFalse(store.hasPersonalKey())
 
         // Valid save encrypts with LCENC1 envelope and masks preview
-        val sampleKey = "AIzaSyTestExampleKey9876543210ABCD9xQ2"
+        val sampleKey = "xai-TestExampleGrokKey9876543210ABCD9xQ2"
         val saved = store.savePersonalKey(sampleKey).getOrThrow()
         assertTrue(saved.hasPersonalKey)
-        assertEquals("AIza••••••9xQ2", saved.maskedPreview)
+        assertEquals("xai-••••••9xQ2", saved.maskedPreview)
         assertEquals(PersonalAiKeyState.ENGINE_PERSONAL_KEY, saved.activeEngineLabel)
 
         // Raw SharedPreferences must contain encrypted envelope, never plaintext
@@ -65,82 +83,108 @@ class Phase10PersonalAiKeyTest {
         // Decryption recovers exact key
         assertEquals(sampleKey, store.readPersonalKeyOrNull())
 
-        // Clear removes encrypted key and reverts to default engine
+        // Clear removes encrypted key and reverts to default Grok engine label
         store.clearPersonalKey()
         assertFalse(store.hasPersonalKey())
         assertNull(store.readPersonalKeyOrNull())
-        assertEquals(PersonalAiKeyState.ENGINE_FIREBASE_AI_LOGIC, store.currentState().activeEngineLabel)
+        assertEquals(PersonalAiKeyState.defaultEngineLabel(), store.currentState().activeEngineLabel)
     }
 
     @Test
-    fun directGeminiClient_buildsSchemasHandlesMultimodalAndFallsBackOn404() = runBlocking {
-        val pdfBytes = "%PDF-1.4 sample".toByteArray()
-        val requestJson = DirectGeminiRestClient.buildRequestJson(
-            promptText = "Explain this report",
-            inlinePart = DirectGeminiInlinePart("application/pdf", pdfBytes),
-            responseSchema = DirectGeminiRestClient.reportExplanationResponseSchema()
+    fun grokApiClient_buildsMultimodalSchemasHandles404FailoverAndStrictSchemaDowngrade() = runBlocking {
+        val jpegBytes = byteArrayOf(0xFF.toByte(), 0xD8.toByte(), 0xFF.toByte(), 0xD9.toByte())
+        val requestJson = GrokApiClient.buildChatCompletionRequestJson(
+            modelName = GrokApiClient.DEFAULT_VISION_MODEL,
+            promptText = "Explain this lab report",
+            inlinePart = GrokInlinePart("image/jpeg", jpegBytes),
+            schemaName = "lifeweave_report_explanation",
+            responseSchema = GrokApiClient.reportExplanationResponseSchema(),
+            useStrictJsonSchema = true
         )
-        val parts = requestJson.getJSONArray("contents").getJSONObject(0).getJSONArray("parts")
-        assertEquals(2, parts.length())
-        assertEquals("application/pdf", parts.getJSONObject(0).getJSONObject("inline_data").getString("mime_type"))
-        assertEquals("Explain this report", parts.getJSONObject(1).getString("text"))
-        assertEquals("application/json", requestJson.getJSONObject("generationConfig").getString("responseMimeType"))
-        assertNotNull(DirectGeminiRestClient.assistantResponseSchema().getJSONObject("properties"))
-        assertNotNull(DirectGeminiRestClient.prescriptionResponseSchema().getJSONObject("properties"))
-        assertNotNull(DirectGeminiRestClient.healthIntelligenceResponseSchema().getJSONObject("properties"))
-        assertNotNull(DirectGeminiRestClient.indianNutritionResponseSchema().getJSONObject("properties"))
+        assertEquals(GrokApiClient.DEFAULT_VISION_MODEL, requestJson.getString("model"))
+        val messages = requestJson.getJSONArray("messages")
+        assertEquals(2, messages.length()) // system + user
+        val userContent = messages.getJSONObject(1).getJSONArray("content")
+        assertEquals(2, userContent.length())
+        assertEquals("text", userContent.getJSONObject(0).getString("type"))
+        assertEquals("image_url", userContent.getJSONObject(1).getString("type"))
+        assertTrue(
+            userContent.getJSONObject(1).getJSONObject("image_url").getString("url")
+                .startsWith("data:image/jpeg;base64,")
+        )
+        assertEquals("json_schema", requestJson.getJSONObject("response_format").getString("type"))
+        assertNotNull(GrokApiClient.assistantResponseSchema().getJSONObject("properties"))
+        assertNotNull(GrokApiClient.prescriptionResponseSchema().getJSONObject("properties"))
+        assertNotNull(GrokApiClient.healthIntelligenceResponseSchema().getJSONObject("properties"))
+        assertNotNull(GrokApiClient.indianNutritionResponseSchema().getJSONObject("properties"))
 
-        // Simulate 404 on default model -> automatic fallback to gemini-3.5-flash-lite
-        val calledUrls = mutableListOf<String>()
-        val client = DirectGeminiRestClient { url, apiKey, _, _ ->
-            calledUrls += url
-            assertEquals("AIzaSyFallbackTestKey00000000001234", apiKey)
-            if (url.contains(DirectGeminiRestClient.DEFAULT_MODEL)) {
-                DirectGeminiHttpResponse(404, """{"error":{"message":"Model not found"}}""")
-            } else {
-                val okBody = JSONObject().put(
-                    "candidates",
-                    JSONArray().put(
-                        JSONObject().put(
-                            "content",
-                            JSONObject().put(
-                                "parts",
-                                JSONArray().put(JSONObject().put("text", "AI Ready"))
-                            )
-                        )
-                    )
-                ).toString()
-                DirectGeminiHttpResponse(200, okBody)
+        // Simulate 404 on DEFAULT_TEXT_MODEL -> automatic failover to FALLBACK_TEXT_MODEL
+        val requestedModels = mutableListOf<String>()
+        val client = GrokApiClient(
+            delayFn = { _ -> },
+            httpExecutor = { endpointUrl, apiKey, bodyJson, _ ->
+                assertEquals(GrokApiClient.CHAT_COMPLETIONS_URL, endpointUrl)
+                assertEquals("xai-FallbackTestKey00000000001234", apiKey)
+                val model = JSONObject(bodyJson).getString("model")
+                requestedModels += model
+                if (model == GrokApiClient.DEFAULT_TEXT_MODEL) {
+                    GrokHttpResponse(404, """{"error":{"message":"Model not found"}}""")
+                } else {
+                    GrokHttpResponse(200, grokOkBody("Grok Ready"))
+                }
             }
-        }
-
-        val pingResult = client.ping("AIzaSyFallbackTestKey00000000001234").getOrThrow()
-        assertEquals(2, calledUrls.size)
-        assertTrue(calledUrls[0].contains(DirectGeminiRestClient.DEFAULT_MODEL))
-        assertTrue(calledUrls[1].contains(DirectGeminiRestClient.FALLBACK_MODEL))
-        assertEquals(DirectGeminiRestClient.FALLBACK_MODEL, pingResult.modelUsed)
-        assertEquals("AI Ready", pingResult.sampleText)
-
-        // Friendly error mapping without leaking key
-        val invalidErr = DirectGeminiRestClient.mapHttpError(
-            400,
-            """{"error":{"message":"API key not valid. Please pass a valid API key."}}""",
-            DirectGeminiRestClient.DEFAULT_MODEL
         )
-        assertTrue(invalidErr.contains("invalid", ignoreCase = true))
-        val rateLimitErr = DirectGeminiRestClient.mapHttpError(429, "{}", DirectGeminiRestClient.DEFAULT_MODEL)
+
+        val pingResult = client.ping("xai-FallbackTestKey00000000001234").getOrThrow()
+        assertEquals(2, requestedModels.size)
+        assertEquals(GrokApiClient.DEFAULT_TEXT_MODEL, requestedModels[0])
+        assertEquals(GrokApiClient.FALLBACK_TEXT_MODEL, requestedModels[1])
+        assertEquals(GrokApiClient.FALLBACK_TEXT_MODEL, pingResult.modelUsed)
+        assertEquals("Grok Ready", pingResult.sampleText)
+
+        // Simulate HTTP 400 rejecting strict json_schema -> automatic downgrade to json_object
+        val responseFormatTypes = mutableListOf<String>()
+        val downgradeClient = GrokApiClient(
+            delayFn = { _ -> },
+            httpExecutor = { _, _, bodyJson, _ ->
+                val fmtType = JSONObject(bodyJson).getJSONObject("response_format").getString("type")
+                responseFormatTypes += fmtType
+                if (fmtType == "json_schema") {
+                    GrokHttpResponse(400, """{"error":{"message":"json_schema response_format unsupported"}}""")
+                } else {
+                    GrokHttpResponse(200, grokOkBody("""```json\n{"assistantReply":"Hydration logged","actions":[]}\n```"""))
+                }
+            }
+        )
+        val rawResult = downgradeClient.generateContent(
+            apiKey = "xai-SchemaDowngradeTestKey1234567890",
+            promptText = "Test prompt",
+            schemaName = "lifeweave_assistant",
+            responseSchema = GrokApiClient.assistantResponseSchema()
+        ).getOrThrow()
+        assertEquals(listOf("json_schema", "json_object"), responseFormatTypes)
+        assertEquals("""{"assistantReply":"Hydration logged","actions":[]}""", rawResult)
+
+        // Friendly error mapping
+        val deniedErr = GrokApiClient.mapHttpError(
+            401,
+            """{"error":{"message":"Incorrect API key provided"}}""",
+            GrokApiClient.DEFAULT_TEXT_MODEL
+        )
+        assertTrue(deniedErr.contains("rejected", ignoreCase = true))
+        val rateLimitErr = GrokApiClient.mapHttpError(429, "{}", GrokApiClient.DEFAULT_TEXT_MODEL)
         assertTrue(rateLimitErr.contains("429"))
     }
 
     @Test
-    fun lifeWeaveAiService_routesThroughPersonalKeyBypassingFirebaseAndAppCheck() = runBlocking {
+    fun lifeWeaveAiService_routesThroughPersonalGrokKeyAndReportsDiagnostics() = runBlocking {
         val context = ApplicationProvider.getApplicationContext<Context>()
         val store = PersonalAiKeyStore(context, createTestVaultManager())
-        val testKey = "AIzaSyPersonalRoutingKey1234567890WXYZ"
+        val testKey = "xai-PersonalRoutingKey1234567890WXYZ"
         store.savePersonalKey(testKey).getOrThrow()
 
         val fakeAssistantJson = JSONObject()
-            .put("assistantReply", "Logged 250 ml of water for you!")
+            .put("assistantReply", "Logged 250 ml of water via Grok!")
             .put(
                 "actions",
                 JSONArray().put(
@@ -153,29 +197,20 @@ class Phase10PersonalAiKeyTest {
             )
             .toString()
 
-        val fakeClient = DirectGeminiRestClient { _, receivedKey, body, _ ->
-            assertEquals(testKey, receivedKey)
-            val replyText = if (body.contains("Reply with two words")) "AI Ready" else fakeAssistantJson
-            val envelope = JSONObject().put(
-                "candidates",
-                JSONArray().put(
-                    JSONObject().put(
-                        "content",
-                        JSONObject().put(
-                            "parts",
-                            JSONArray().put(JSONObject().put("text", replyText))
-                        )
-                    )
-                )
-            ).toString()
-            DirectGeminiHttpResponse(200, envelope)
-        }
+        val fakeClient = GrokApiClient(
+            delayFn = { _ -> },
+            httpExecutor = { _, receivedKey, body, _ ->
+                assertEquals(testKey, receivedKey)
+                val replyText = if (body.contains("Grok Ready")) "Grok Ready" else fakeAssistantJson
+                GrokHttpResponse(200, grokOkBody(replyText))
+            }
+        )
 
-        // Passing null context proves FirebaseApp / AppCheck is completely bypassed when personal key is active
         val service = LifeWeaveAiService(
             context = null,
             personalAiKeyStore = store,
-            directGeminiClient = fakeClient
+            grokClient = fakeClient,
+            buildConfigKeyProvider = { "" }
         )
 
         val outcome = service.processVoiceOrTextCommand(
@@ -184,150 +219,107 @@ class Phase10PersonalAiKeyTest {
             wellnessContextSummary = "Hydration: 0 / 2500 ml"
         ).getOrThrow()
 
-        assertEquals("Logged 250 ml of water for you!", outcome.replyText)
+        assertEquals("Logged 250 ml of water via Grok!", outcome.replyText)
         assertEquals(1, outcome.actions.size)
         assertEquals(AiActionType.LOG_WATER, outcome.actions.first().actionType)
         assertEquals(250, outcome.actions.first().amountOrValue)
 
         val diag = service.runDiagnostics()
         assertTrue(diag.isHealthy)
-        assertTrue(diag.firebaseStatus.contains("Personal Gemini API Key", ignoreCase = true))
-        assertTrue(diag.appCheckStatus.contains("Not required", ignoreCase = true))
+        assertTrue(diag.providerStatus.contains("xAI Grok", ignoreCase = true))
+        assertTrue(diag.authStatus.contains("Personal xAI Grok Key", ignoreCase = true))
+        assertTrue(diag.grokStatus.contains("Connected", ignoreCase = true))
 
         store.clearPersonalKey()
     }
 
     @Test
-    fun personalAiKeyStore_acceptsAndMasksNewAqPrefixKeys() {
-        val context = ApplicationProvider.getApplicationContext<Context>()
-        val store = PersonalAiKeyStore(context, createTestVaultManager())
-        store.clearPersonalKey()
-
-        val aqKey = "AQ.Ab8RN6ExampleGoogleAIStudioKey12345JyfQ"
-        val saved = store.savePersonalKey(aqKey).getOrThrow()
-        assertTrue(saved.hasPersonalKey)
-        assertEquals("AQ.A••••••JyfQ", saved.maskedPreview)
-        assertEquals(aqKey, store.readPersonalKeyOrNull())
-
-        store.clearPersonalKey()
-    }
-
-    @Test
-    fun directGeminiClient_retries503WithBackoffAndFallsBackToFlashLite() = runBlocking {
-        val calls = mutableListOf<String>()
+    fun grokApiClient_retries503WithBackoffAndFallsBackToGrok3Mini() = runBlocking {
+        val modelsCalled = mutableListOf<String>()
         val delays = mutableListOf<Long>()
-        val okEnvelope = JSONObject().put(
-            "candidates",
-            JSONArray().put(
-                JSONObject().put(
-                    "content",
-                    JSONObject().put(
-                        "parts",
-                        JSONArray().put(JSONObject().put("text", "AI Ready"))
-                    )
-                )
-            )
-        ).toString()
 
-        val client = DirectGeminiRestClient(
+        val client = GrokApiClient(
             delayFn = { ms -> delays += ms },
-            httpExecutor = { url, _, _, _ ->
-                calls += url
-                if (url.contains(DirectGeminiRestClient.DEFAULT_MODEL)) {
-                    DirectGeminiHttpResponse(
+            httpExecutor = { _, _, bodyJson, _ ->
+                val model = JSONObject(bodyJson).getString("model")
+                modelsCalled += model
+                if (model == GrokApiClient.DEFAULT_TEXT_MODEL) {
+                    GrokHttpResponse(
                         503,
-                        """{"error":{"message":"This model is currently experiencing high demand."}}"""
+                        """{"error":{"message":"Service temporarily overloaded"}}"""
                     )
                 } else {
-                    DirectGeminiHttpResponse(200, okEnvelope)
+                    GrokHttpResponse(200, grokOkBody("Grok Ready"))
                 }
             }
         )
 
-        val pingResult = client.ping("AQ.Ab8RN6TestKey1234567890JyfQ").getOrThrow()
-        assertEquals(DirectGeminiRestClient.FALLBACK_MODEL, pingResult.modelUsed)
-        assertEquals("AI Ready", pingResult.sampleText)
-        // 2 attempts on DEFAULT_MODEL (initial + 1 backoff retry), then 1 winning call on FALLBACK_MODEL
-        assertEquals(3, calls.size)
-        assertTrue(calls[0].contains(DirectGeminiRestClient.DEFAULT_MODEL))
-        assertTrue(calls[1].contains(DirectGeminiRestClient.DEFAULT_MODEL))
-        assertTrue(calls[2].contains(DirectGeminiRestClient.FALLBACK_MODEL))
+        val pingResult = client.ping("xai-Retry503TestKey1234567890ABCD").getOrThrow()
+        assertEquals(GrokApiClient.FALLBACK_TEXT_MODEL, pingResult.modelUsed)
+        assertEquals("Grok Ready", pingResult.sampleText)
+        // 2 attempts on grok-3 (initial + 1 backoff retry), then 1 winning call on grok-3-mini
+        assertEquals(
+            listOf(
+                GrokApiClient.DEFAULT_TEXT_MODEL,
+                GrokApiClient.DEFAULT_TEXT_MODEL,
+                GrokApiClient.FALLBACK_TEXT_MODEL
+            ),
+            modelsCalled
+        )
         assertEquals(1, delays.size)
         assertTrue(delays.first() > 0L)
     }
 
     @Test
-    fun directGeminiClient_discoversLiveGemini3FlashModelWhenStaticModels503AndRedactsErrors() = runBlocking {
-        val secretKey = "AQ.Ab8RN6SuperSecretKey99999JyfQ"
-        val postUrls = mutableListOf<String>()
+    fun grokApiClient_discoversLiveModelViaV1ModelsAndRedactsKeysInErrors() = runBlocking {
+        val secretKey = "xai-SuperSecretGrokKey99999ABCD"
+        val modelsCalled = mutableListOf<String>()
         val getUrls = mutableListOf<String>()
 
         val modelsListPayload = JSONObject().put(
-            "models",
+            "data",
             JSONArray()
-                .put(
-                    JSONObject()
-                        .put("name", "models/gemini-3-tts-preview")
-                        .put("supportedGenerationMethods", JSONArray().put("generateContent"))
-                )
-                .put(
-                    JSONObject()
-                        .put("name", "models/gemini-3-flash-preview")
-                        .put("supportedGenerationMethods", JSONArray().put("generateContent"))
-                )
+                .put(JSONObject().put("id", "grok-2-image-1212")) // excluded imagine/image-gen or lower priority
+                .put(JSONObject().put("id", "grok-4-fast-non-reasoning"))
+                .put(JSONObject().put("id", "grok-3-beta"))
         ).toString()
 
-        val okEnvelope = JSONObject().put(
-            "candidates",
-            JSONArray().put(
-                JSONObject().put(
-                    "content",
-                    JSONObject().put(
-                        "parts",
-                        JSONArray().put(JSONObject().put("text", "Discovered OK"))
-                    )
-                )
-            )
-        ).toString()
-
-        val client = DirectGeminiRestClient(
+        val client = GrokApiClient(
             httpGetExecutor = { url, key, _ ->
                 getUrls += url
                 assertEquals(secretKey, key)
-                DirectGeminiHttpResponse(200, modelsListPayload)
+                GrokHttpResponse(200, modelsListPayload)
             },
             delayFn = { _ -> },
-            httpExecutor = { url, _, _, _ ->
-                postUrls += url
-                if (url.contains("gemini-3-flash-preview")) {
-                    DirectGeminiHttpResponse(200, okEnvelope)
+            httpExecutor = { _, _, bodyJson, _ ->
+                val model = JSONObject(bodyJson).getString("model")
+                modelsCalled += model
+                if (model == "grok-4-fast-non-reasoning") {
+                    GrokHttpResponse(200, grokOkBody("Discovered Grok OK"))
                 } else {
-                    DirectGeminiHttpResponse(
-                        429,
-                        """{"error":{"message":"Quota exceeded for model"}}"""
-                    )
+                    GrokHttpResponse(429, """{"error":{"message":"Quota exceeded for model"}}""")
                 }
             }
         )
 
-        val result = client.generateContent(secretKey, "Hello").getOrThrow()
-        assertEquals("Discovered OK", result)
+        val result = client.generateContent(secretKey, "Hello Grok").getOrThrow()
+        assertEquals("Discovered Grok OK", result)
         assertEquals(1, getUrls.size)
-        assertEquals(DirectGeminiRestClient.BASE_URL, getUrls.first())
-        assertTrue(postUrls.last().contains("gemini-3-flash-preview"))
+        assertEquals(GrokApiClient.MODELS_URL, getUrls.first())
+        assertEquals("grok-4-fast-non-reasoning", modelsCalled.last())
 
         // Verify 5xx diagnostics surface sanitized server details and redact any accidental key echo
-        val mapped503 = DirectGeminiRestClient.mapHttpError(
+        val mapped503 = GrokApiClient.mapHttpError(
             statusCode = 503,
-            responseBody = """{"error":{"message":"High demand for key $secretKey on backend"}}""",
-            modelName = DirectGeminiRestClient.FALLBACK_MODEL,
-            attemptedModels = listOf(DirectGeminiRestClient.DEFAULT_MODEL, DirectGeminiRestClient.FALLBACK_MODEL),
+            responseBody = """{"error":{"message":"High demand for key $secretKey on xAI backend"}}""",
+            modelName = GrokApiClient.FALLBACK_TEXT_MODEL,
+            attemptedModels = listOf(GrokApiClient.DEFAULT_TEXT_MODEL, GrokApiClient.FALLBACK_TEXT_MODEL),
             apiKeyToRedact = secretKey
         )
         assertTrue(mapped503.contains("HTTP 503"))
         assertTrue(mapped503.contains("High demand"))
-        assertTrue(mapped503.contains(DirectGeminiRestClient.DEFAULT_MODEL))
-        assertTrue(mapped503.contains(DirectGeminiRestClient.FALLBACK_MODEL))
+        assertTrue(mapped503.contains(GrokApiClient.DEFAULT_TEXT_MODEL))
+        assertTrue(mapped503.contains(GrokApiClient.FALLBACK_TEXT_MODEL))
         assertTrue(mapped503.contains("[redacted-key]"))
         assertFalse(mapped503.contains(secretKey))
     }

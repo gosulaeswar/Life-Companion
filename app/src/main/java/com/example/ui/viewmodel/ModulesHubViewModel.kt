@@ -372,10 +372,12 @@ class ModulesHubViewModel(
         }
     ) { base, arr ->
         @Suppress("UNCHECKED_CAST")
+        val grantedPerms = arr[1] as Set<String>
+        @Suppress("UNCHECKED_CAST")
         val mealPair = arr[4] as Pair<Boolean, String?>
         base.copy(
             hcAvailability = arr[0] as HealthConnectAvailability,
-            grantedPerms = arr[1] as Set<String>,
+            grantedPerms = grantedPerms,
             isSyncingFitness = arr[2] as Boolean,
             syncBanner = arr[3] as String?,
             isGeneratingMealPlan = mealPair.first,
@@ -942,12 +944,12 @@ class ModulesHubViewModel(
                 aiService.testPersonalApiKey().fold(
                     onSuccess = { ping ->
                         personalKeyFeedbackFlow.value = true to
-                            "Connected via ${ping.modelUsed} (${ping.latencyMs}ms). All AI features are now active!"
+                            "Connected to xAI Grok via ${ping.modelUsed} (${ping.latencyMs}ms). All AI features are now active!"
                         diagnosticReportFlow.value = aiService.runDiagnostics()
                     },
                     onFailure = { err ->
                         personalKeyFeedbackFlow.value = false to
-                            (err.localizedMessage ?: "Saved key could not connect to Gemini API.")
+                            (err.localizedMessage ?: "Saved key could not connect to xAI Grok API.")
                     }
                 )
             } finally {
@@ -959,7 +961,8 @@ class ModulesHubViewModel(
     fun removePersonalAiKey() {
         personalAiKeyStore?.clearPersonalKey()
         diagnosticReportFlow.value = null
-        personalKeyFeedbackFlow.value = true to "Personal API key removed. Switched back to Firebase AI Logic (Default)."
+        personalKeyFeedbackFlow.value = true to
+            "Personal xAI Grok key removed. Active engine: ${PersonalAiKeyState.defaultEngineLabel()}."
     }
 
     fun clearPersonalAiKeyFeedback() {
@@ -992,7 +995,7 @@ class ModulesHubViewModel(
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
         val snapshot = uiState.value.healthIntelligence
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            aiTaskStatus.value = AiTaskStatus.Loading("Connecting to xAI Grok...")
             val result = aiService.generatePersonalHealthIntelligence(
                 timeframeName = timeframe.name,
                 languageOption = lang,
@@ -1062,7 +1065,7 @@ class ModulesHubViewModel(
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
         val contextSummary = uiState.value.healthIntelligence.groundedAiPromptContext
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            aiTaskStatus.value = AiTaskStatus.Loading("Connecting to xAI Grok...")
             val result = aiService.generateMultilingualAppGuide(
                 languageOption = lang,
                 wellnessContextSummary = contextSummary,
@@ -1115,7 +1118,7 @@ class ModulesHubViewModel(
         }
 
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            aiTaskStatus.value = AiTaskStatus.Loading("Connecting to xAI Grok...")
             val result = aiService.processVoiceOrTextCommand(
                 userMessage = clean,
                 languageOption = lang,
@@ -1166,7 +1169,7 @@ class ModulesHubViewModel(
         val lang = SupportedVoiceLanguages.byTag(selectedLanguageTag.value)
 
         viewModelScope.launch {
-            aiTaskStatus.value = AiTaskStatus.Loading("Checking App Check...")
+            aiTaskStatus.value = AiTaskStatus.Loading("Connecting to xAI Grok Vision...")
             val result = aiService.extractPrescriptionFromUri(
                 context = context,
                 imageUri = imageUri,
@@ -1516,7 +1519,7 @@ class ModulesHubViewModel(
 
         viewModelScope.launch {
             isGeneratingMealPlanFlow.value = true
-            mealPlanStatusFlow.value = "Checking App Check & calibrating ${region.label} plan..."
+            mealPlanStatusFlow.value = "Connecting to xAI Grok & calibrating ${region.label} plan..."
             val result = aiService.generateIndianNutritionPlan(
                 regionLabel = region.label,
                 dietaryLabel = dietary.label,
@@ -1529,11 +1532,11 @@ class ModulesHubViewModel(
                 avoidAllergens = allergenNames,
                 languageOption = lang,
                 onStageUpdate = { stage -> mealPlanStatusFlow.value = stage },
-                onPartialPreview = { title -> mealPlanStatusFlow.value = "✨ Designing: $title..." }
+                onPartialPreview = { title -> mealPlanStatusFlow.value = "✨ Grok designing: $title..." }
             )
             result.onSuccess { plan ->
                 allModulesRepo.saveNutritionPlan(pid, plan)
-                mealPlanStatusFlow.value = "✨ Gemini AI generated & saved your ${region.label} meal plan."
+                mealPlanStatusFlow.value = "✨ Grok AI generated & saved your ${region.label} meal plan."
             }.onFailure { err ->
                 if (err is CancellationException) throw err
                 val offlinePlan = IndianNutritionEngine.generateOfflineIndianMealPlan(

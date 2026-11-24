@@ -433,7 +433,7 @@ fun DietNutritionScreen(
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(plan.planTitle, style = MaterialTheme.typography.titleSmall)
                                 Text(
-                                    "${if (plan.isFromCloudAi) "✨ Gemini AI" else "🌿 Offline Regional Plan"} • ${plan.totalCalories} kcal • P:${plan.totalProteinGrams}g C:${plan.totalCarbsGrams}g F:${plan.totalFatGrams}g",
+                                    "${if (plan.isFromCloudAi) "✨ Grok AI" else "🌿 Offline Regional Plan"} • ${plan.totalCalories} kcal • P:${plan.totalProteinGrams}g C:${plan.totalCarbsGrams}g F:${plan.totalFatGrams}g",
                                     style = MaterialTheme.typography.labelMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )

@@ -2,56 +2,81 @@ package com.example.ui.theme
 
 import androidx.compose.ui.graphics.Color
 
-// Vibrant Botanical Studio — Light Palette
-val WarmLinenBackground = Color(0xFFF2F6F5)
-val SoftAlabasterSurface = Color(0xFFFFFFFF)
-val OatSurfaceVariant = Color(0xFFE3ECEA)
-val SandOutline = Color(0xFFCBD8D4)
+// Spatial Cobalt Blue & Solar Orange — Light Glass Palette
+val SpatialLightBase = Color(0xFFEEF4FF)
+val SpatialLightBlueTop = Color(0xFFD6E8FF)
+val SpatialLightBlueOrb = Color(0xFF2563EB)
+val SpatialLightCyanOrb = Color(0xFF0EA5E9)
+val SpatialLightOrangeOrb = Color(0xFFFF7A1A)
+val SpatialLightPeachWash = Color(0xFFFFE6D1)
 
-val BotanicalSagePrimary = Color(0xFF0B7A63)
-val BotanicalSageContainer = Color(0xFFC6F4E7)
-val OnBotanicalSageContainer = Color(0xFF043227)
+val SpatialGlassLight = Color(0xE0FFFFFF)
+val SpatialGlassVariantLight = Color(0xD4E6F0FF)
+val SpatialGlassOutlineLight = Color(0xFFBDD3F7)
+val SpatialGlassHairlineLight = Color(0x99FFFFFF)
 
-val MineralTealSecondary = Color(0xFF0284C7)
-val MineralTealContainer = Color(0xFFD3F1FE)
-val OnMineralTealContainer = Color(0xFF043049)
+val SolarOrangePrimary = Color(0xFFEA580C)
+val SolarOrangeContainer = Color(0xFFFFE5D0)
+val OnSolarOrangeContainer = Color(0xFF5C1E03)
 
-val TerracottaRoseTertiary = Color(0xFFE5594A)
-val TerracottaRoseContainer = Color(0xFFFFE0DC)
-val OnTerracottaRoseContainer = Color(0xFF53130D)
+val CobaltBlueSecondary = Color(0xFF1D4ED8)
+val CobaltBlueContainer = Color(0xFFDCEBFF)
+val OnCobaltBlueContainer = Color(0xFF0C2461)
 
-val DeepForestInk = Color(0xFF0F1E1A)
-val MutedPineInk = Color(0xFF4A5D57)
+val ElectricAzureTertiary = Color(0xFF0284C7)
+val ElectricAzureContainer = Color(0xFFD0F0FF)
+val OnElectricAzureContainer = Color(0xFF062C43)
 
-// Deep Obsidian Emerald — Dark Palette
-val DeepPineBackground = Color(0xFF091210)
-val MutedMossSurface = Color(0xFF111F1C)
-val SlateOliveSurfaceVariant = Color(0xFF1A2D28)
-val PineOutline = Color(0xFF2E4740)
+val DeepCobaltInk = Color(0xFF0B162C)
+val MutedSlateBlueInk = Color(0xFF425474)
 
-val SoftSagePrimary = Color(0xFF3FD9B4)
-val DarkSageContainer = Color(0xFF0F4437)
-val OnDarkSageContainer = Color(0xFFC7FAEC)
+// Spatial Obsidian Navy & Radiant Orange — Dark Glass Palette
+val SpatialDarkBase = Color(0xFF060E21)
+val SpatialDarkBlueOrb = Color(0xFF1D4ED8)
+val SpatialDarkCyanOrb = Color(0xFF0284C7)
+val SpatialDarkOrangeOrb = Color(0xFFFF6B00)
+val SpatialDarkAmberGlow = Color(0xFFFF9838)
 
-val MistAquaSecondary = Color(0xFF56CCF2)
-val DarkTealContainer = Color(0xFF0D4159)
-val OnDarkTealContainer = Color(0xFFCDEFFE)
+val SpatialGlassDark = Color(0xCC0F1D3A)
+val SpatialGlassVariantDark = Color(0xC8172A50)
+val SpatialGlassOutlineDark = Color(0xFF2F4B7E)
+val SpatialGlassHairlineDark = Color(0x4793C5FD)
 
-val WarmCoralTertiary = Color(0xFFFF8577)
-val DarkTerracottaContainer = Color(0xFF5B201A)
-val OnDarkTerracottaContainer = Color(0xFFFFDFDB)
+val RadiantOrangePrimary = Color(0xFFFF8A3D)
+val DarkOrangeContainer = Color(0xFF5C2406)
+val OnDarkOrangeContainer = Color(0xFFFFE4CC)
 
-val WarmIvoryInk = Color(0xFFEDF5F2)
-val SoftSageMutedInk = Color(0xFF9BB2AA)
+val LuminousBlueSecondary = Color(0xFF60A5FA)
+val DarkCobaltContainer = Color(0xFF132D63)
+val OnDarkCobaltContainer = Color(0xFFDBEAFE)
 
-// Rich Semantic & Studio Accents
+val SunsetAmberTertiary = Color(0xFFFBBF24)
+val DarkAmberContainer = Color(0xFF4D3106)
+val OnDarkAmberContainer = Color(0xFFFEF3C7)
+
+val SpatialSnowInk = Color(0xFFF1F6FF)
+val SpatialMistInk = Color(0xFFA2B8D8)
+
+// Spatial Hero & Grok Studio Accents
+val SpatialHeroBlueDeep = Color(0xFF091B42)
+val SpatialHeroCobalt = Color(0xFF194299)
+val SpatialHeroOrangeGlow = Color(0xFFEA580C)
+val SpatialGrokAccent = Color(0xFFFFA35C)
+val SpatialBlueAccent = Color(0xFF7CC4FF)
+
+// Rich Semantic & Compatibility Aliases (remapped to Spatial Orange & Blue)
 val ErrorCoralLight = Color(0xFFD92D20)
 val ErrorCoralDark = Color(0xFFFFB4AB)
 val AmberNotice = Color(0xFFF59E0B)
 val FertileLeafGreen = Color(0xFF10B981)
-val VioletFocus = Color(0xFF7C5DFA)
-val HeroForestDark = Color(0xFF0D2E27)
-val HeroTealDeep = Color(0xFF0A4D46)
-val AiStudioMidnight = Color(0xFF0D1D24)
-val CardHairlineLight = Color(0xFFE5EEEC)
+val VioletFocus = Color(0xFF6366F1)
 
+val WarmLinenBackground = SpatialLightBase
+val DeepPineBackground = SpatialDarkBase
+val BotanicalSagePrimary = SolarOrangePrimary
+val SoftSagePrimary = RadiantOrangePrimary
+val MineralTealSecondary = CobaltBlueSecondary
+val HeroForestDark = SpatialHeroBlueDeep
+val HeroTealDeep = SpatialHeroCobalt
+val AiStudioMidnight = SpatialHeroBlueDeep
+val CardHairlineLight = SpatialGlassOutlineLight

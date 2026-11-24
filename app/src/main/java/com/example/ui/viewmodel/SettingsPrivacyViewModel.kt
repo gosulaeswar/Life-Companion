@@ -659,11 +659,11 @@ class SettingsPrivacyViewModel(
                 service.testPersonalApiKey().fold(
                     onSuccess = { ping ->
                         personalKeyFeedbackFlow.value = true to
-                            "Connected via ${ping.modelUsed} (${ping.latencyMs}ms). All cloud AI features are now active without App Check debug tokens."
+                            "Connected to xAI Grok via ${ping.modelUsed} (${ping.latencyMs}ms). All AI features are now active!"
                     },
                     onFailure = { err ->
                         personalKeyFeedbackFlow.value = false to
-                            (err.localizedMessage ?: "Saved key could not connect to Gemini API.")
+                            (err.localizedMessage ?: "Saved key could not connect to xAI Grok API.")
                     }
                 )
             } finally {
@@ -674,7 +674,8 @@ class SettingsPrivacyViewModel(
 
     fun removePersonalAiKey() {
         personalAiKeyStore?.clearPersonalKey()
-        personalKeyFeedbackFlow.value = true to "Personal API key removed. Switched back to Firebase AI Logic (Default)."
+        personalKeyFeedbackFlow.value = true to
+            "Personal xAI Grok key removed. Active engine: ${PersonalAiKeyState.defaultEngineLabel()}."
     }
 
     fun clearPersonalAiKeyFeedback() {

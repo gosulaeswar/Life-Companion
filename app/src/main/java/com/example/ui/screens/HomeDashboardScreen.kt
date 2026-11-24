@@ -92,10 +92,17 @@ import com.example.ui.components.ModuleStatusPill
 import com.example.ui.components.QuickAmountChip
 import com.example.ui.theme.AiStudioMidnight
 import com.example.ui.theme.AmberNotice
+import com.example.ui.theme.CobaltBlueSecondary
 import com.example.ui.theme.FertileLeafGreen
 import com.example.ui.theme.HeroForestDark
 import com.example.ui.theme.HeroTealDeep
 import com.example.ui.theme.JetBrainsMonoMetricFont
+import com.example.ui.theme.SolarOrangePrimary
+import com.example.ui.theme.SpatialBlueAccent
+import com.example.ui.theme.SpatialGrokAccent
+import com.example.ui.theme.SpatialHeroBlueDeep
+import com.example.ui.theme.SpatialHeroCobalt
+import com.example.ui.theme.SpatialHeroOrangeGlow
 import com.example.ui.theme.VioletFocus
 import com.example.ui.viewmodel.AiTaskStatus
 import com.example.ui.viewmodel.HomeUiState
@@ -388,14 +395,14 @@ fun HomeDashboardScreen(
                                     .clip(CircleShape)
                                     .clickable(onClick = onOpenSubscription)
                                     .testTag("home_subscription_chip"),
-                                color = Color(0xFF2CE5B5).copy(alpha = 0.22f),
-                                border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.50f)),
+                                color = SpatialGrokAccent.copy(alpha = 0.24f),
+                                border = BorderStroke(1.dp, SpatialGrokAccent.copy(alpha = 0.58f)),
                                 shape = CircleShape
                             ) {
                                 Text(
                                     text = "💎 $currentPlanLabel",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = Color(0xFF9DF7DF),
+                                    color = Color(0xFFFFE5CC),
                                     maxLines = 1,
                                     softWrap = false,
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 6.dp)
@@ -430,12 +437,12 @@ fun HomeDashboardScreen(
                     modifier = Modifier
                         .widthIn(max = 600.dp)
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(20.dp))
+                        .clip(RoundedCornerShape(22.dp))
                         .clickable { onOpenModuleKey("exercise_tracker") }
                         .testTag("home_live_sleep_monitor_banner"),
-                    shape = RoundedCornerShape(20.dp),
-                    color = AiStudioMidnight,
-                    border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.55f))
+                    shape = RoundedCornerShape(22.dp),
+                    color = SpatialHeroBlueDeep,
+                    border = BorderStroke(1.dp, SpatialBlueAccent.copy(alpha = 0.60f))
                 ) {
                     Row(
                         modifier = Modifier.padding(horizontal = 16.dp, vertical = 12.dp),
@@ -446,7 +453,7 @@ fun HomeDashboardScreen(
                             Text(
                                 text = "😴 Sleep & Snoring Monitor LIVE",
                                 style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
-                                color = Color(0xFF9DF7DF)
+                                color = Color(0xFFFFD6A8)
                             )
                             Text(
                                 text = "${live.estimatedStage.emoji} ${live.estimatedStage.label} • Quality ${live.liveQualityScore}/100 • ${live.snoreEventsCount} snore(s) • ${live.currentDb.toInt()} dB",
@@ -457,7 +464,7 @@ fun HomeDashboardScreen(
                         Icon(
                             imageVector = Icons.AutoMirrored.Rounded.KeyboardArrowRight,
                             contentDescription = "Open sleep monitor",
-                            tint = Color(0xFF9DF7DF)
+                            tint = Color(0xFFFFD6A8)
                         )
                     }
                 }
@@ -515,10 +522,11 @@ fun HomeDashboardScreen(
                         modifier = Modifier
                             .matchParentSize()
                             .background(
-                                Brush.horizontalGradient(
+                                Brush.linearGradient(
                                     colors = listOf(
-                                        AiStudioMidnight.copy(alpha = 0.88f),
-                                        HeroTealDeep.copy(alpha = 0.65f)
+                                        SpatialHeroBlueDeep.copy(alpha = 0.92f),
+                                        SpatialHeroCobalt.copy(alpha = 0.78f),
+                                        SpatialHeroOrangeGlow.copy(alpha = 0.42f)
                                     )
                                 )
                             )
@@ -547,9 +555,9 @@ fun HomeDashboardScreen(
                                         .clip(CircleShape)
                                         .background(
                                             if (isListening) {
-                                                Color(0xFFFF6B6B).copy(alpha = 0.30f)
+                                                Color(0xFFFF6B6B).copy(alpha = 0.34f)
                                             } else {
-                                                Color(0xFF3FD9B4).copy(alpha = 0.24f)
+                                                SpatialGrokAccent.copy(alpha = 0.28f)
                                             }
                                         )
                                 )
@@ -577,7 +585,7 @@ fun HomeDashboardScreen(
                                                 colors = if (isListening) {
                                                     listOf(Color(0xFFFF5F56), Color(0xFFE53935))
                                                 } else {
-                                                    listOf(Color(0xFF2CE5B5), Color(0xFF06B6D4))
+                                                    listOf(SolarOrangePrimary, SpatialBlueAccent)
                                                 }
                                             )
                                         )
@@ -586,14 +594,14 @@ fun HomeDashboardScreen(
                                     if (isThinking) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(24.dp),
-                                            color = Color(0xFF042920),
+                                            color = Color.White,
                                             strokeWidth = 2.5.dp
                                         )
                                     } else {
                                         Icon(
                                             imageVector = if (isListening) Icons.Rounded.Stop else Icons.Rounded.Mic,
-                                            contentDescription = if (isListening) "Stop AI voice listener" else "Speak to AI voice listener",
-                                            tint = if (isListening) Color.White else Color(0xFF042920),
+                                            contentDescription = if (isListening) "Stop Grok voice listener" else "Speak to Grok voice listener",
+                                            tint = Color.White,
                                             modifier = Modifier.size(28.dp)
                                         )
                                     }
@@ -625,7 +633,7 @@ fun HomeDashboardScreen(
                                         Text(
                                             text = "${selectedLang.emoji} ${selectedLang.label.substringBefore(" ")}",
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF8FF3D8),
+                                            color = Color(0xFFFFDFC0),
                                             maxLines = 1,
                                             softWrap = false,
                                             modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp)
@@ -691,13 +699,13 @@ fun HomeDashboardScreen(
                                     ) {
                                         CircularProgressIndicator(
                                             modifier = Modifier.size(16.dp),
-                                            color = Color(0xFF8FF3D8),
+                                            color = SpatialGrokAccent,
                                             strokeWidth = 2.dp
                                         )
                                         Text(
                                             text = status.label,
                                             style = MaterialTheme.typography.bodySmall,
-                                            color = Color(0xFF9DF7DF)
+                                            color = Color(0xFFFFDFC0)
                                         )
                                     }
                                 }
@@ -716,7 +724,7 @@ fun HomeDashboardScreen(
                                         Text(
                                             text = status.label,
                                             style = MaterialTheme.typography.labelSmall,
-                                            color = Color(0xFF8FF3D8)
+                                            color = Color(0xFFFFDFC0)
                                         )
                                         if (status.previewText.isNotBlank()) {
                                             Text(
@@ -840,7 +848,7 @@ fun HomeDashboardScreen(
                                                     text = if (modulesState.isRunningDiagnostics) {
                                                         "⏳ Checking..."
                                                     } else {
-                                                        "🩺 Diagnose App Check"
+                                                        "🩺 Test Grok AI"
                                                     },
                                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                                     color = MaterialTheme.colorScheme.primary,
@@ -856,7 +864,7 @@ fun HomeDashboardScreen(
                                                 color = MaterialTheme.colorScheme.primaryContainer
                                             ) {
                                                 Text(
-                                                    text = "🔑 Use My API Key",
+                                                    text = "🔑 Set Grok Key",
                                                     style = MaterialTheme.typography.labelSmall.copy(fontWeight = FontWeight.SemiBold),
                                                     color = MaterialTheme.colorScheme.onPrimaryContainer,
                                                     modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
@@ -875,7 +883,7 @@ fun HomeDashboardScreen(
                                                     color = if (latestAiReply.isError) {
                                                         MaterialTheme.colorScheme.primaryContainer
                                                     } else {
-                                                        Color(0xFF2CE5B5).copy(alpha = 0.24f)
+                                                        SpatialGrokAccent.copy(alpha = 0.24f)
                                                     }
                                                 ) {
                                                     Text(
@@ -884,7 +892,7 @@ fun HomeDashboardScreen(
                                                         color = if (latestAiReply.isError) {
                                                             MaterialTheme.colorScheme.onPrimaryContainer
                                                         } else {
-                                                            Color(0xFF9DF7DF)
+                                                            Color(0xFFFFDFC0)
                                                         },
                                                         modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp)
                                                     )
@@ -900,13 +908,13 @@ fun HomeDashboardScreen(
                             Surface(
                                 shape = RoundedCornerShape(14.dp),
                                 color = if (diag.isHealthy) {
-                                    Color(0xFF0E493C)
+                                    CobaltBlueSecondary.copy(alpha = 0.34f)
                                 } else {
                                     MaterialTheme.colorScheme.errorContainer
                                 },
                                 border = BorderStroke(
                                     1.dp,
-                                    if (diag.isHealthy) Color(0xFF2CE5B5).copy(alpha = 0.5f) else MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
+                                    if (diag.isHealthy) SpatialGrokAccent.copy(alpha = 0.60f) else MaterialTheme.colorScheme.error.copy(alpha = 0.35f)
                                 )
                             ) {
                                 Column(
@@ -915,15 +923,15 @@ fun HomeDashboardScreen(
                                         .padding(11.dp),
                                     verticalArrangement = Arrangement.spacedBy(4.dp)
                                 ) {
-                                    val titleColor = if (diag.isHealthy) Color(0xFF9DF7DF) else MaterialTheme.colorScheme.onErrorContainer
+                                    val titleColor = if (diag.isHealthy) Color(0xFFFFDFC0) else MaterialTheme.colorScheme.onErrorContainer
                                     val bodyColor = if (diag.isHealthy) Color.White else MaterialTheme.colorScheme.onErrorContainer
                                     Text(
-                                        text = if (diag.isHealthy) "🩺 Diagnostic Passed" else "🩺 App Check / AI Diagnostic",
+                                        text = if (diag.isHealthy) "🩺 xAI Grok Diagnostic Passed" else "🩺 xAI Grok Diagnostic",
                                         style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                                         color = titleColor
                                     )
                                     Text(
-                                        text = "App Check: ${diag.appCheckStatus}\nGemini: ${diag.geminiStatus}\n${diag.recommendation}",
+                                        text = "Provider: ${diag.providerStatus}\nAuth: ${diag.authStatus}\nGrok: ${diag.grokStatus}\n${diag.recommendation}",
                                         style = MaterialTheme.typography.bodySmall,
                                         color = bodyColor
                                     )
@@ -932,9 +940,9 @@ fun HomeDashboardScreen(
                         }
 
                         Text(
-                            text = "Uses your recorded logs when prompted • Wellness guidance only, not medical diagnosis.",
+                            text = "Powered by xAI Grok • Uses your recorded logs when prompted • Wellness guidance only.",
                             style = MaterialTheme.typography.labelSmall,
-                            color = Color.White.copy(alpha = 0.68f)
+                            color = Color.White.copy(alpha = 0.72f)
                         )
 
                         FlowRow(
@@ -947,12 +955,13 @@ fun HomeDashboardScreen(
                                     .clip(CircleShape)
                                     .clickable { onOpenModuleKey("on_device_ai") },
                                 shape = CircleShape,
-                                color = Color(0xFF2CE5B5).copy(alpha = 0.22f)
+                                color = SpatialGrokAccent.copy(alpha = 0.25f),
+                                border = BorderStroke(1.dp, SpatialGrokAccent.copy(alpha = 0.50f))
                             ) {
                                 Text(
                                     text = "📄 Scan Rx / Languages →",
                                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.SemiBold),
-                                    color = Color(0xFF9DF7DF),
+                                    color = Color(0xFFFFE5CC),
                                     modifier = Modifier.padding(horizontal = 12.dp, vertical = 7.dp)
                                 )
                             }
@@ -1287,9 +1296,10 @@ fun HomeDashboardScreen(
                         }
                     }
 
-                    if (showGestureAlert && activeOveruse != null) {
-                        val isOverCap = activeOveruse.severity == OveruseSeverity.EXCEEDED ||
-                            activeOveruse.severity == OveruseSeverity.CRITICAL
+                    if (showGestureAlert) {
+                        val overuseAlert = activeOveruse
+                        val isOverCap = overuseAlert.severity == OveruseSeverity.EXCEEDED ||
+                            overuseAlert.severity == OveruseSeverity.CRITICAL
                         val haptic = LocalHapticFeedback.current
                         val coroutineScope = rememberCoroutineScope()
                         val swipeOffsetX = remember { Animatable(0f) }

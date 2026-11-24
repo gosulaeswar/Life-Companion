@@ -572,7 +572,7 @@ internal fun OnboardingPreferencesStep(
                             icon = Icons.Rounded.DarkMode,
                             selected = selectedThemeMode == ThemeMode.DARK,
                             previewBrush = Brush.verticalGradient(
-                                listOf(DeepPineBackground, Color(0xFF152420))
+                                listOf(DeepPineBackground, Color(0xFF1B3A7A))
                             ),
                             accentColor = SoftSagePrimary,
                             onClick = { onSelectThemeMode(ThemeMode.DARK) },

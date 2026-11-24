@@ -43,7 +43,7 @@ enum class BundledAlertTone(
     val displayName: String,
     val description: String,
     val durationLabel: String,
-    @RawRes val rawRes: Int
+    @param:RawRes val rawRes: Int
 ) {
     WATER_DROP(
         id = "water_drop",

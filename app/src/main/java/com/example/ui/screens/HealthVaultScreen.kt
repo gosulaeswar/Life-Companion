@@ -70,6 +70,8 @@ import com.example.ui.components.CalendarDatePickerDialog
 import com.example.ui.theme.HeroForestDark
 import com.example.ui.theme.HeroTealDeep
 import com.example.ui.theme.JetBrainsMonoMetricFont
+import com.example.ui.theme.SpatialGrokAccent
+import com.example.ui.theme.SpatialHeroOrangeGlow
 import com.example.ui.viewmodel.HealthVaultUiState
 import com.example.ui.viewmodel.HealthVaultViewModel
 
@@ -158,7 +160,11 @@ fun HealthVaultScreen(
                     modifier = Modifier
                         .background(
                             Brush.linearGradient(
-                                colors = listOf(HeroForestDark, HeroTealDeep)
+                                colors = listOf(
+                                    HeroForestDark,
+                                    HeroTealDeep,
+                                    SpatialHeroOrangeGlow.copy(alpha = 0.45f)
+                                )
                             )
                         )
                         .padding(18.dp),
@@ -183,13 +189,13 @@ fun HealthVaultScreen(
                         }
                         Surface(
                             shape = CircleShape,
-                            color = Color(0xFF2CE5B5).copy(alpha = 0.22f),
-                            border = BorderStroke(1.dp, Color(0xFF2CE5B5).copy(alpha = 0.45f))
+                            color = SpatialGrokAccent.copy(alpha = 0.25f),
+                            border = BorderStroke(1.dp, SpatialGrokAccent.copy(alpha = 0.55f))
                         ) {
                             Text(
                                 text = "${uiState.documents.size} Docs • ${uiState.labComparisons.size} Labs",
                                 style = MaterialTheme.typography.labelSmall.copy(fontFamily = JetBrainsMonoMetricFont),
-                                color = Color(0xFF9DF7DF),
+                                color = Color(0xFFFFE5CC),
                                 modifier = Modifier.padding(horizontal = 10.dp, vertical = 5.dp)
                             )
                         }

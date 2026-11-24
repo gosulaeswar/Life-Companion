@@ -2,6 +2,7 @@ package com.example.security
 
 import android.content.Context
 import android.util.Log
+import com.example.BuildConfig
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -9,17 +10,38 @@ import kotlinx.coroutines.flow.asStateFlow
 data class PersonalAiKeyState(
     val hasPersonalKey: Boolean = false,
     val maskedPreview: String = "",
-    val activeEngineLabel: String = ENGINE_FIREBASE_AI_LOGIC
+    val activeEngineLabel: String = defaultEngineLabel()
 ) {
     companion object {
-        const val ENGINE_PERSONAL_KEY = "Personal Gemini API Key"
-        const val ENGINE_FIREBASE_AI_LOGIC = "Firebase AI Logic (Default)"
+        const val ENGINE_PERSONAL_KEY = "Personal xAI Grok API Key"
+        const val ENGINE_APP_SECRET_GROK = "xAI Grok (App Secret)"
+        const val ENGINE_GROK_UNCONFIGURED = "xAI Grok (Enter Key in Settings)"
+
+        fun isUsableGrokKey(rawKey: String?): Boolean {
+            val cleaned = rawKey?.trim().orEmpty()
+            if (cleaned.length < 20) return false
+            if (cleaned.any { it.isWhitespace() }) return false
+            if (cleaned.equals("XAI_API_KEY_DEFAULT_VALUE", ignoreCase = true)) return false
+            if (cleaned.contains("DEFAULT_VALUE", ignoreCase = true) || cleaned.contains("PLACEHOLDER", ignoreCase = true)) {
+                return false
+            }
+            if (cleaned.startsWith("AIza") || cleaned.startsWith("AQ.")) return false
+            return cleaned.startsWith("xai-")
+        }
+
+        fun hasBuildConfigGrokKey(): Boolean {
+            val raw = runCatching { BuildConfig.XAI_API_KEY }.getOrDefault("")
+            return isUsableGrokKey(raw)
+        }
+
+        fun defaultEngineLabel(): String =
+            if (hasBuildConfigGrokKey()) ENGINE_APP_SECRET_GROK else ENGINE_GROK_UNCONFIGURED
     }
 }
 
 /**
  * Device-local, Android Keystore (AES-256-GCM) encrypted storage for an optional
- * user-supplied personal Gemini API key.
+ * user-supplied personal xAI Grok API key (`xai-...`).
  *
  * Security boundaries:
  * - Stored in a dedicated private SharedPreferences file excluded from backups and cloud sync.
@@ -56,7 +78,7 @@ class PersonalAiKeyStore(
                 .putString(KEY_MASKED_PREVIEW, masked)
                 .commit()
             if (!committed) {
-                throw IllegalStateException("Unable to persist encrypted API key on this device.")
+                throw IllegalStateException("Unable to persist encrypted Grok API key on this device.")
             }
             val updated = PersonalAiKeyState(
                 hasPersonalKey = true,
@@ -66,7 +88,7 @@ class PersonalAiKeyStore(
             _keyState.value = updated
             updated
         }.onFailure { err ->
-            Log.e(TAG, "Failed to encrypt and save personal Gemini API key: ${err.javaClass.simpleName}")
+            Log.e(TAG, "Failed to encrypt and save personal xAI Grok API key: ${err.javaClass.simpleName}")
         }
     }
 
@@ -74,9 +96,10 @@ class PersonalAiKeyStore(
         val encrypted = prefs.getString(KEY_ENCRYPTED_API_KEY, null)?.trim()
         if (encrypted.isNullOrEmpty()) return null
         return runCatching {
-            vaultManager.decryptBackupPayload(encrypted).trim().takeIf { it.isNotEmpty() }
+            vaultManager.decryptBackupPayload(encrypted).trim()
+                .takeIf { PersonalAiKeyState.isUsableGrokKey(it) }
         }.onFailure { err ->
-            Log.e(TAG, "Failed to decrypt stored personal Gemini API key: ${err.javaClass.simpleName}")
+            Log.e(TAG, "Failed to decrypt stored personal xAI Grok API key: ${err.javaClass.simpleName}")
         }.getOrNull()
     }
 
@@ -88,7 +111,7 @@ class PersonalAiKeyStore(
         _keyState.value = PersonalAiKeyState(
             hasPersonalKey = false,
             maskedPreview = "",
-            activeEngineLabel = PersonalAiKeyState.ENGINE_FIREBASE_AI_LOGIC
+            activeEngineLabel = PersonalAiKeyState.defaultEngineLabel()
         )
     }
 
@@ -109,19 +132,25 @@ class PersonalAiKeyStore(
     companion object {
         private const val TAG = "PersonalAiKeyStore"
         internal const val PREFS_NAME = "lifeweave_personal_ai_key_vault"
-        internal const val KEY_ENCRYPTED_API_KEY = "encrypted_gemini_api_key"
-        internal const val KEY_MASKED_PREVIEW = "masked_gemini_api_key_preview"
+        internal const val KEY_ENCRYPTED_API_KEY = "encrypted_xai_grok_api_key"
+        internal const val KEY_MASKED_PREVIEW = "masked_xai_grok_api_key_preview"
 
         fun validateKeyFormat(rawKey: String): String? {
             val cleaned = rawKey.trim()
             if (cleaned.isEmpty()) {
-                return "Please paste your Gemini API key first."
+                return "Please paste your xAI Grok API key first."
             }
             if (cleaned.any { it.isWhitespace() }) {
                 return "API key cannot contain spaces or line breaks. Copy only the key string."
             }
+            if (cleaned.startsWith("AIza") || cleaned.startsWith("AQ.")) {
+                return "That looks like a Google Gemini key. Please paste an xAI Grok API key (starts with xai-) from console.x.ai."
+            }
+            if (!cleaned.startsWith("xai-")) {
+                return "xAI Grok API keys start with \"xai-\". Create or copy your key from console.x.ai."
+            }
             if (cleaned.length < 20) {
-                return "That key looks too short. Copy the full Gemini API key from Google AI Studio."
+                return "That key looks too short. Copy the full xAI Grok API key (xai-...) from console.x.ai."
             }
             return null
         }

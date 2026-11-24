@@ -59,7 +59,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.example.security.PersonalAiKeyState
 
-private const val AI_STUDIO_KEY_URL = "https://aistudio.google.com/apikey"
+private const val XAI_CONSOLE_KEY_URL = "https://console.x.ai"
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
@@ -86,14 +86,14 @@ fun PersonalAiKeyCard(
             .widthIn(max = 600.dp)
             .fillMaxWidth()
             .testTag("personal_ai_key_card"),
-        shape = RoundedCornerShape(20.dp),
+        shape = RoundedCornerShape(24.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         border = BorderStroke(
             width = 1.dp,
             color = if (keyState.hasPersonalKey) {
-                MaterialTheme.colorScheme.primary.copy(alpha = 0.45f)
+                MaterialTheme.colorScheme.primary.copy(alpha = 0.55f)
             } else {
-                MaterialTheme.colorScheme.outlineVariant
+                MaterialTheme.colorScheme.secondary.copy(alpha = 0.35f)
             }
         )
     ) {
@@ -112,7 +112,7 @@ fun PersonalAiKeyCard(
                     modifier = Modifier.weight(1f)
                 ) {
                     Surface(
-                        shape = RoundedCornerShape(12.dp),
+                        shape = RoundedCornerShape(14.dp),
                         color = if (keyState.hasPersonalKey) {
                             MaterialTheme.colorScheme.primaryContainer
                         } else {
@@ -121,7 +121,7 @@ fun PersonalAiKeyCard(
                     ) {
                         Icon(
                             imageVector = if (keyState.hasPersonalKey) Icons.Rounded.CloudDone else Icons.Rounded.Key,
-                            contentDescription = "Cloud AI connection",
+                            contentDescription = "xAI Grok connection",
                             tint = if (keyState.hasPersonalKey) {
                                 MaterialTheme.colorScheme.onPrimaryContainer
                             } else {
@@ -132,15 +132,17 @@ fun PersonalAiKeyCard(
                     }
                     Column {
                         Text(
-                            text = "Cloud AI Connection",
+                            text = "xAI Grok Connection",
                             style = MaterialTheme.typography.titleMedium,
                             fontWeight = FontWeight.SemiBold
                         )
                         Text(
                             text = if (keyState.hasPersonalKey) {
-                                "Using your Personal Gemini API Key"
+                                "Using your Personal xAI Grok API Key"
+                            } else if (PersonalAiKeyState.hasBuildConfigGrokKey()) {
+                                "Using app secret key — or enter your own xAI Grok key"
                             } else {
-                                "No App Check debug token? Use your own Gemini key"
+                                "Connect your xAI Grok API key (console.x.ai)"
                             },
                             style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
@@ -155,7 +157,7 @@ fun PersonalAiKeyCard(
                 color = if (keyState.hasPersonalKey) {
                     MaterialTheme.colorScheme.primaryContainer
                 } else {
-                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.7f)
+                    MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.78f)
                 }
             ) {
                 Row(
@@ -188,7 +190,7 @@ fun PersonalAiKeyCard(
 
             if (keyState.hasPersonalKey) {
                 Surface(
-                    shape = RoundedCornerShape(14.dp),
+                    shape = RoundedCornerShape(16.dp),
                     color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.55f),
                     modifier = Modifier.fillMaxWidth()
                 ) {
@@ -207,7 +209,7 @@ fun PersonalAiKeyCard(
                                     .padding(end = 8.dp)
                             ) {
                                 Text(
-                                    text = "Saved Personal Key (Encrypted)",
+                                    text = "Saved Personal Grok Key (Encrypted)",
                                     style = MaterialTheme.typography.labelSmall,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant
                                 )
@@ -251,7 +253,7 @@ fun PersonalAiKeyCard(
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text("Testing...")
                                 } else {
-                                    Text("Test Connection")
+                                    Text("Test Grok")
                                 }
                             }
                             OutlinedButton(
@@ -276,7 +278,7 @@ fun PersonalAiKeyCard(
                 }
             } else {
                 Text(
-                    text = "For sideloaded or family-shared APKs, each person can enter their own free Gemini API key here to run Voice AI, Prescription Scanner, Lab Explainer, and Meal Planner without Firebase App Check debug tokens.",
+                    text = "Power Voice AI, Prescription Vision Scanner, Lab Report Explainer, Health Briefings, and Regional Indian Meal Planner with xAI Grok (grok-3 / grok-2-vision). Each device can securely store its own xAI key.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant
                 )
@@ -290,7 +292,7 @@ fun PersonalAiKeyCard(
                         modifier = Modifier.size(18.dp)
                     )
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(if (editorExpanded) "Hide Key Setup" else "Enter Personal Gemini API Key")
+                    Text(if (editorExpanded) "Hide Key Setup" else "Enter xAI Grok API Key")
                 }
             }
 
@@ -302,8 +304,8 @@ fun PersonalAiKeyCard(
                     OutlinedTextField(
                         value = draftKey,
                         onValueChange = { draftKey = it },
-                        label = { Text("Gemini API Key (AIza... or AQ...)") },
-                        placeholder = { Text("Paste key from Google AI Studio") },
+                        label = { Text("xAI Grok API Key (xai-...)") },
+                        placeholder = { Text("Paste key from xAI Console") },
                         singleLine = true,
                         visualTransformation = if (showPlainDraft) {
                             VisualTransformation.None
@@ -327,7 +329,7 @@ fun PersonalAiKeyCard(
                         },
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("personal_gemini_key_input")
+                            .testTag("personal_grok_key_input")
                     )
 
                     FlowRow(
@@ -344,7 +346,7 @@ fun PersonalAiKeyCard(
                                     Toast.makeText(context, "Clipboard is empty", Toast.LENGTH_SHORT).show()
                                 }
                             },
-                            modifier = Modifier.testTag("personal_gemini_key_paste_button")
+                            modifier = Modifier.testTag("personal_grok_key_paste_button")
                         ) {
                             Icon(
                                 imageVector = Icons.Rounded.ContentPaste,
@@ -359,17 +361,17 @@ fun PersonalAiKeyCard(
                             onClick = {
                                 runCatching {
                                     context.startActivity(
-                                        Intent(Intent.ACTION_VIEW, Uri.parse(AI_STUDIO_KEY_URL))
+                                        Intent(Intent.ACTION_VIEW, Uri.parse(XAI_CONSOLE_KEY_URL))
                                     )
                                 }.onFailure {
                                     Toast.makeText(
                                         context,
-                                        "Open aistudio.google.com/apikey in your browser",
+                                        "Open console.x.ai in your browser to create an API key",
                                         Toast.LENGTH_LONG
                                     ).show()
                                 }
                             },
-                            modifier = Modifier.testTag("personal_gemini_key_get_key_button")
+                            modifier = Modifier.testTag("personal_grok_key_get_key_button")
                         ) {
                             Icon(
                                 imageVector = Icons.AutoMirrored.Rounded.OpenInNew,
@@ -377,7 +379,7 @@ fun PersonalAiKeyCard(
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
-                            Text("Get Free Key (AI Studio)")
+                            Text("Get Grok Key (console.x.ai)")
                         }
                     }
 
@@ -390,7 +392,7 @@ fun PersonalAiKeyCard(
                         enabled = !isTesting && draftKey.trim().isNotEmpty(),
                         modifier = Modifier
                             .fillMaxWidth()
-                            .testTag("personal_gemini_key_save_button")
+                            .testTag("personal_grok_key_save_button")
                     ) {
                         if (isTesting) {
                             CircularProgressIndicator(
@@ -399,9 +401,9 @@ fun PersonalAiKeyCard(
                                 color = MaterialTheme.colorScheme.onPrimary
                             )
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Saving & Testing Connection...")
+                            Text("Saving & Testing Grok...")
                         } else {
-                            Text("Save & Test Connection")
+                            Text("Save & Test Grok Connection")
                         }
                     }
                 }
